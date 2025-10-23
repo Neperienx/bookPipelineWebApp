@@ -75,7 +75,12 @@ bookPipelineWebApp/
 2. **Create and activate a virtual environment**
    ```bash
    python3.13 -m venv .venv
-   source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
+   source .venv/bin/activate
+   ```
+   On Windows, run the `activate` script that matches where your virtual environment lives. For example, if you share a single
+   environment located at `C:\Users\nicol\Documents\01_Code\.venv`, activate it with:
+   ```powershell
+   C:\Users\nicol\Documents\01_Code\.venv\Scripts\activate
    ```
 
 3. **Install dependencies**
@@ -83,17 +88,34 @@ bookPipelineWebApp/
    pip install -r requirements.txt
    ```
 
-4. **Set environment variables** (optional but recommended)
+4. **Configure the app and prepare the database in one step**
+
+   The repository includes a helper script that writes a `.env` file and creates the development SQLite database in a single
+   command. Run it after activating your virtual environment:
+
+   ```bash
+   python scripts/dev_setup.py --secret-key "replace-me" --llm-api-base "http://localhost:8000"
+   ```
+
+   - `--secret-key` should be replaced with a long random string for session security.
+   - `--llm-api-base` is optional—omit it if you do not have a local LLM endpoint yet.
+   - Add `--database-url` if you prefer to point at a different database backend.
+
+   The script performs two actions:
+
+   1. Creates or updates a `.env` file with the variables Flask needs (`FLASK_APP`, `FLASK_ENV`, `SECRET_KEY`, and optional
+      extras).
+   2. Bootstraps the SQLite database at `instance/book_pipeline.db` with the required tables.
+
+   If you would rather manage these pieces manually, set the environment variables yourself and run `flask shell` with
+   `db.create_all()`:
+
    ```bash
    export FLASK_APP=wsgi.py
    export FLASK_ENV=development
    export SECRET_KEY="replace-me"
-   # If you already know your local LLM endpoint, add:
-   export LLM_API_BASE="http://localhost:8000"
-   ```
+   # Optional: export LLM_API_BASE="http://localhost:8000"
 
-5. **Initialize the database**
-   ```bash
    flask shell <<'PY'
    from app import create_app, db
    app = create_app()
@@ -101,15 +123,14 @@ bookPipelineWebApp/
        db.create_all()
    PY
    ```
-   This command creates an `instance/book_pipeline.db` SQLite database with the `users` and `projects` tables.
 
-6. **Run the development server**
+5. **Run the development server**
    ```bash
    flask run --debug
    ```
    The site is available at [http://localhost:5000](http://localhost:5000).
 
-7. **Create your first account**
+6. **Create your first account**
    - Navigate to `/register` and sign up.
    - The dashboard lets you create projects and open the immersive workspace for each one.
 

@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from flask import Flask
+from dotenv import load_dotenv
 
 from .config import Config
 from .extensions import csrf, db, login_manager, migrate
+
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")
 
 
 def create_app(config_class: type[Config] = Config) -> Flask:
