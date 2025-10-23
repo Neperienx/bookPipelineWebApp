@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from flask import Flask
@@ -16,6 +17,11 @@ load_dotenv(BASE_DIR / ".env")
 def create_app(config_class: type[Config] = Config) -> Flask:
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_object(config_class)
+    app.config.setdefault("PROMPT_CONFIG_PATH", str(BASE_DIR / "prompt_config.json"))
+    if "TEXT_GENERATOR_MODEL_PATH" not in app.config:
+        env_model_path = os.environ.get("TEXT_GENERATOR_MODEL_PATH")
+        if env_model_path:
+            app.config["TEXT_GENERATOR_MODEL_PATH"] = env_model_path
 
     register_extensions(app)
     register_blueprints(app)

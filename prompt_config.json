@@ -1,0 +1,11 @@
+{
+  "outline_from_prompt": {
+    "display_name": "Idea to Outline (~500 words)",
+    "prompt_template": "You are an experienced story development editor. Using the project information below, expand the idea into a fully fleshed outline of approximately 500 words (±10%). Structure the response using Markdown with the following top-level headings: Premise & Tone, Act I – Setup & Disruption, Act II – Complications & Revelations, Act III – Resolution, Character & Worldbuilding Notes. Beneath each heading provide three to four bullet points. Each bullet point should deliver two to three sentences that combine plot momentum with emotional stakes. Build on the supplied idea instead of repeating it verbatim, keep character names consistent, and favour active voice with concrete imagery. End the response with a short paragraph titled \"Next Steps\" describing how to iterate on the outline.\n\nProject title: {project_title}\nStory idea: {user_prompt}\n\nReturn only the outline.",
+    "parameters": {
+      "max_new_tokens": 900,
+      "temperature": 0.65,
+      "top_p": 0.9
+    }
+  }
+}
