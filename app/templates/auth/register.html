@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Create account • Book Pipeline Studio{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <div class="card frosted-card shadow-lg border-0">
+      <div class="card-body p-4 p-lg-5">
+        <h1 class="h3 fw-semibold mb-4 text-center">Begin your writing journey</h1>
+        <form method="post">
+          {{ form.hidden_tag() }}
+          <div class="mb-3">
+            {{ form.display_name.label(class="form-label") }}
+            {{ form.display_name(class="form-control form-control-lg", placeholder="Creative pen name") }}
+            {% for error in form.display_name.errors %}
+            <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+          </div>
+          <div class="mb-3">
+            {{ form.email.label(class="form-label") }}
+            {{ form.email(class="form-control form-control-lg", placeholder="you@example.com") }}
+            {% for error in form.email.errors %}
+            <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+          </div>
+          <div class="mb-3">
+            {{ form.password.label(class="form-label") }}
+            {{ form.password(class="form-control form-control-lg", placeholder="Create a strong password") }}
+            {% for error in form.password.errors %}
+            <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+          </div>
+          <div class="mb-3">
+            {{ form.confirm_password.label(class="form-label") }}
+            {{ form.confirm_password(class="form-control form-control-lg", placeholder="Repeat your password") }}
+            {% for error in form.confirm_password.errors %}
+            <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+          </div>
+          <div class="d-grid gap-2">
+            {{ form.submit(class="btn btn-primary btn-lg rounded-pill") }}
+          </div>
+        </form>
+        <p class="mt-4 text-center text-white-50">
+          Already have an account?
+          <a href="{{ url_for('auth.login') }}" class="link-light text-decoration-none">Sign in</a>
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

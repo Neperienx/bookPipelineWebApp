@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard • Book Pipeline Studio{% endblock %}
+
+{% block content %}
+<div class="row align-items-center mb-5">
+  <div class="col-lg-7">
+    <h1 class="display-5 fw-semibold text-white">Your storytelling studio</h1>
+    <p class="lead text-white-50">
+      Manage interactive writing projects, collaborate with the local language model, and track your
+      progress from spark to finished manuscript.
+    </p>
+  </div>
+  <div class="col-lg-5">
+    <div class="card frosted-card shadow-lg border-0">
+      <div class="card-body p-4">
+        <h2 class="h5 fw-semibold mb-3">Start something new</h2>
+        <form method="post">
+          {{ form.hidden_tag() }}
+          <div class="mb-3">
+            {{ form.title.label(class="form-label") }}
+            {{ form.title(class="form-control", placeholder="Epic fantasy trilogy") }}
+            {% for error in form.title.errors %}
+            <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+          </div>
+          <div class="mb-3">
+            {{ form.description.label(class="form-label") }}
+            {{ form.description(class="form-control", rows="3", placeholder="Optional: describe the tone, audience, or themes.") }}
+            {% for error in form.description.errors %}
+            <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+          </div>
+          <div class="d-grid">
+            {{ form.submit(class="btn btn-primary rounded-pill") }}
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2 class="h4 fw-semibold text-white mb-3">Active projects</h2>
+{% if projects %}
+<div class="row g-4">
+  {% for project in projects %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card project-card h-100 border-0 shadow">
+      <div class="card-body d-flex flex-column">
+        <div class="d-flex justify-content-between align-items-start mb-3">
+          <span class="badge rounded-pill status-pill status-{{ project.status | replace('_', '-') }}">{{ project.status.replace('_', ' ').title() }}</span>
+          <small class="text-white-50">Updated {{ project.updated_at.strftime('%b %d, %Y') }}</small>
+        </div>
+        <h3 class="h5 fw-semibold text-white">{{ project.title }}</h3>
+        <p class="text-white-50 flex-grow-1">{{ project.description or "No description yet." }}</p>
+        <div class="mt-3">
+          <a class="btn btn-outline-light btn-sm rounded-pill" href="{{ url_for('projects.detail', project_id=project.id) }}">Open workspace</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state text-center py-5">
+  <h3 class="h4 text-white mb-3">No projects yet</h3>
+  <p class="text-white-50 mb-0">Use the form above to spin up your first story concept.</p>
+</div>
+{% endif %}
+{% endblock %}
