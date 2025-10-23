@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.title }} • Book Pipeline Studio{% endblock %}
+
+{% block content %}
+<div class="row g-4 align-items-start">
+  <div class="col-lg-4">
+    <div class="card frosted-card border-0 shadow-sm mb-4">
+      <div class="card-body">
+        <h2 class="h5 text-white fw-semibold mb-3">Project overview</h2>
+        <p class="text-white-50 mb-1"><strong>Status:</strong> {{ project.status.replace('_', ' ').title() }}</p>
+        <p class="text-white-50"><strong>Current step:</strong> {{ project.current_step.replace('_', ' ').title() }}</p>
+        <p class="text-white-50">{{ project.description or "No description yet." }}</p>
+      </div>
+    </div>
+
+    <div class="card frosted-card border-0 shadow-sm">
+      <div class="card-body">
+        <h3 class="h6 text-white text-uppercase mb-3">Pipeline steps</h3>
+        <ol class="timeline vertical">
+          {% for step_id, label in steps %}
+          {% set step_index = loop.index0 %}
+          <li class="timeline-step {% if step_index == current_index %}active{% elif step_index < current_index %}completed{% endif %}">
+            <div class="step-indicator"></div>
+            <div>
+              <span class="step-label">{{ label }}</span>
+              {% if step_index == current_index %}
+              <span class="badge rounded-pill bg-primary ms-2">In progress</span>
+              {% endif %}
+            </div>
+          </li>
+          {% endfor %}
+        </ol>
+        <div class="d-flex gap-2 mt-4">
+          <form action="{{ url_for('projects.advance', project_id=project.id) }}" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-primary btn-sm rounded-pill" type="submit">Advance step</button>
+          </form>
+          <form action="{{ url_for('projects.reset', project_id=project.id) }}" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-outline-light btn-sm rounded-pill" type="submit">Reset</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    <div class="chat-surface shadow-lg">
+      <div class="chat-header d-flex justify-content-between align-items-center">
+        <div>
+          <h2 class="h5 text-white mb-0">Creative companion</h2>
+          <small class="text-white-50">Connected to local LLM • Step: {{ project.current_step.replace('_', ' ').title() }}</small>
+        </div>
+        <span class="badge rounded-pill bg-success-subtle text-success-emphasis">Prototype</span>
+      </div>
+      <div class="chat-body">
+        <div class="chat-message assistant">
+          <div class="avatar">AI</div>
+          <div class="bubble">
+            <p class="mb-1">
+              Let's focus on {{ project.current_step.replace('_', ' ').lower() }}. Provide details below and I'll craft a structured
+              response.
+            </p>
+            <p class="mb-0 text-white-50 small">Future iterations will stream responses directly from your local model.</p>
+          </div>
+        </div>
+        <div class="chat-message user placeholder">
+          <div class="avatar">You</div>
+          <div class="bubble">
+            <p class="mb-0">Your conversation history will appear here once the assistant is connected.</p>
+          </div>
+        </div>
+      </div>
+      <div class="chat-input">
+        <label for="message" class="form-label text-white-50">Share your guidance for this step</label>
+        <textarea id="message" class="form-control" rows="4" placeholder="Describe what happens next, key beats, or stylistic goals."></textarea>
+        <div class="d-flex justify-content-between align-items-center mt-3">
+          <div class="form-check form-switch text-white-50">
+            <input class="form-check-input" type="checkbox" role="switch" id="llmToggle" checked disabled />
+            <label class="form-check-label" for="llmToggle">Local LLM ready</label>
+          </div>
+          <button class="btn btn-primary rounded-pill" type="button" disabled>Send to assistant</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

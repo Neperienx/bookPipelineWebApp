@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Book Pipeline Studio{% endblock %}
+
+{% block content %}
+<section class="hero text-center text-lg-start">
+  <div class="row align-items-center">
+    <div class="col-lg-7 mb-5 mb-lg-0">
+      <h1 class="display-4 fw-bold text-white mb-4">From prompt to published — in one elegant flow.</h1>
+      <p class="lead text-white-50 mb-4">
+        Book Pipeline Studio pairs your creativity with a locally hosted language model to craft novels
+        through structured storytelling milestones. Shape characters, refine outlines, and generate
+        polished scenes all inside an immersive workspace.
+      </p>
+      <div class="d-flex flex-column flex-sm-row gap-3">
+        <a href="{{ url_for('auth.register') }}" class="btn btn-primary btn-lg rounded-pill px-4">Start writing</a>
+        <a href="#roadmap" class="btn btn-outline-light btn-lg rounded-pill px-4">Explore the roadmap</a>
+      </div>
+    </div>
+    <div class="col-lg-5">
+      <div class="mockup-card shadow-lg">
+        <div class="mockup-header d-flex justify-content-between align-items-center mb-3">
+          <span class="badge rounded-pill bg-opacity">Live preview</span>
+          <span class="text-white-50 small">Local LLM connected</span>
+        </div>
+        <div class="mockup-body">
+          <p class="text-white-50 small text-uppercase mb-2">Next up</p>
+          <h2 class="h5 text-white fw-semibold">Generate three-act structure</h2>
+          <p class="text-white-50">
+            Confirm your premise and key characters to activate the AI-assisted outline builder. Every
+            step is collaborative, transparent, and revision-friendly.
+          </p>
+          <ul class="timeline list-unstyled mt-4">
+            <li class="timeline-step completed">Prompt discovery</li>
+            <li class="timeline-step completed">Character workshop</li>
+            <li class="timeline-step active">Three-act outline</li>
+            <li class="timeline-step">Chapter architecture</li>
+            <li class="timeline-step">Scene drafting</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="mt-5" id="roadmap">
+  <h2 class="h4 text-white fw-semibold mb-4 text-center text-lg-start">Guided journey from idea to manuscript</h2>
+  <div class="row g-4">
+    <div class="col-md-4">
+      <div class="roadmap-card h-100">
+        <h3 class="h5 text-white">Strategic prompts</h3>
+        <p class="text-white-50">
+          Capture your high-level concept, tone, and inspirations. The assistant prepares the right
+          questions to unlock a compelling narrative foundation.
+        </p>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="roadmap-card h-100">
+        <h3 class="h5 text-white">Iterative outlines</h3>
+        <p class="text-white-50">
+          Move through character arcs, three-act structure, and chapter breakdowns with checkpoints for
+          validation or revision after each milestone.
+        </p>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="roadmap-card h-100">
+        <h3 class="h5 text-white">Scene generation</h3>
+        <p class="text-white-50">
+          Produce draft scenes leveraging the local LLM, layering in your creative direction while
+          maintaining voice consistency and pacing.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
