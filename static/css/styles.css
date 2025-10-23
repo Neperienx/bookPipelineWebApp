@@ -1,12 +1,12 @@
 :root {
-  --surface: rgba(17, 22, 40, 0.7);
-  --surface-strong: rgba(17, 22, 40, 0.85);
+  --surface: rgba(17, 22, 40, 0.82);
+  --surface-strong: rgba(17, 22, 40, 0.92);
   --accent: #7c5cff;
   --accent-soft: rgba(124, 92, 255, 0.2);
   --accent-strong: #5f3cf7;
   --text-primary: #ffffff;
-  --text-muted: rgba(255, 255, 255, 0.65);
-  --border-soft: rgba(255, 255, 255, 0.12);
+  --text-muted: rgba(255, 255, 255, 0.78);
+  --border-soft: rgba(255, 255, 255, 0.2);
 }
 
 body {
@@ -33,6 +33,18 @@ body {
 
 .navbar-brand {
   letter-spacing: 0.5px;
+}
+
+.navbar-dark .navbar-nav .nav-link {
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 500;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.navbar-dark .navbar-nav .nav-link:hover,
+.navbar-dark .navbar-nav .nav-link:focus {
+  color: #ffffff;
+  transform: translateY(-1px);
 }
 
 .text-gradient {
@@ -170,13 +182,21 @@ body {
 .btn-outline-light {
   border-width: 2px;
   color: var(--text-primary);
-  border-color: rgba(255, 255, 255, 0.5);
+  border-color: rgba(255, 255, 255, 0.7);
+  transition: all 0.2s ease;
 }
 
 .btn-outline-light:hover,
-.btn-outline-light:focus {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+.btn-outline-light:focus,
+.btn-outline-light:active {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.9);
+}
+
+.btn-light {
+  color: #1d2130;
+  font-weight: 500;
 }
 
 .card,
@@ -199,7 +219,7 @@ body {
 }
 
 .form-label {
-  color: var(--text-muted);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .chat-surface {
@@ -265,6 +285,39 @@ body {
   padding: 1.5rem;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(0, 0, 0, 0.15);
+}
+
+.outline-result {
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 1.25rem;
+  padding: 1.5rem;
+}
+
+.outline-output {
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  white-space: pre-wrap;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.prompt-preview {
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 1rem;
+  padding: 1rem 1.25rem;
+}
+
+.prompt-text {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--text-primary);
 }
 
 .toast {

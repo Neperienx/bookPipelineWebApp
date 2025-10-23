@@ -46,6 +46,80 @@
   </div>
 
   <div class="col-lg-8">
+    <div class="card frosted-card border-0 shadow-sm mb-4">
+      <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+          <div>
+            <h2 class="h5 text-white fw-semibold mb-1">Idea → outline</h2>
+            <p class="text-white-50 small mb-0">
+              Transform a rough idea into a guided outline of roughly five hundred words that you can iterate on.
+            </p>
+          </div>
+          <span class="badge rounded-pill bg-info-subtle text-info-emphasis">New</span>
+        </div>
+        <form method="post" class="mt-4">
+          {{ outline_form.hidden_tag() }}
+          <div class="mb-3">
+            {{ outline_form.prompt.label(class="form-label text-white fw-semibold") }}
+            {{ outline_form.prompt(class="form-control form-control-lg", rows="4", placeholder="Describe the core idea, genre, and any key characters or stakes.") }}
+            {% for error in outline_form.prompt.errors %}
+            <div class="text-danger small mt-1">{{ error }}</div>
+            {% endfor %}
+          </div>
+          <div class="d-flex flex-wrap align-items-center gap-3">
+            {{ outline_form.submit(class="btn btn-primary rounded-pill px-4") }}
+            <span class="text-white-50 small">The configured prompt template guides the LLM to deliver ~500 words.</span>
+          </div>
+        </form>
+
+        {% if outline_result %}
+        <div class="outline-result mt-4">
+          <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+            <div>
+              <h3 class="h6 text-white mb-1">Generated outline</h3>
+              <p class="text-white-50 small mb-0">
+                {% if outline_result.used_fallback %}
+                Created with the built-in planner while the LLM connection is offline.
+                {% else %}
+                Created with your configured language model.
+                {% endif %}
+              </p>
+            </div>
+            <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">
+              {{ outline_result.word_count }} words
+            </span>
+          </div>
+          <div class="outline-output" id="outlineOutput">{{ outline_result.outline }}</div>
+          <div class="d-flex flex-wrap gap-2 mt-3">
+            <button class="btn btn-outline-light btn-sm rounded-pill" type="button" data-copy-target="#outlineOutput">
+              Copy outline
+            </button>
+            <button
+              class="btn btn-outline-light btn-sm rounded-pill"
+              type="button"
+              data-bs-toggle="collapse"
+              data-bs-target="#outlinePrompt"
+              aria-expanded="false"
+              aria-controls="outlinePrompt"
+            >
+              View prompt
+            </button>
+          </div>
+          <div class="collapse mt-3" id="outlinePrompt">
+            <div class="prompt-preview">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="text-white-50 small text-uppercase">Prompt sent to the model</span>
+                <button class="btn btn-light btn-sm rounded-pill" type="button" data-copy-target="#outlinePromptText">
+                  Copy prompt
+                </button>
+              </div>
+              <pre class="prompt-text" id="outlinePromptText">{{ outline_result.prompt }}</pre>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
     <div class="chat-surface shadow-lg">
       <div class="chat-header d-flex justify-content-between align-items-center">
         <div>
@@ -86,4 +160,42 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+  (() => {
+    const copyButtons = document.querySelectorAll('[data-copy-target]');
+    copyButtons.forEach((button) => {
+      const original = button.innerHTML;
+      button.addEventListener('click', async () => {
+        const selector = button.getAttribute('data-copy-target');
+        const target = selector ? document.querySelector(selector) : null;
+        if (!target) {
+          return;
+        }
+        const text = target.innerText.trim();
+        try {
+          await navigator.clipboard.writeText(text);
+          button.innerHTML = 'Copied!';
+          button.classList.remove('btn-outline-light');
+          button.classList.add('btn-success');
+        } catch (error) {
+          console.error('Copy failed', error);
+          button.innerHTML = 'Copy unavailable';
+          button.classList.remove('btn-outline-light');
+          button.classList.add('btn-danger');
+        }
+        setTimeout(() => {
+          button.innerHTML = original;
+          button.classList.remove('btn-success', 'btn-danger');
+          if (!button.classList.contains('btn-outline-light')) {
+            button.classList.add('btn-outline-light');
+          }
+        }, 1600);
+      });
+    });
+  })();
+</script>
 {% endblock %}

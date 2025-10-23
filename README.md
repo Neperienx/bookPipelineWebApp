@@ -19,7 +19,17 @@ The end goal is a modular pipeline that can evolve as we learn which creative st
 
 ---
 
-## 2. Technology Stack
+## 2. Implemented Features
+
+- **Modern interface refresh** – Gradient canvas, glassmorphism panels, and higher-contrast buttons/navigation for improved legibility.
+- **Authentication & profiles** – Email-based registration, login, logout, and secure password hashing.
+- **Project dashboard** – Create, review, and jump into multiple story projects with status tracking and timeline badges.
+- **Pipeline workspace** – Visualise each storytelling step and simulate progress with advance/reset controls.
+- **Idea-to-outline generator** – Convert a free-form story seed into an outline of ~500 words, using the configurable template in `prompt_config.json` with an offline-friendly fallback when no LLM is connected.
+
+---
+
+## 3. Technology Stack
 
 - **Runtime**: Python 3.13.7
 - **Web framework**: Flask 3
@@ -31,7 +41,7 @@ The end goal is a modular pipeline that can evolve as we learn which creative st
 
 ---
 
-## 3. Project Structure
+## 4. Project Structure
 
 ```
 bookPipelineWebApp/
@@ -62,7 +72,7 @@ bookPipelineWebApp/
 
 ---
 
-## 4. Setup Instructions (Development)
+## 5. Setup Instructions (Development)
 
 > **Prerequisite:** Python 3.13.7 (the project uses features from the latest Python release).
 
@@ -136,31 +146,31 @@ bookPipelineWebApp/
 
 ---
 
-## 5. Application Walkthrough
+## 6. Application Walkthrough
 
-### 5.1 Landing Page
+### 6.1 Landing Page
 - Hero section introduces the pipeline and highlights the connection to a local LLM.
 - Roadmap cards explain how the story will move from idea to manuscript.
 - CTA buttons invite visitors to register or scroll for details.
 
-### 5.2 Authentication
+### 6.2 Authentication
 - Email + password login with hashed credentials (`werkzeug.security`).
 - CSRF protection is enabled application-wide.
 - Flash messaging uses elegant toasts for feedback.
 
-### 5.3 Dashboard
+### 6.3 Dashboard
 - Left side encourages new project creation with a concise form.
 - Right side features a responsive grid of project cards, each with status badges and quick links to the workspace.
 - Projects default to `draft` status and the first pipeline step (`prompt`).
 
-### 5.4 Project Workspace
+### 6.4 Project Workspace
 - Status timeline visualizes the full pipeline (prompt → characters → three-act outline → chapters → scenes → manuscript).
 - Buttons allow you to simulate progress (`Advance step`) or reset to the beginning while persistence logic is built.
 - The chat surface is styled for the upcoming conversational UX. For now it explains what will happen once the local LLM is wired in.
 
 ---
 
-## 6. Connecting the Local LLM (Preview)
+## 7. Connecting the Local LLM (Preview)
 
 We plan to reuse the existing `text_generator.py` module as a staging point for local inference. The future integration will work roughly as follows:
 
@@ -173,7 +183,7 @@ Until the service layer is implemented, the UI highlights that the assistant is 
 
 ---
 
-## 7. Suggested Next Steps
+## 8. Suggested Next Steps
 
 1. **Model migrations**: Introduce Flask-Migrate commands and seed data for development demos.
 2. **Project artefacts**: Create tables for prompts, outlines, and scenes linked to `Project` with revision history.
@@ -183,7 +193,7 @@ Until the service layer is implemented, the UI highlights that the assistant is 
 
 ---
 
-## 8. Design Language
+## 9. Design Language
 
 - **Palette**: Neon gradients with deep navy backgrounds inspired by creative studios.
 - **Typography**: Poppins for a modern and legible interface.
@@ -193,7 +203,7 @@ Feel free to iterate on the styling in `static/css/styles.css` to match your bra
 
 ---
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 | Issue | Fix |
 | ----- | --- |
@@ -203,7 +213,7 @@ Feel free to iterate on the styling in `static/css/styles.css` to match your bra
 
 ---
 
-## 10. Contributing
+## 11. Contributing
 
 1. Fork the repository and branch off `work` (or your chosen base branch).
 2. Follow the structure already established for blueprints, templates, and services.

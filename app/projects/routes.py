@@ -1,9 +1,11 @@
-from flask import abort, flash, redirect, render_template, url_for
+from flask import abort, current_app, flash, redirect, render_template, url_for
 from flask_login import current_user, login_required
 
 from ..extensions import db
 from ..models import Project
+from ..services.story_outline import OutlineGenerationError, generate_story_outline
 from . import bp
+from .forms import OutlineRequestForm
 
 
 PROJECT_STEPS = [
@@ -16,7 +18,7 @@ PROJECT_STEPS = [
 ]
 
 
-@bp.route("/<int:project_id>")
+@bp.route("/<int:project_id>", methods=["GET", "POST"])
 @login_required
 def detail(project_id: int):
     project = Project.query.get_or_404(project_id)
@@ -29,11 +31,28 @@ def detail(project_id: int):
     except ValueError:
         current_index = 0
 
+    outline_form = OutlineRequestForm(prefix="outline")
+    outline_result = None
+    if outline_form.validate_on_submit():
+        try:
+            outline_result = generate_story_outline(
+                outline_form.prompt.data,
+                project_title=project.title,
+            )
+            flash("Draft outline created from your story seed.", "success")
+        except OutlineGenerationError as exc:
+            flash(str(exc), "danger")
+        except Exception:  # pragma: no cover - defensive logging for unexpected states
+            current_app.logger.exception("Unexpected error while generating story outline")
+            flash("We couldn't generate an outline right now. Please try again.", "danger")
+
     return render_template(
         "projects/project_detail.html",
         project=project,
         steps=PROJECT_STEPS,
         current_index=current_index,
+        outline_form=outline_form,
+        outline_result=outline_result,
     )
 
 
