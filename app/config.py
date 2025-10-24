@@ -17,6 +17,10 @@ class Config:
     SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL", _default_sqlite_uri())
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     WTF_CSRF_TIME_LIMIT = None
+    TEXT_GENERATOR_MODEL_PATH = os.environ.get(
+        "TEXT_GENERATOR_MODEL_PATH",
+        r"C:\Users\nicol\Documents\01_Code\models\dolphin-2.6-mistral-7b",
+    )
 
 
 class TestConfig(Config):
