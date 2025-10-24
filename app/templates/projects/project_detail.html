@@ -54,12 +54,20 @@
         <ul class="list-group stage-summary" id="stageSummary" data-stage-summary>
           {% for stage_id, stage_data in stage_generation_steps.items() %}
           {% set entry = stage_entries.get(stage_id) %}
+          {% set detail_link = stage_detail_links.get(stage_id) %}
+          {% set quick_action = stage_quick_actions.get(stage_id) %}
           <li
-            class="list-group-item d-flex justify-content-between align-items-start rounded-3 mb-2 bg-transparent text-white-50"
+            class="list-group-item d-flex justify-content-between align-items-start rounded-3 mb-2 bg-transparent text-white-50 position-relative"
             data-stage-summary-item="{{ stage_id }}"
           >
-            <div>
-              <div class="fw-semibold text-white">{{ stage_data.label }}</div>
+            <div class="me-3">
+              <div class="fw-semibold text-white">
+                {% if detail_link %}
+                <a class="stage-summary-link stretched-link" href="{{ detail_link }}">{{ stage_data.label }}</a>
+                {% else %}
+                {{ stage_data.label }}
+                {% endif %}
+              </div>
               <div class="small" data-stage-summary-detail="{{ stage_id }}">
                 {% if entry %}
                 Updated {{ entry.updated_at.strftime('%b %d, %Y %H:%M') }}
@@ -68,12 +76,17 @@
                 {% endif %}
               </div>
             </div>
-            <span
-              class="badge rounded-pill {% if entry %}bg-success-subtle text-success-emphasis{% else %}bg-dark-subtle text-white-50{% endif %}"
-              data-stage-summary-state="{{ stage_id }}"
-            >
-              {% if entry %}Ready{% else %}Pending{% endif %}
-            </span>
+            <div class="d-flex flex-column align-items-end gap-2 stage-quick-action">
+              <span
+                class="badge rounded-pill {% if entry %}bg-success-subtle text-success-emphasis{% else %}bg-dark-subtle text-white-50{% endif %}"
+                data-stage-summary-state="{{ stage_id }}"
+              >
+                {% if entry %}Ready{% else %}Pending{% endif %}
+              </span>
+              {% if quick_action %}
+              <a class="btn btn-outline-light btn-sm rounded-pill" href="{{ quick_action.url }}">{{ quick_action.label }}</a>
+              {% endif %}
+            </div>
           </li>
           {% endfor %}
         </ul>
