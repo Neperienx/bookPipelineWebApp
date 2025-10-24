@@ -12,12 +12,6 @@ from flask_login import current_user, login_required
 
 from ..extensions import db
 from ..models import ActOutline, CharacterProfile, OutlineDraft, Project, ProjectStage
-from ..services.autofill import (
-    CharacterAutofillError,
-    OutlineAutofillError,
-    autofill_characters_for_project,
-    autofill_outline_for_project,
-)
 from ..services.stage_generation import (
     StageGenerationError,
     generate_stage_content,
@@ -28,31 +22,27 @@ from .forms import ActOutlineForm, CharacterProfileForm, OutlineDraftForm, Outli
 
 
 PROJECT_STEPS = [
-    ("prompt", "Initial story prompt"),
-    ("characters", "Character development"),
-    ("three_act", "Three-act outline"),
-    ("chapters", "Chapter outline"),
-    ("scenes", "Scene outline"),
-    ("manuscript", "Draft manuscript"),
+    ("outline", "Outline"),
+    ("characters", "Character roster"),
+    ("act_outline", "Act outline"),
 ]
 
 
 STAGE_GENERATION_STEPS = {
-    "prompt": {
-        "label": "Initial story prompt",
-        "cta": "Generate project brief",
-        "description": "Capture the core hook, tone, and stakes to guide later stages.",
-        "input_label": "Describe the spark",
-        "input_placeholder": "Summarise the idea, genre, and any must-have beats.",
-        "output_label": "Expanded project brief",
+    "outline": {
+        "label": "Outline",
+        "description": "Build a high-level outline that captures the major beats.",
+        "system_prompt": "You are an experienced narrative designer crafting crisp, structured outlines.",
     },
     "characters": {
-        "label": "Character development",
-        "cta": "Outline character set",
-        "description": "Sketch the protagonist, opposing force, and key allies.",
-        "input_label": "What do you know about the cast?",
-        "input_placeholder": "Share goals, flaws, relationships, or archetypes.",
-        "output_label": "Suggested character breakdown",
+        "label": "Create character",
+        "description": "Develop a cast overview with motivations and conflicts.",
+        "system_prompt": "You are a character development expert who finds vivid personalities in any idea.",
+    },
+    "act_outline": {
+        "label": "Act outline",
+        "description": "Transform the idea into a three-act progression with key turns.",
+        "system_prompt": "You are a story architect specialising in clear, escalating act structures.",
     },
 }
 
@@ -235,6 +225,26 @@ def detail(project_id: int):
         for entry in ProjectStage.query.filter_by(project_id=project.id).all()
     }
 
+    stage_client_config = {
+        stage_id: {
+            "label": data.get("label", stage_id.replace("_", " ").title()),
+            "description": data.get("description"),
+            "system_prompt": data.get("system_prompt", ""),
+        }
+        for stage_id, data in STAGE_GENERATION_STEPS.items()
+    }
+
+    stage_client_entries = {
+        stage_id: {
+            "system_prompt": (entry.system_prompt or ""),
+            "user_prompt": (entry.user_prompt or ""),
+            "generated_text": (entry.generated_text or ""),
+            "updated_at": entry.updated_at.isoformat() if entry.updated_at else None,
+            "used_fallback": entry.used_fallback,
+        }
+        for stage_id, entry in stage_entries.items()
+    }
+
     outlines = (
         OutlineDraft.query.filter_by(project_id=project.id)
         .order_by(OutlineDraft.created_at.desc())
@@ -335,39 +345,6 @@ def detail(project_id: int):
         character_form.conflict.data = ""
         character_form.notes.data = ""
 
-    base_query_args = {}
-    if selected_outline:
-        base_query_args["outline_id"] = selected_outline.id
-    if selected_act:
-        base_query_args["act_id"] = selected_act.id
-    if selected_character:
-        base_query_args["character_id"] = selected_character.id
-
-    def build_project_url(**overrides: object) -> str:
-        params = {**base_query_args, **overrides}
-        filtered_params = {
-            key: value
-            for key, value in params.items()
-            if value not in (None, "")
-        }
-        return url_for("projects.detail", project_id=project.id, **filtered_params)
-
-    stage_detail_links = {
-        "prompt": f"{build_project_url()}#outlineLibrary",
-        "characters": f"{build_project_url()}#characterLibrary",
-    }
-
-    stage_quick_actions = {
-        "prompt": {
-            "label": "Refine outline",
-            "url": f"{build_project_url()}#outlineForm",
-        },
-        "characters": {
-            "label": "Add character",
-            "url": f"{build_project_url(character_id='new')}#characterLibrary",
-        },
-    }
-
     return render_template(
         "projects/project_detail.html",
         project=project,
@@ -386,8 +363,8 @@ def detail(project_id: int):
         selected_character=selected_character,
         stage_entries=stage_entries,
         stage_generation_steps=STAGE_GENERATION_STEPS,
-        stage_detail_links=stage_detail_links,
-        stage_quick_actions=stage_quick_actions,
+        stage_client_config=stage_client_config,
+        stage_client_entries=stage_client_entries,
     )
 
 
@@ -401,12 +378,22 @@ def generate_stage(project_id: int):
     payload = request.get_json(silent=True) or {}
     stage = payload.get("stage")
     prompt = payload.get("prompt", "")
+    system_prompt = payload.get("system_prompt", "")
 
     if stage not in STAGE_GENERATION_STEPS:
         return jsonify({"error": "Unknown stage requested."}), 400
 
+    stage_config = STAGE_GENERATION_STEPS[stage]
+    default_system_prompt = (stage_config.get("system_prompt") or "").strip()
+    effective_system_prompt = (system_prompt or "").strip() or default_system_prompt
+
     try:
-        result = generate_stage_content(stage, prompt, project_title=project.title)
+        result = generate_stage_content(
+            stage,
+            prompt,
+            system_prompt=effective_system_prompt,
+            project_title=project.title,
+        )
     except StageGenerationError as exc:
         return jsonify({"error": str(exc)}), 400
 
@@ -414,6 +401,7 @@ def generate_stage(project_id: int):
     if not entry:
         entry = ProjectStage(project=project, stage=stage)
 
+    entry.system_prompt = effective_system_prompt
     entry.user_prompt = (prompt or "").strip() or None
     entry.generated_text = result.text
     entry.used_fallback = result.used_fallback
@@ -424,33 +412,10 @@ def generate_stage(project_id: int):
         "stage": stage,
         "label": STAGE_GENERATION_STEPS[stage]["label"],
         "content": entry.generated_text,
+        "system_prompt": entry.system_prompt,
         "used_fallback": entry.used_fallback,
         "updated_at": entry.updated_at.isoformat() if entry.updated_at else None,
     }
-
-    if stage == "prompt":
-        try:
-            outline_autofill = autofill_outline_for_project(project, prompt)
-        except OutlineAutofillError as exc:
-            current_app.logger.warning("Outline autofill failed: %s", exc)
-        else:
-            response_payload["outline"] = {
-                "id": outline_autofill.draft.id,
-                "title": outline_autofill.draft.title,
-                "word_count": outline_autofill.word_count,
-                "used_fallback": outline_autofill.used_fallback,
-            }
-    elif stage == "characters":
-        try:
-            character_autofill = autofill_characters_for_project(project, prompt)
-        except CharacterAutofillError as exc:
-            current_app.logger.warning("Character autofill failed: %s", exc)
-        else:
-            response_payload["characters"] = {
-                "created_ids": [character.id for character in character_autofill.created],
-                "updated_ids": [character.id for character in character_autofill.updated],
-                "used_fallback": character_autofill.used_fallback,
-            }
 
     db.session.commit()
 

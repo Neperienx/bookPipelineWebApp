@@ -20,12 +20,19 @@ class StageContentResult:
 
 
 STAGE_PROMPT_KEYS: Dict[str, str] = {
-    "prompt": "stage_initial_story_prompt",
+    "outline": "outline_from_prompt",
     "characters": "stage_character_development",
+    "act_outline": "stage_act_outline",
 }
 
 
-def generate_stage_content(stage: str, user_prompt: str, *, project_title: Optional[str] = None) -> StageContentResult:
+def generate_stage_content(
+    stage: str,
+    user_prompt: str,
+    *,
+    system_prompt: Optional[str] = None,
+    project_title: Optional[str] = None,
+) -> StageContentResult:
     stage_key = STAGE_PROMPT_KEYS.get(stage)
     if not stage_key:
         raise StageGenerationError("Unsupported stage requested.")
@@ -44,10 +51,16 @@ def generate_stage_content(stage: str, user_prompt: str, *, project_title: Optio
     if not prompt_template:
         raise StageGenerationError("Prompt template is missing for this stage.")
 
-    final_prompt = prompt_template.format(
+    prompt_body = prompt_template.format(
         project_title=project_fragment,
         user_prompt=cleaned_prompt,
     )
+
+    system_fragment = (system_prompt or "").strip()
+    if system_fragment:
+        final_prompt = f"{system_fragment}\n\n{prompt_body}".strip()
+    else:
+        final_prompt = prompt_body
 
     generator = _get_text_generator()
     parameters = config_entry.get("parameters") if isinstance(config_entry, dict) else None
@@ -80,17 +93,14 @@ def generate_stage_content(stage: str, user_prompt: str, *, project_title: Optio
 
 
 def _fallback_for_stage(stage: str, user_prompt: str, project_title: str) -> str:
-    if stage == "prompt":
+    if stage == "outline":
         return (
-            f"Working title: {project_title}\n"
-            "Premise summary:\n"
-            f"- Clarify the inciting incident suggested by: {user_prompt}.\n"
-            "- Outline the protagonist's central desire and immediate obstacle.\n"
-            "- Note the tone, genre, or comparable stories that inspired this concept.\n\n"
-            "Key questions to explore next:\n"
-            "1. What personal stakes make the protagonist risk everything?\n"
-            "2. Which relationship will transform the most because of these events?\n"
-            "3. Where does the story leave the reader emotionally?"
+            f"Project: {project_title}\n"
+            "Outline starter:\n"
+            f"- Describe how {user_prompt} introduces the protagonist and their central drive.\n"
+            "- Highlight the disruptive event that forces a hard choice.\n"
+            "- Sketch the midpoint escalation and the dark-night-of-the-soul.\n"
+            "- Close with a glimpse of the resolution and thematic takeaway."
         )
     if stage == "characters":
         return (
@@ -99,6 +109,14 @@ def _fallback_for_stage(stage: str, user_prompt: str, project_title: str) -> str
             "2. Antagonistic Force — describe the pressure it exerts, how it mirrors the protagonist, and why it believes it must win.\n"
             "3. Key Ally — note the skill that makes them indispensable, the boundary they won't cross, and the moment they may waver.\n"
             "4. Wildcard — imagine an unexpected character or subplot that complicates loyalties."
+        )
+    if stage == "act_outline":
+        return (
+            f"Act structure guide for {project_title}:\n"
+            "Act I: Show the everyday world, the catalytic disruption, and the decision that launches the journey.\n"
+            "Act II: Track escalating complications, shifting alliances, and the midpoint revelation sparked by {user_prompt}.\n"
+            "Act III: Describe the climactic confrontation, what is sacrificed, and the transformed status quo.\n"
+            "Closing beat: Capture the emotional resonance that lingers with the reader."
         )
 
     raise StageGenerationError("No fallback is defined for this stage.")
