@@ -329,6 +329,39 @@ def detail(project_id: int):
         character_form.conflict.data = ""
         character_form.notes.data = ""
 
+    base_query_args = {}
+    if selected_outline:
+        base_query_args["outline_id"] = selected_outline.id
+    if selected_act:
+        base_query_args["act_id"] = selected_act.id
+    if selected_character:
+        base_query_args["character_id"] = selected_character.id
+
+    def build_project_url(**overrides: object) -> str:
+        params = {**base_query_args, **overrides}
+        filtered_params = {
+            key: value
+            for key, value in params.items()
+            if value not in (None, "")
+        }
+        return url_for("projects.detail", project_id=project.id, **filtered_params)
+
+    stage_detail_links = {
+        "prompt": f"{build_project_url()}#outlineLibrary",
+        "characters": f"{build_project_url()}#characterLibrary",
+    }
+
+    stage_quick_actions = {
+        "prompt": {
+            "label": "Refine outline",
+            "url": f"{build_project_url()}#outlineForm",
+        },
+        "characters": {
+            "label": "Add character",
+            "url": f"{build_project_url(character_id='new')}#characterLibrary",
+        },
+    }
+
     return render_template(
         "projects/project_detail.html",
         project=project,
@@ -347,6 +380,8 @@ def detail(project_id: int):
         selected_character=selected_character,
         stage_entries=stage_entries,
         stage_generation_steps=STAGE_GENERATION_STEPS,
+        stage_detail_links=stage_detail_links,
+        stage_quick_actions=stage_quick_actions,
     )
 
 

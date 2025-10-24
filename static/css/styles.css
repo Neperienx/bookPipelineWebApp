@@ -348,6 +348,22 @@ footer {
 .stage-summary .list-group-item {
   border: 1px solid rgba(255, 255, 255, 0.08);
   background-color: rgba(15, 15, 26, 0.4);
+  position: relative;
+}
+
+.stage-summary .stage-summary-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.stage-summary .stage-summary-link:hover,
+.stage-summary .stage-summary-link:focus {
+  color: #fff;
+}
+
+.stage-summary .stage-quick-action {
+  position: relative;
+  z-index: 2;
 }
 
 .chat-header {
