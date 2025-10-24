@@ -5,7 +5,12 @@ from typing import Dict, Optional
 
 from flask import current_app
 
-from .story_outline import OutlineGenerationError, _get_text_generator, _load_prompt_entry
+from .story_outline import (
+    OutlineGenerationError,
+    _extract_generation_parameters,
+    _get_text_generator,
+    _load_prompt_entry,
+)
 
 
 class StageGenerationError(RuntimeError):
@@ -63,17 +68,14 @@ def generate_stage_content(
         final_prompt = prompt_body
 
     generator = _get_text_generator()
-    parameters = config_entry.get("parameters") if isinstance(config_entry, dict) else None
-    max_new_tokens = None
-    if isinstance(parameters, dict):
-        max_new_tokens = parameters.get("max_new_tokens")
+    generation_kwargs = _extract_generation_parameters(config_entry.get("parameters"))
 
     result_text: Optional[str] = None
     used_fallback = False
 
     if generator is not None:
         try:
-            result_text = generator.generate_response(final_prompt, max_new_tokens=max_new_tokens)
+            result_text = generator.generate_response(final_prompt, **generation_kwargs)
         except Exception as exc:  # pragma: no cover - defensive log for integrations
             current_app.logger.warning(
                 "LLM stage generation failed; using fallback response for '%s'. Error: %s",

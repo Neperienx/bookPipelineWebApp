@@ -53,14 +53,11 @@ def generate_story_outline(user_prompt: str, *, project_title: Optional[str] = N
     used_fallback = False
 
     generator = _get_text_generator()
-    max_new_tokens = None
-    parameters = config_entry.get("parameters")
-    if isinstance(parameters, dict):
-        max_new_tokens = parameters.get("max_new_tokens")
+    generation_kwargs = _extract_generation_parameters(config_entry.get("parameters"))
 
     if generator is not None:
         try:
-            outline_text = generator.generate_response(final_prompt, max_new_tokens=max_new_tokens)
+            outline_text = generator.generate_response(final_prompt, **generation_kwargs)
         except Exception as exc:  # pragma: no cover - defensive logging for external integrations
             current_app.logger.warning("LLM outline generation failed; falling back to heuristic outline. Error: %s", exc)
 
@@ -117,6 +114,30 @@ def _load_prompt_config() -> Dict[str, Any]:
 
     app.config[PROMPT_CACHE_KEY] = data
     return data
+
+
+_GENERATION_PARAMETER_KEYS = {
+    "max_new_tokens",
+    "temperature",
+    "top_p",
+    "repetition_penalty",
+    "presence_penalty",
+    "frequency_penalty",
+    "top_k",
+}
+
+
+def _extract_generation_parameters(parameters: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Filter a raw parameters dictionary to generation kwargs supported by the LLM."""
+
+    if not isinstance(parameters, dict):
+        return {}
+
+    kwargs: Dict[str, Any] = {}
+    for key in _GENERATION_PARAMETER_KEYS:
+        if key in parameters and parameters[key] is not None:
+            kwargs[key] = parameters[key]
+    return kwargs
 
 
 def _get_text_generator() -> Optional[Any]:  # pragma: no cover - integration point
