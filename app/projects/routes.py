@@ -1,4 +1,4 @@
-from flask import abort, current_app, flash, redirect, render_template, url_for
+from flask import abort, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from ..extensions import db
@@ -32,8 +32,16 @@ def detail(project_id: int):
         current_index = 0
 
     outline_form = OutlineRequestForm(prefix="outline")
+    if request.method == "GET":
+        outline_form.prompt.data = project.last_outline_prompt or ""
     outline_result = None
     if outline_form.validate_on_submit():
+        saved_prompt = (outline_form.prompt.data or "").strip()
+        normalized_prompt = saved_prompt or None
+        commit_needed = False
+        if project.last_outline_prompt != normalized_prompt:
+            project.last_outline_prompt = normalized_prompt
+            commit_needed = True
         try:
             outline_result = generate_story_outline(
                 outline_form.prompt.data,
@@ -45,6 +53,9 @@ def detail(project_id: int):
         except Exception:  # pragma: no cover - defensive logging for unexpected states
             current_app.logger.exception("Unexpected error while generating story outline")
             flash("We couldn't generate an outline right now. Please try again.", "danger")
+        finally:
+            if commit_needed:
+                db.session.commit()
 
     return render_template(
         "projects/project_detail.html",

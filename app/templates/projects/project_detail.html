@@ -57,7 +57,7 @@
           </div>
           <span class="badge rounded-pill bg-info-subtle text-info-emphasis">New</span>
         </div>
-        <form method="post" class="mt-4">
+        <form method="post" class="mt-4" id="outlineForm">
           {{ outline_form.hidden_tag() }}
           <div class="mb-3">
             {{ outline_form.prompt.label(class="form-label text-white fw-semibold") }}
@@ -65,10 +65,20 @@
             {% for error in outline_form.prompt.errors %}
             <div class="text-danger small mt-1">{{ error }}</div>
             {% endfor %}
+            <div class="text-white-50 small mt-2">Your last prompt is saved with this project — refine or build on it anytime.</div>
           </div>
           <div class="d-flex flex-wrap align-items-center gap-3">
-            {{ outline_form.submit(class="btn btn-primary rounded-pill px-4") }}
-            <span class="text-white-50 small">The configured prompt template guides the LLM to deliver ~500 words.</span>
+            {{ outline_form.submit(class="btn btn-primary rounded-pill px-4", id="generateOutlineButton") }}
+            <div
+              id="outlineGeneratingIndicator"
+              class="d-none text-white-50 small"
+              role="status"
+              aria-live="polite"
+            >
+              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+              <span>Generating outline…</span>
+            </div>
+            <span class="text-white-50 small flex-grow-1">The configured prompt template guides the LLM to deliver ~500 words.</span>
           </div>
         </form>
 
@@ -196,6 +206,23 @@
         }, 1600);
       });
     });
+
+    const outlineForm = document.getElementById('outlineForm');
+    const generateButton = document.getElementById('generateOutlineButton');
+    const generatingIndicator = document.getElementById('outlineGeneratingIndicator');
+    if (outlineForm && generateButton) {
+      outlineForm.addEventListener('submit', () => {
+        if (generateButton.hasAttribute('disabled')) {
+          return;
+        }
+        generateButton.value = 'Generating…';
+        generateButton.setAttribute('disabled', 'disabled');
+        if (generatingIndicator) {
+          generatingIndicator.classList.remove('d-none');
+          generatingIndicator.classList.add('d-flex', 'align-items-center', 'gap-2');
+        }
+      });
+    }
   })();
 </script>
 {% endblock %}
