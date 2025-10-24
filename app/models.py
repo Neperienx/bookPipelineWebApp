@@ -70,6 +70,13 @@ class Project(db.Model):
         cascade="all, delete-orphan",
         order_by="CharacterProfile.name",
     )
+    stages = db.relationship(
+        "ProjectStage",
+        backref="project",
+        lazy=True,
+        cascade="all, delete-orphan",
+        order_by="ProjectStage.stage",
+    )
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Project {self.title} ({self.status})>"
@@ -125,3 +132,23 @@ class CharacterProfile(db.Model):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<CharacterProfile {self.name}>"
+
+
+class ProjectStage(db.Model):
+    __tablename__ = "project_stages"
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("projects.id"), nullable=False, index=True)
+    stage = db.Column(db.String(50), nullable=False)
+    user_prompt = db.Column(db.Text, nullable=True)
+    generated_text = db.Column(db.Text, nullable=True)
+    used_fallback = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint("project_id", "stage", name="uq_project_stage_stage"),
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<ProjectStage {self.stage} for project {self.project_id}>"

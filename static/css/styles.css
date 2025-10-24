@@ -319,6 +319,37 @@ footer {
   box-shadow: var(--shadow-lg);
 }
 
+.stage-switch .nav-link {
+  color: rgba(255, 255, 255, 0.7);
+  border-radius: 999px;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.stage-switch .nav-link.active {
+  background: rgba(17, 205, 239, 0.15);
+  color: #fff;
+}
+
+.stage-panels .stage-panel {
+  display: none;
+  animation: fadeIn 0.2s ease;
+}
+
+.stage-panels .stage-panel.active {
+  display: block;
+}
+
+.stage-output {
+  background-color: rgba(15, 15, 26, 0.6);
+  color: #f8f9fa;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.stage-summary .list-group-item {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background-color: rgba(15, 15, 26, 0.4);
+}
+
 .chat-header {
   padding: 1.5rem 1.75rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);

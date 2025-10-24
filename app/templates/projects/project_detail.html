@@ -43,9 +43,147 @@
         </div>
       </div>
     </div>
+
+    <div class="card frosted-card border-0 shadow-sm mt-4">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start mb-3">
+          <h3 class="h6 text-white text-uppercase mb-0">Stage insights</h3>
+          <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis small">Live sync</span>
+        </div>
+        <p class="text-white-50 small">Track which creative stages already have assistant drafts saved for this project.</p>
+        <ul class="list-group stage-summary" id="stageSummary" data-stage-summary>
+          {% for stage_id, stage_data in stage_generation_steps.items() %}
+          {% set entry = stage_entries.get(stage_id) %}
+          <li
+            class="list-group-item d-flex justify-content-between align-items-start rounded-3 mb-2 bg-transparent text-white-50"
+            data-stage-summary-item="{{ stage_id }}"
+          >
+            <div>
+              <div class="fw-semibold text-white">{{ stage_data.label }}</div>
+              <div class="small" data-stage-summary-detail="{{ stage_id }}">
+                {% if entry %}
+                Updated {{ entry.updated_at.strftime('%b %d, %Y %H:%M') }}
+                {% else %}
+                Awaiting input
+                {% endif %}
+              </div>
+            </div>
+            <span
+              class="badge rounded-pill {% if entry %}bg-success-subtle text-success-emphasis{% else %}bg-dark-subtle text-white-50{% endif %}"
+              data-stage-summary-state="{{ stage_id }}"
+            >
+              {% if entry %}Ready{% else %}Pending{% endif %}
+            </span>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
   </div>
 
   <div class="col-lg-8">
+    <div
+      class="card frosted-card border-0 shadow-sm mb-4"
+      id="stageAssistant"
+      data-stage-endpoint="{{ url_for('projects.generate_stage', project_id=project.id) }}"
+    >
+      <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+          <div>
+            <h2 class="h5 text-white fw-semibold mb-1">Story foundation assistant</h2>
+            <p class="text-white-50 small mb-0">Switch between stages, feed a brief, and let the Logal LLM prefill your project database.</p>
+          </div>
+          <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis">Beta</span>
+        </div>
+
+        <ul class="nav nav-pills stage-switch" role="tablist">
+          {% for stage_id, stage_data in stage_generation_steps.items() %}
+          <li class="nav-item me-2" role="presentation">
+            <button
+              class="nav-link {% if loop.first %}active{% endif %}"
+              id="stage-tab-{{ stage_id }}"
+              data-stage-tab
+              data-stage-target="{{ stage_id }}"
+              type="button"
+              role="tab"
+            >
+              {{ stage_data.label }}
+            </button>
+          </li>
+          {% endfor %}
+        </ul>
+
+        <div class="stage-panels mt-4">
+          {% for stage_id, stage_data in stage_generation_steps.items() %}
+          {% set entry = stage_entries.get(stage_id) %}
+          <div
+            class="stage-panel {% if loop.first %}active{% endif %}"
+            data-stage-panel="{{ stage_id }}"
+            role="tabpanel"
+            aria-labelledby="stage-tab-{{ stage_id }}"
+          >
+            <form class="stage-form" data-stage-form data-stage="{{ stage_id }}">
+              <div class="mb-3">
+                <label class="form-label text-white fw-semibold" for="stage-input-{{ stage_id }}">
+                  {{ stage_data.input_label }}
+                </label>
+                <textarea
+                  class="form-control"
+                  id="stage-input-{{ stage_id }}"
+                  name="prompt"
+                  rows="4"
+                  placeholder="{{ stage_data.input_placeholder }}"
+                >{{ entry.user_prompt if entry else '' }}</textarea>
+              </div>
+              <div class="mb-3">
+                <label class="form-label text-white fw-semibold" for="stage-output-{{ stage_id }}">
+                  {{ stage_data.output_label }}
+                </label>
+                <textarea
+                  class="form-control stage-output"
+                  id="stage-output-{{ stage_id }}"
+                  name="stage_output"
+                  rows="8"
+                  readonly
+                  data-stage-output="{{ stage_id }}"
+                >{{ entry.generated_text if entry else '' }}</textarea>
+                <div class="form-text text-white-50" data-stage-feedback="{{ stage_id }}">
+                  {% if entry %}
+                  {% if entry.used_fallback %}
+                  Generated using the fallback heuristic while the Logal LLM was offline.
+                  {% else %}
+                  Drafted by the Logal LLM and stored automatically.
+                  {% endif %}
+                  {% else %}
+                  Output is saved to the project as soon as the assistant finishes.
+                  {% endif %}
+                </div>
+              </div>
+              <div class="d-flex flex-wrap align-items-center gap-3">
+                <button class="btn btn-primary rounded-pill px-4" type="submit" data-stage-submit="{{ stage_id }}">
+                  {{ stage_data.cta }}
+                </button>
+                <div class="flex-grow-1">
+                  <div class="progress d-none" data-stage-progress="{{ stage_id }}">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
+                  </div>
+                </div>
+                <div class="text-white-50 small" data-stage-status="{{ stage_id }}">
+                  {% if entry %}
+                  Synced {{ entry.updated_at.strftime('%b %d, %Y %H:%M') }}
+                  {% else %}
+                  Ready to generate
+                  {% endif %}
+                </div>
+              </div>
+              <div class="text-danger small mt-2 d-none" data-stage-error="{{ stage_id }}"></div>
+            </form>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
     <div class="card frosted-card border-0 shadow-sm mb-4">
       <div class="card-body">
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
@@ -443,6 +581,199 @@
           generatingIndicator.classList.remove('d-none');
           generatingIndicator.classList.add('d-flex', 'align-items-center', 'gap-2');
         }
+      });
+    }
+
+    const stageAssistant = document.getElementById('stageAssistant');
+    if (stageAssistant) {
+      const stageEndpoint = stageAssistant.getAttribute('data-stage-endpoint');
+      const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+      const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
+      const tabs = stageAssistant.querySelectorAll('[data-stage-tab]');
+      const panels = stageAssistant.querySelectorAll('[data-stage-panel]');
+
+      tabs.forEach((tab) => {
+        tab.addEventListener('click', () => {
+          const target = tab.getAttribute('data-stage-target');
+          tabs.forEach((btn) => btn.classList.remove('active'));
+          tab.classList.add('active');
+          panels.forEach((panel) => {
+            panel.classList.toggle('active', panel.getAttribute('data-stage-panel') === target);
+          });
+        });
+      });
+
+      const summary = document.querySelector('[data-stage-summary]');
+
+      const updateSummary = (stage, { updated_at: updatedAt, used_fallback: usedFallback }) => {
+        if (!summary) {
+          return;
+        }
+        const detail = summary.querySelector(`[data-stage-summary-detail="${stage}"]`);
+        const state = summary.querySelector(`[data-stage-summary-state="${stage}"]`);
+        if (detail) {
+          if (updatedAt) {
+            const date = new Date(updatedAt);
+            detail.textContent = `Updated ${date.toLocaleString()}`;
+          } else {
+            detail.textContent = usedFallback ? 'Generated with fallback' : 'Awaiting input';
+          }
+        }
+        if (state) {
+          if (updatedAt) {
+            state.textContent = 'Ready';
+            state.classList.remove('bg-dark-subtle', 'text-white-50');
+            state.classList.add('bg-success-subtle', 'text-success-emphasis');
+          } else {
+            state.textContent = 'Pending';
+            state.classList.remove('bg-success-subtle', 'text-success-emphasis');
+            state.classList.add('bg-dark-subtle', 'text-white-50');
+          }
+        }
+      };
+
+      const formatStatus = (dateString) => {
+        if (!dateString) {
+          return 'Ready to generate';
+        }
+        const date = new Date(dateString);
+        return `Synced ${date.toLocaleString()}`;
+      };
+
+      stageAssistant.querySelectorAll('[data-stage-form]').forEach((form) => {
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          if (!stageEndpoint) {
+            return;
+          }
+          const stage = form.getAttribute('data-stage');
+          const promptField = form.querySelector('textarea[name="prompt"]');
+          const outputField = form.querySelector(`[data-stage-output="${stage}"]`);
+          const progress = form.querySelector(`[data-stage-progress="${stage}"]`);
+          const status = form.querySelector(`[data-stage-status="${stage}"]`);
+          const feedback = form.querySelector(`[data-stage-feedback="${stage}"]`);
+          const error = form.querySelector(`[data-stage-error="${stage}"]`);
+          const submitButton = form.querySelector(`[data-stage-submit="${stage}"]`);
+          const summaryDetail = summary
+            ? summary.querySelector(`[data-stage-summary-detail="${stage}"]`)
+            : null;
+          const summaryState = summary
+            ? summary.querySelector(`[data-stage-summary-state="${stage}"]`)
+            : null;
+          const previousSummaryDetail = summaryDetail ? summaryDetail.textContent : '';
+          const previousSummaryStateClass = summaryState ? summaryState.className : '';
+          const previousSummaryStateText = summaryState ? summaryState.textContent : '';
+          let summaryWasUpdated = false;
+
+          if (!promptField || !outputField || !submitButton) {
+            return;
+          }
+
+          const prompt = promptField.value.trim();
+          if (!prompt) {
+            if (error) {
+              error.textContent = 'Please describe what you would like the assistant to consider.';
+              error.classList.remove('d-none');
+            }
+            return;
+          }
+
+          if (error) {
+            error.classList.add('d-none');
+            error.textContent = '';
+          }
+
+          const originalLabel = submitButton.getAttribute('data-original-label') || submitButton.textContent;
+          submitButton.setAttribute('disabled', 'disabled');
+          submitButton.textContent = 'Generating…';
+          if (progress) {
+            progress.classList.remove('d-none');
+          }
+          if (status) {
+            status.textContent = 'Working with the Logal LLM…';
+          }
+          if (summary) {
+            if (summaryDetail) {
+              summaryDetail.textContent = 'Syncing with assistant…';
+            }
+            if (summaryState) {
+              summaryState.textContent = 'Working';
+              summaryState.classList.remove(
+                'bg-dark-subtle',
+                'text-white-50',
+                'bg-success-subtle',
+                'text-success-emphasis',
+                'bg-primary-subtle',
+                'text-primary-emphasis'
+              );
+              summaryState.classList.add('bg-primary-subtle', 'text-primary-emphasis');
+            }
+          }
+
+          try {
+            const response = await fetch(stageEndpoint, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken || '',
+                'X-CSRF-Token': csrfToken || '',
+              },
+              body: JSON.stringify({ stage, prompt }),
+            });
+
+            const payload = await response.json();
+            if (!response.ok) {
+              throw new Error(payload.error || 'Unable to generate content.');
+            }
+
+            outputField.value = payload.content || '';
+            if (feedback) {
+              feedback.textContent = payload.used_fallback
+                ? 'Generated using the fallback heuristic while the Logal LLM was offline.'
+                : 'Drafted by the Logal LLM and stored automatically.';
+            }
+            if (status) {
+              status.textContent = formatStatus(payload.updated_at);
+            }
+            if (summary) {
+              if (summaryState) {
+                summaryState.classList.remove('bg-primary-subtle', 'text-primary-emphasis');
+              }
+              updateSummary(stage, payload);
+              summaryWasUpdated = true;
+            }
+          } catch (err) {
+            if (error) {
+              error.textContent = err instanceof Error ? err.message : 'Unable to generate content right now.';
+              error.classList.remove('d-none');
+            }
+            if (status) {
+              status.textContent = 'Something went wrong — try again.';
+            }
+          } finally {
+            submitButton.removeAttribute('disabled');
+            submitButton.textContent = originalLabel;
+            if (progress) {
+              progress.classList.add('d-none');
+            }
+            if (status && !status.textContent) {
+              status.textContent = 'Ready to generate';
+            }
+            if (summary && !summaryWasUpdated) {
+              if (summaryDetail) {
+                summaryDetail.textContent = previousSummaryDetail || 'Awaiting input';
+              }
+              if (summaryState) {
+                summaryState.className = previousSummaryStateClass || summaryState.className;
+                summaryState.textContent = previousSummaryStateText || 'Pending';
+              }
+            }
+          }
+        });
+      });
+
+      stageAssistant.querySelectorAll('[data-stage-submit]').forEach((button) => {
+        button.setAttribute('data-original-label', button.textContent);
       });
     }
   })();
