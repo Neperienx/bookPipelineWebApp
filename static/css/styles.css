@@ -12,10 +12,12 @@
 body {
   font-family: "Poppins", sans-serif;
   color: var(--text-primary);
+  background-color: #05070f;
 }
 
 .bg-canvas {
-  background: radial-gradient(circle at 10% 20%, #11162a, #080b16 55%, #05070f 100%);
+  background-color: #05070f;
+  background-image: radial-gradient(circle at 10% 20%, #11162a, #080b16 55%, #05070f 100%);
   position: relative;
   overflow-x: hidden;
 }
@@ -54,7 +56,7 @@ body {
 }
 
 .frosted-card {
-  background: var(--surface);
+  background: rgba(17, 22, 40, 0.9);
   border-radius: 1.25rem;
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
@@ -62,7 +64,7 @@ body {
 }
 
 .project-card {
-  background: var(--surface-strong);
+  background: rgba(17, 22, 40, 0.95);
   border-radius: 1.25rem;
   backdrop-filter: blur(16px);
   border: 1px solid var(--border-soft);
