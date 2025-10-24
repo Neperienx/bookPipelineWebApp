@@ -20,7 +20,8 @@ def ensure_database_schema() -> None:
     The function is intentionally light-weight so it can run on every
     application start. It currently makes sure that the ``projects`` table has
     the ``last_outline_prompt`` column which was introduced after the initial
-    database creation.
+    database creation and that the ``project_stages`` table contains the newer
+    prompt-related columns used by the application views.
     """
 
     try:
@@ -53,6 +54,32 @@ def ensure_database_schema() -> None:
                     connection.execute(
                         text("ALTER TABLE projects ADD COLUMN last_outline_prompt TEXT")
                     )
+
+        if "project_stages" in table_names:
+            stage_columns = _get_column_names("project_stages")
+            alter_statements = []
+
+            if "system_prompt" not in stage_columns:
+                alter_statements.append(
+                    "ALTER TABLE project_stages ADD COLUMN system_prompt TEXT"
+                )
+
+            if "user_prompt" not in stage_columns:
+                alter_statements.append(
+                    "ALTER TABLE project_stages ADD COLUMN user_prompt TEXT"
+                )
+
+            if "used_fallback" not in stage_columns:
+                # SQLite does not support boolean columns natively; use INTEGER with
+                # a default value of 0 to represent False and remain backwards
+                # compatible with existing rows.
+                alter_statements.append(
+                    "ALTER TABLE project_stages ADD COLUMN used_fallback BOOLEAN NOT NULL DEFAULT 0"
+                )
+
+            for statement in alter_statements:
+                with db.engine.begin() as connection:
+                    connection.execute(text(statement))
     except SQLAlchemyError:
         # If we fail to introspect or modify the schema we re-raise the error so
         # that the application does not continue in a partially configured state.
