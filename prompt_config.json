@@ -26,6 +26,15 @@
       "top_p": 0.9
     }
   },
+  "stage_act_outline": {
+    "display_name": "Three-act structure overview",
+    "prompt_template": "You are the Logal LLM, an expert in three-act dramatic architecture. Using the writer's notes, draft a structured response with the headings Act I – Setup, Act II – Escalation, Act III – Resolution, and Final Image. Under each heading provide two to three bullet points that emphasise causality, emotional stakes, and reversals specific to the concept. Keep the language active, avoid repeating the input verbatim, and end with a short paragraph titled \"Opportunities\" outlining how to deepen theme or character arcs.\n\nProject title: {project_title}\nWriter notes: {user_prompt}",
+    "parameters": {
+      "max_new_tokens": 600,
+      "temperature": 0.7,
+      "top_p": 0.9
+    }
+  },
   "character_autofill": {
     "display_name": "Character roster autofill",
     "prompt_template": "You are the Logal LLM drafting detailed character records for the project database. Using the notes below, generate JSON matching this schema: {\"characters\": [{\"name\": string, \"role\": string, \"background\": string, \"goals\": string, \"conflict\": string, \"notes\": string}]}. Provide at least three characters (protagonist, opposition, key ally) and optionally one wildcard. Each string should be concise but specific to the supplied concept. Avoid commentary or markdown — return valid JSON only.\n\nProject title: {project_title}\nWriter notes: {user_prompt}",

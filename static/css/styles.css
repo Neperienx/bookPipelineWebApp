@@ -343,6 +343,11 @@ footer {
   background-color: rgba(15, 15, 26, 0.6);
   color: #f8f9fa;
   border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  min-height: 160px;
+  padding: 1.25rem;
+  white-space: pre-wrap;
+  transition: border-color 0.2s var(--transition), box-shadow 0.2s var(--transition);
 }
 
 .stage-summary .list-group-item {
@@ -364,6 +369,50 @@ footer {
 .stage-summary .stage-quick-action {
   position: relative;
   z-index: 2;
+}
+
+.stage-status-list .list-group-item {
+  background-color: rgba(17, 30, 54, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-md);
+  margin-bottom: 0.75rem;
+  padding: 1rem 1.25rem;
+}
+
+.stage-status-list .list-group-item:last-child {
+  margin-bottom: 0;
+}
+
+.stage-selector .stage-button {
+  min-width: 160px;
+  font-weight: 600;
+  border-radius: 999px !important;
+  border-width: 1px;
+  border-color: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.75);
+  transition: all 0.2s var(--transition);
+}
+
+.stage-selector .stage-button.active,
+.stage-selector .stage-button:hover,
+.stage-selector .stage-button:focus {
+  color: #fff;
+  border-color: rgba(111, 125, 255, 0.55);
+  background: rgba(111, 125, 255, 0.2);
+  box-shadow: 0 0 0 4px rgba(111, 125, 255, 0.15);
+}
+
+.stage-output.has-content {
+  border-color: rgba(111, 125, 255, 0.55);
+  box-shadow: 0 14px 32px rgba(10, 20, 38, 0.45);
+}
+
+#generationStatus {
+  min-width: 200px;
+}
+
+#generationProgress .progress-bar {
+  background: linear-gradient(90deg, #7d8cff 0%, #5fe0ff 50%, #54e1a1 100%);
 }
 
 .chat-header {

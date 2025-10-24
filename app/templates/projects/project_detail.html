@@ -3,541 +3,95 @@
 {% block title %}{{ project.title }} • Book Pipeline Studio{% endblock %}
 
 {% block content %}
-<div class="row g-4 align-items-start">
-  <div class="col-lg-4">
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-10">
     <div class="card frosted-card border-0 shadow-sm mb-4">
       <div class="card-body">
-        <h2 class="h5 text-white fw-semibold mb-3">Project overview</h2>
-        <p class="text-white-50 mb-1"><strong>Status:</strong> {{ project.status.replace('_', ' ').title() }}</p>
-        <p class="text-white-50"><strong>Current step:</strong> {{ project.current_step.replace('_', ' ').title() }}</p>
-        <p class="text-white-50">{{ project.description or "No description yet." }}</p>
-      </div>
-    </div>
-
-    <div class="card frosted-card border-0 shadow-sm">
-      <div class="card-body">
-        <h3 class="h6 text-white text-uppercase mb-3">Pipeline steps</h3>
-        <ol class="timeline vertical">
-          {% for step_id, label in steps %}
-          {% set step_index = loop.index0 %}
-          <li class="timeline-step {% if step_index == current_index %}active{% elif step_index < current_index %}completed{% endif %}">
-            <div class="step-indicator"></div>
-            <div>
-              <span class="step-label">{{ label }}</span>
-              {% if step_index == current_index %}
-              <span class="badge rounded-pill bg-primary ms-2">In progress</span>
-              {% endif %}
-            </div>
-          </li>
-          {% endfor %}
-        </ol>
-        <div class="d-flex gap-2 mt-4">
-          <form action="{{ url_for('projects.advance', project_id=project.id) }}" method="post">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-primary btn-sm rounded-pill" type="submit">Advance step</button>
-          </form>
-          <form action="{{ url_for('projects.reset', project_id=project.id) }}" method="post">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-outline-light btn-sm rounded-pill" type="submit">Reset</button>
-          </form>
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+          <div>
+            <h1 class="h4 text-white fw-semibold mb-1">{{ project.title }}</h1>
+            <p class="text-white-50 mb-0">{{ project.description or "No description provided yet." }}</p>
+          </div>
+          <div class="text-md-end">
+            <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis me-2">{{ project.status.replace('_', ' ').title() }}</span>
+            <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">Current step: {{ project.current_step.replace('_', ' ').title() }}</span>
+          </div>
         </div>
-      </div>
-    </div>
 
-    <div class="card frosted-card border-0 shadow-sm mt-4">
-      <div class="card-body">
-        <div class="d-flex justify-content-between align-items-start mb-3">
-          <h3 class="h6 text-white text-uppercase mb-0">Stage insights</h3>
-          <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis small">Live sync</span>
-        </div>
-        <p class="text-white-50 small">Track which creative stages already have assistant drafts saved for this project.</p>
-        <ul class="list-group stage-summary" id="stageSummary" data-stage-summary>
-          {% for stage_id, stage_data in stage_generation_steps.items() %}
-          {% set entry = stage_entries.get(stage_id) %}
-          {% set detail_link = stage_detail_links.get(stage_id) %}
-          {% set quick_action = stage_quick_actions.get(stage_id) %}
-          <li
-            class="list-group-item d-flex justify-content-between align-items-start rounded-3 mb-2 bg-transparent text-white-50 position-relative"
-            data-stage-summary-item="{{ stage_id }}"
-          >
-            <div class="me-3">
-              <div class="fw-semibold text-white">
-                {% if detail_link %}
-                <a class="stage-summary-link stretched-link" href="{{ detail_link }}">{{ stage_data.label }}</a>
-                {% else %}
-                {{ stage_data.label }}
-                {% endif %}
+        <div class="stage-status-list mb-4">
+          <h2 class="h6 text-white text-uppercase mb-3">Stage status</h2>
+          <ul class="list-group">
+            {% for stage_id, stage_data in stage_generation_steps.items() %}
+            {% set entry = stage_entries.get(stage_id) %}
+            <li class="list-group-item d-flex justify-content-between align-items-start flex-column flex-md-row gap-3">
+              <div>
+                <div class="text-white fw-semibold">{{ stage_data.label }}</div>
+                <div class="small text-white-50">
+                  {% if entry and entry.updated_at %}
+                  Updated {{ entry.updated_at.strftime('%b %d, %Y %H:%M') }}
+                  {% else %}
+                  Awaiting input
+                  {% endif %}
+                </div>
               </div>
-              <div class="small" data-stage-summary-detail="{{ stage_id }}">
-                {% if entry %}
-                Updated {{ entry.updated_at.strftime('%b %d, %Y %H:%M') }}
-                {% else %}
-                Awaiting input
-                {% endif %}
-              </div>
-            </div>
-            <div class="d-flex flex-column align-items-end gap-2 stage-quick-action">
-              <span
-                class="badge rounded-pill {% if entry %}bg-success-subtle text-success-emphasis{% else %}bg-dark-subtle text-white-50{% endif %}"
-                data-stage-summary-state="{{ stage_id }}"
-              >
-                {% if entry %}Ready{% else %}Pending{% endif %}
+              <span class="badge rounded-pill {% if entry %}bg-success-subtle text-success-emphasis{% else %}bg-dark-subtle text-white-50{% endif %}">
+                {% if entry %}Complete{% else %}Pending{% endif %}
               </span>
-              {% if quick_action %}
-              <a class="btn btn-outline-light btn-sm rounded-pill" href="{{ quick_action.url }}">{{ quick_action.label }}</a>
-              {% endif %}
-            </div>
-          </li>
-          {% endfor %}
-        </ul>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-lg-8">
-    <div
-      class="card frosted-card border-0 shadow-sm mb-4"
-      id="stageAssistant"
-      data-stage-endpoint="{{ url_for('projects.generate_stage', project_id=project.id) }}"
-    >
-      <div class="card-body">
-        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
-          <div>
-            <h2 class="h5 text-white fw-semibold mb-1">Story foundation assistant</h2>
-            <p class="text-white-50 small mb-0">Switch between stages, feed a brief, and let the Logal LLM prefill your project database.</p>
-          </div>
-          <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis">Beta</span>
-        </div>
-
-        <ul class="nav nav-pills stage-switch" role="tablist">
-          {% for stage_id, stage_data in stage_generation_steps.items() %}
-          <li class="nav-item me-2" role="presentation">
-            <button
-              class="nav-link {% if loop.first %}active{% endif %}"
-              id="stage-tab-{{ stage_id }}"
-              data-stage-tab
-              data-stage-target="{{ stage_id }}"
-              type="button"
-              role="tab"
-            >
-              {{ stage_data.label }}
-            </button>
-          </li>
-          {% endfor %}
-        </ul>
-
-        <div class="stage-panels mt-4">
-          {% for stage_id, stage_data in stage_generation_steps.items() %}
-          {% set entry = stage_entries.get(stage_id) %}
-          <div
-            class="stage-panel {% if loop.first %}active{% endif %}"
-            data-stage-panel="{{ stage_id }}"
-            role="tabpanel"
-            aria-labelledby="stage-tab-{{ stage_id }}"
-          >
-            <form class="stage-form" data-stage-form data-stage="{{ stage_id }}">
-              <div class="mb-3">
-                <label class="form-label text-white fw-semibold" for="stage-input-{{ stage_id }}">
-                  {{ stage_data.input_label }}
-                </label>
-                <textarea
-                  class="form-control"
-                  id="stage-input-{{ stage_id }}"
-                  name="prompt"
-                  rows="4"
-                  placeholder="{{ stage_data.input_placeholder }}"
-                >{{ entry.user_prompt if entry else '' }}</textarea>
-              </div>
-              <div class="mb-3">
-                <label class="form-label text-white fw-semibold" for="stage-output-{{ stage_id }}">
-                  {{ stage_data.output_label }}
-                </label>
-                <textarea
-                  class="form-control stage-output"
-                  id="stage-output-{{ stage_id }}"
-                  name="stage_output"
-                  rows="8"
-                  readonly
-                  data-stage-output="{{ stage_id }}"
-                >{{ entry.generated_text if entry else '' }}</textarea>
-                <div class="form-text text-white-50" data-stage-feedback="{{ stage_id }}">
-                  {% if entry %}
-                  {% if entry.used_fallback %}
-                  Generated using the fallback heuristic while the Logal LLM was offline.
-                  {% else %}
-                  Drafted by the Logal LLM and stored automatically.
-                  {% endif %}
-                  {% else %}
-                  Output is saved to the project as soon as the assistant finishes.
-                  {% endif %}
-                </div>
-              </div>
-              <div class="d-flex flex-wrap align-items-center gap-3">
-                <button class="btn btn-primary rounded-pill px-4" type="submit" data-stage-submit="{{ stage_id }}">
-                  {{ stage_data.cta }}
-                </button>
-                <div class="flex-grow-1">
-                  <div class="progress d-none" data-stage-progress="{{ stage_id }}">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
-                  </div>
-                </div>
-                <div class="text-white-50 small" data-stage-status="{{ stage_id }}">
-                  {% if entry %}
-                  Synced {{ entry.updated_at.strftime('%b %d, %Y %H:%M') }}
-                  {% else %}
-                  Ready to generate
-                  {% endif %}
-                </div>
-              </div>
-              <div class="text-danger small mt-2 d-none" data-stage-error="{{ stage_id }}"></div>
-            </form>
-          </div>
-          {% endfor %}
-        </div>
-      </div>
-    </div>
-
-    <div class="card frosted-card border-0 shadow-sm mb-4">
-      <div class="card-body">
-        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
-          <div>
-            <h2 class="h5 text-white fw-semibold mb-1">Idea → outline</h2>
-            <p class="text-white-50 small mb-0">
-              Transform a rough idea into a guided outline of roughly five hundred words that you can iterate on.
-            </p>
-          </div>
-          <span class="badge rounded-pill bg-info-subtle text-info-emphasis">New</span>
-        </div>
-        <form method="post" class="mt-4" id="outlineForm">
-          {{ outline_form.hidden_tag() }}
-          <div class="mb-3">
-            {{ outline_form.prompt.label(class="form-label text-white fw-semibold") }}
-            {{ outline_form.prompt(class="form-control form-control-lg", rows="4", placeholder="Describe the core idea, genre, and any key characters or stakes.") }}
-            {% for error in outline_form.prompt.errors %}
-            <div class="text-danger small mt-1">{{ error }}</div>
+            </li>
             {% endfor %}
-            <div class="text-white-50 small mt-2">Your last prompt is saved with this project — refine or build on it anytime.</div>
-          </div>
-          <div class="d-flex flex-wrap align-items-center gap-3">
-            {{ outline_form.submit(class="btn btn-primary rounded-pill px-4", id="generateOutlineButton") }}
-            <div
-              id="outlineGeneratingIndicator"
-              class="d-none text-white-50 small"
-              role="status"
-              aria-live="polite"
-            >
-              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
-              <span>Generating outline…</span>
-            </div>
-            <span class="text-white-50 small flex-grow-1">The configured prompt template guides the LLM to deliver ~500 words.</span>
-          </div>
-        </form>
-
-        {% if outline_result %}
-        <div class="outline-result mt-4">
-          <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
-            <div>
-              <h3 class="h6 text-white mb-1">Generated outline</h3>
-              <p class="text-white-50 small mb-0">
-                {% if outline_result.used_fallback %}
-                Created with the built-in planner while the LLM connection is offline.
-                {% else %}
-                Created with your configured language model.
-                {% endif %}
-              </p>
-            </div>
-            <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis">
-              {{ outline_result.word_count }} words
-            </span>
-          </div>
-          <div class="outline-output" id="outlineOutput">{{ outline_result.outline }}</div>
-          <div class="d-flex flex-wrap gap-2 mt-3">
-            <button class="btn btn-outline-light btn-sm rounded-pill" type="button" data-copy-target="#outlineOutput">
-              Copy outline
-            </button>
-            <button
-              class="btn btn-outline-light btn-sm rounded-pill"
-              type="button"
-              data-bs-toggle="collapse"
-              data-bs-target="#outlinePrompt"
-              aria-expanded="false"
-              aria-controls="outlinePrompt"
-            >
-              View prompt
-            </button>
-          </div>
-          <div class="collapse mt-3" id="outlinePrompt">
-            <div class="prompt-preview">
-              <div class="d-flex justify-content-between align-items-center mb-2">
-                <span class="text-white-50 small text-uppercase">Prompt sent to the model</span>
-                <button class="btn btn-light btn-sm rounded-pill" type="button" data-copy-target="#outlinePromptText">
-                  Copy prompt
-                </button>
-              </div>
-              <pre class="prompt-text" id="outlinePromptText">{{ outline_result.prompt }}</pre>
-            </div>
-          </div>
-        </div>
-        {% endif %}
-      </div>
-    </div>
-
-    <div class="card frosted-card border-0 shadow-sm mb-4" id="outlineLibrary">
-      <div class="card-body">
-        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
-          <div>
-            <h2 class="h6 text-white fw-semibold mb-1">Saved outlines</h2>
-            <p class="text-white-50 small mb-0">
-              Browse every draft you've generated and refine them inline.
-            </p>
-          </div>
+          </ul>
         </div>
 
-        {% if outlines %}
-        <div class="row g-4 mt-3">
-          <div class="col-lg-4">
-            <div class="list-group outline-list">
-              {% for outline in outlines %}
-              <a
-                class="list-group-item list-group-item-action rounded-3 mb-2 {% if selected_outline and outline.id == selected_outline.id %}active{% endif %}"
-                href="{{ url_for('projects.detail', project_id=project.id, outline_id=outline.id, act_id=request.args.get('act_id'), character_id=request.args.get('character_id')) }}#outlineLibrary"
+        <div
+          id="stageWorkspace"
+          data-stage-endpoint="{{ url_for('projects.generate_stage', project_id=project.id) }}"
+          data-stage-config='{{ stage_client_config | tojson }}'
+          data-stage-entries='{{ stage_client_entries | tojson }}'
+        >
+          <div class="mb-3">
+            <div class="text-white-50 text-uppercase small fw-semibold mb-2">Select a stage</div>
+            <div class="btn-group stage-selector" role="group" aria-label="Stage selector">
+              {% for stage_id, stage_data in stage_generation_steps.items() %}
+              <button
+                type="button"
+                class="btn btn-outline-light stage-button {% if loop.first %}active{% endif %}"
+                data-stage-button
+                data-stage="{{ stage_id }}"
               >
-                <div class="d-flex justify-content-between align-items-start">
-                  <div>
-                    <div class="fw-semibold">{{ outline.title }}</div>
-                    <div class="text-white-50 small">
-                      {{ outline.word_count }} words · {{ outline.created_at.strftime('%b %d, %Y %H:%M') }}
-                    </div>
-                  </div>
-                  {% if outline.used_fallback %}
-                  <span class="badge text-bg-secondary rounded-pill">Fallback</span>
-                  {% endif %}
-                </div>
-              </a>
+                {{ stage_data.label }}
+              </button>
               {% endfor %}
             </div>
+            <p class="text-white-50 small mt-3" data-stage-description>Choose a stage to load its guidance and saved progress.</p>
           </div>
-          <div class="col-lg-8">
-            {% if selected_outline %}
-            <form method="post" class="outline-editor">
-              {{ outline_edit_form.hidden_tag() }}
-              {{ outline_edit_form.outline_id(value=selected_outline.id) }}
-              <div class="mb-3">
-                {{ outline_edit_form.title.label(class="form-label text-white fw-semibold") }}
-                {{ outline_edit_form.title(class="form-control form-control-lg", placeholder="Outline title") }}
-                {% for error in outline_edit_form.title.errors %}
-                <div class="text-danger small mt-1">{{ error }}</div>
-                {% endfor %}
-              </div>
-              <div class="mb-3">
-                {{ outline_edit_form.content.label(class="form-label text-white fw-semibold") }}
-                {{ outline_edit_form.content(class="form-control", rows="14") }}
-                {% for error in outline_edit_form.content.errors %}
-                <div class="text-danger small mt-1">{{ error }}</div>
-                {% endfor %}
-              </div>
-              <div class="d-flex justify-content-between align-items-center">
-                <p class="text-white-50 small mb-0">
-                  Prompt snapshot saved {{ selected_outline.created_at.strftime('%b %d, %Y %H:%M') }}
-                </p>
-                {{ outline_edit_form.submit(class="btn btn-primary rounded-pill px-4") }}
-              </div>
-            </form>
-            {% else %}
-            <p class="text-white-50 mb-0">Generate an outline above to start building your library.</p>
-            {% endif %}
-          </div>
-        </div>
-        {% else %}
-        <p class="text-white-50 small mb-0 mt-3">No outlines saved yet. Generate your first draft to begin iterating.</p>
-        {% endif %}
-      </div>
-    </div>
 
-    <div class="card frosted-card border-0 shadow-sm mb-4" id="actOutlines">
-      <div class="card-body">
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
-          <div>
-            <h2 class="h6 text-white fw-semibold mb-1">Act structure</h2>
-            <p class="text-white-50 small mb-0">Select an act to refine turning points and pacing.</p>
+          <div class="mb-3">
+            <label class="form-label text-white fw-semibold" for="systemPrompt">System prompt</label>
+            <textarea class="form-control" id="systemPrompt" rows="4" placeholder="Provide high-level instructions for the generator."></textarea>
           </div>
-          <a
-            class="btn btn-outline-light btn-sm rounded-pill"
-            href="{{ url_for('projects.detail', project_id=project.id, outline_id=request.args.get('outline_id'), act_id='new', character_id=request.args.get('character_id')) }}#actOutlines"
-          >
-            New act
-          </a>
-        </div>
-        <div class="row g-4">
-          <div class="col-lg-4">
-            <div class="list-group outline-list">
-              {% for act in acts %}
-              <a
-                class="list-group-item list-group-item-action rounded-3 mb-2 {% if selected_act and act.id == selected_act.id %}active{% endif %}"
-                href="{{ url_for('projects.detail', project_id=project.id, outline_id=request.args.get('outline_id'), act_id=act.id, character_id=request.args.get('character_id')) }}#actOutlines"
-              >
-                <div class="fw-semibold">{{ act.sequence }}. {{ act.title }}</div>
-                <div class="text-white-50 small">Updated {{ act.updated_at.strftime('%b %d, %Y') }}</div>
-              </a>
-              {% endfor %}
-              {% if not acts %}
-              <div class="text-white-50 small">No acts yet — create one to break down your structure.</div>
-              {% endif %}
+
+          <div class="mb-3">
+            <label class="form-label text-white fw-semibold" for="userPrompt">Your input</label>
+            <textarea class="form-control" id="userPrompt" rows="5" placeholder="Describe the idea, characters, or beats you would like to explore."></textarea>
+          </div>
+
+          <div class="d-flex flex-column flex-md-row align-items-md-center gap-3 mb-3">
+            <button class="btn btn-primary rounded-pill px-4" type="button" id="generateStageButton">Generate</button>
+            <div class="progress flex-grow-1 d-none" id="generationProgress">
+              <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
             </div>
+            <div class="text-white-50 small" id="generationStatus">Select a stage to begin.</div>
           </div>
-          <div class="col-lg-8">
-            <form method="post" class="act-editor">
-              {{ act_form.hidden_tag() }}
-              {{ act_form.act_id() }}
-              <div class="row g-3">
-                <div class="col-sm-4">
-                  {{ act_form.sequence.label(class="form-label text-white fw-semibold") }}
-                  {{ act_form.sequence(class="form-control", placeholder="1") }}
-                  <div class="form-text text-white-50">Used to order your acts.</div>
-                  {% for error in act_form.sequence.errors %}
-                  <div class="text-danger small mt-1">{{ error }}</div>
-                  {% endfor %}
-                </div>
-                <div class="col-sm-8">
-                  {{ act_form.title.label(class="form-label text-white fw-semibold") }}
-                  {{ act_form.title(class="form-control", placeholder="Setup & disruption") }}
-                  {% for error in act_form.title.errors %}
-                  <div class="text-danger small mt-1">{{ error }}</div>
-                  {% endfor %}
-                </div>
-              </div>
-              <div class="mt-3">
-                {{ act_form.summary.label(class="form-label text-white fw-semibold") }}
-                {{ act_form.summary(class="form-control", rows="6") }}
-                {% for error in act_form.summary.errors %}
-                <div class="text-danger small mt-1">{{ error }}</div>
-                {% endfor %}
-              </div>
-              <div class="mt-3">
-                {{ act_form.turning_points.label(class="form-label text-white fw-semibold") }}
-                {{ act_form.turning_points(class="form-control", rows="5", placeholder="List the key reversals and reveals...") }}
-              </div>
-              <div class="mt-3">
-                {{ act_form.notes.label(class="form-label text-white fw-semibold") }}
-                {{ act_form.notes(class="form-control", rows="3", placeholder="Themes, motifs, or reminders") }}
-              </div>
-              <div class="d-flex justify-content-end mt-4">
-                {{ act_form.submit(class="btn btn-primary rounded-pill px-4") }}
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-    </div>
 
-    <div class="card frosted-card border-0 shadow-sm mb-4" id="characterLibrary">
-      <div class="card-body">
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
-          <div>
-            <h2 class="h6 text-white fw-semibold mb-1">Character roster</h2>
-            <p class="text-white-50 small mb-0">Keep track of your cast and iterate on their core traits.</p>
-          </div>
-          <a
-            class="btn btn-outline-light btn-sm rounded-pill"
-            href="{{ url_for('projects.detail', project_id=project.id, outline_id=request.args.get('outline_id'), act_id=request.args.get('act_id'), character_id='new') }}#characterLibrary"
-          >
-            New character
-          </a>
-        </div>
-        <div class="row g-4">
-          <div class="col-lg-4">
-            <div class="list-group outline-list">
-              {% for character in characters %}
-              <a
-                class="list-group-item list-group-item-action rounded-3 mb-2 {% if selected_character and character.id == selected_character.id %}active{% endif %}"
-                href="{{ url_for('projects.detail', project_id=project.id, outline_id=request.args.get('outline_id'), act_id=request.args.get('act_id'), character_id=character.id) }}#characterLibrary"
-              >
-                <div class="fw-semibold">{{ character.name }}</div>
-                <div class="text-white-50 small">{{ character.role or 'Role TBD' }}</div>
-              </a>
-              {% endfor %}
-              {% if not characters %}
-              <div class="text-white-50 small">No characters yet — add your protagonist to begin.</div>
-              {% endif %}
+          <div class="alert alert-danger d-none" id="generationError"></div>
+
+          <div class="mt-4">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+              <h3 class="h6 text-white mb-0" id="outputHeading">Latest output</h3>
+              <span class="badge rounded-pill bg-dark-subtle text-white-50" id="outputMeta">No generation yet</span>
             </div>
+            <div class="stage-output" id="stageOutput">Run a generation to see results here.</div>
           </div>
-          <div class="col-lg-8">
-            <form method="post" class="character-editor">
-              {{ character_form.hidden_tag() }}
-              {{ character_form.character_id() }}
-              <div class="row g-3">
-                <div class="col-sm-6">
-                  {{ character_form.name.label(class="form-label text-white fw-semibold") }}
-                  {{ character_form.name(class="form-control", placeholder="Character name") }}
-                  {% for error in character_form.name.errors %}
-                  <div class="text-danger small mt-1">{{ error }}</div>
-                  {% endfor %}
-                </div>
-                <div class="col-sm-6">
-                  {{ character_form.role.label(class="form-label text-white fw-semibold") }}
-                  {{ character_form.role(class="form-control", placeholder="Protagonist, mentor...") }}
-                </div>
-              </div>
-              <div class="mt-3">
-                <label class="form-label text-white fw-semibold">Background</label>
-                {{ character_form.background(class="form-control", rows="4", placeholder="History, upbringing, key memories") }}
-              </div>
-              <div class="mt-3">
-                <label class="form-label text-white fw-semibold">Goals & desires</label>
-                {{ character_form.goals(class="form-control", rows="4", placeholder="What are they striving for?") }}
-              </div>
-              <div class="mt-3">
-                <label class="form-label text-white fw-semibold">Conflicts & obstacles</label>
-                {{ character_form.conflict(class="form-control", rows="4", placeholder="What stands in their way?") }}
-              </div>
-              <div class="mt-3">
-                {{ character_form.notes.label(class="form-label text-white fw-semibold") }}
-                {{ character_form.notes(class="form-control", rows="3", placeholder="Voice, quirks, or narrative duties") }}
-              </div>
-              <div class="d-flex justify-content-end mt-4">
-                {{ character_form.submit(class="btn btn-primary rounded-pill px-4") }}
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="chat-surface shadow-lg">
-      <div class="chat-header d-flex justify-content-between align-items-center">
-        <div>
-          <h2 class="h5 text-white mb-0">Creative companion</h2>
-          <small class="text-white-50">Connected to local LLM • Step: {{ project.current_step.replace('_', ' ').title() }}</small>
-        </div>
-        <span class="badge rounded-pill bg-success-subtle text-success-emphasis">Prototype</span>
-      </div>
-      <div class="chat-body">
-        <div class="chat-message assistant">
-          <div class="avatar">AI</div>
-          <div class="bubble">
-            <p class="mb-1">
-              Let's focus on {{ project.current_step.replace('_', ' ').lower() }}. Provide details below and I'll craft a structured
-              response.
-            </p>
-            <p class="mb-0 text-white-50 small">Future iterations will stream responses directly from your local model.</p>
-          </div>
-        </div>
-        <div class="chat-message user placeholder">
-          <div class="avatar">You</div>
-          <div class="bubble">
-            <p class="mb-0">Your conversation history will appear here once the assistant is connected.</p>
-          </div>
-        </div>
-      </div>
-      <div class="chat-input">
-        <label for="message" class="form-label text-white-50">Share your guidance for this step</label>
-        <textarea id="message" class="form-control" rows="4" placeholder="Describe what happens next, key beats, or stylistic goals."></textarea>
-        <div class="d-flex justify-content-between align-items-center mt-3">
-          <div class="form-check form-switch text-white-50">
-            <input class="form-check-input" type="checkbox" role="switch" id="llmToggle" checked disabled />
-            <label class="form-check-label" for="llmToggle">Local LLM ready</label>
-          </div>
-          <button class="btn btn-primary rounded-pill" type="button" disabled>Send to assistant</button>
         </div>
       </div>
     </div>
@@ -548,246 +102,170 @@
 {% block scripts %}
 {{ super() }}
 <script>
-  (() => {
-    const copyButtons = document.querySelectorAll('[data-copy-target]');
-    copyButtons.forEach((button) => {
-      const original = button.innerHTML;
-      button.addEventListener('click', async () => {
-        const selector = button.getAttribute('data-copy-target');
-        const target = selector ? document.querySelector(selector) : null;
-        if (!target) {
+  (function () {
+    const workspace = document.getElementById('stageWorkspace');
+    if (!workspace) {
+      return;
+    }
+
+    const endpoint = workspace.getAttribute('data-stage-endpoint');
+    const config = JSON.parse(workspace.getAttribute('data-stage-config') || '{}');
+    const existingEntries = JSON.parse(workspace.getAttribute('data-stage-entries') || '{}');
+
+    const stageButtons = workspace.querySelectorAll('[data-stage-button]');
+    const description = workspace.querySelector('[data-stage-description]');
+    const systemPromptField = document.getElementById('systemPrompt');
+    const userPromptField = document.getElementById('userPrompt');
+    const generateButton = document.getElementById('generateStageButton');
+    const progress = document.getElementById('generationProgress');
+    const status = document.getElementById('generationStatus');
+    const output = document.getElementById('stageOutput');
+    const outputHeading = document.getElementById('outputHeading');
+    const outputMeta = document.getElementById('outputMeta');
+    const errorBox = document.getElementById('generationError');
+
+    const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
+
+    let currentStage = stageButtons.length ? stageButtons[0].getAttribute('data-stage') : null;
+
+    const applyStageState = (stageId) => {
+      const defaults = config[stageId] || {};
+      const history = existingEntries[stageId] || {};
+
+      if (description) {
+        description.textContent = defaults.description || 'Provide a prompt and generate to fill this stage.';
+      }
+
+      const systemPrompt = history.system_prompt || defaults.system_prompt || '';
+      systemPromptField.value = systemPrompt;
+      userPromptField.value = history.user_prompt || '';
+
+      const outputText = history.generated_text || '';
+      if (outputText) {
+        output.innerText = outputText;
+        output.classList.add('has-content');
+        outputMeta.textContent = history.updated_at ? `Updated ${new Date(history.updated_at).toLocaleString()}` : 'Saved result';
+      } else {
+        output.innerText = 'Run a generation to see results here.';
+        output.classList.remove('has-content');
+        outputMeta.textContent = 'No generation yet';
+      }
+
+      outputHeading.textContent = defaults.label ? `${defaults.label} output` : 'Latest output';
+      status.textContent = 'Ready to generate.';
+      if (errorBox) {
+        errorBox.classList.add('d-none');
+        errorBox.textContent = '';
+      }
+    };
+
+    const setActiveStage = (stageId) => {
+      currentStage = stageId;
+      stageButtons.forEach((button) => {
+        const matches = button.getAttribute('data-stage') === stageId;
+        button.classList.toggle('active', matches);
+      });
+      applyStageState(stageId);
+    };
+
+    stageButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        const stageId = button.getAttribute('data-stage');
+        if (!stageId) {
           return;
         }
-        const text = target.innerText.trim();
-        try {
-          await navigator.clipboard.writeText(text);
-          button.innerHTML = 'Copied!';
-          button.classList.remove('btn-outline-light');
-          button.classList.add('btn-success');
-        } catch (error) {
-          console.error('Copy failed', error);
-          button.innerHTML = 'Copy unavailable';
-          button.classList.remove('btn-outline-light');
-          button.classList.add('btn-danger');
-        }
-        setTimeout(() => {
-          button.innerHTML = original;
-          button.classList.remove('btn-success', 'btn-danger');
-          if (!button.classList.contains('btn-outline-light')) {
-            button.classList.add('btn-outline-light');
-          }
-        }, 1600);
+        setActiveStage(stageId);
       });
     });
 
-    const outlineForm = document.getElementById('outlineForm');
-    const generateButton = document.getElementById('generateOutlineButton');
-    const generatingIndicator = document.getElementById('outlineGeneratingIndicator');
-    if (outlineForm && generateButton) {
-      outlineForm.addEventListener('submit', () => {
-        if (generateButton.hasAttribute('disabled')) {
-          return;
-        }
-        generateButton.value = 'Generating…';
+    const toggleLoading = (isLoading) => {
+      if (isLoading) {
         generateButton.setAttribute('disabled', 'disabled');
-        if (generatingIndicator) {
-          generatingIndicator.classList.remove('d-none');
-          generatingIndicator.classList.add('d-flex', 'align-items-center', 'gap-2');
-        }
-      });
-    }
+        generateButton.textContent = 'Generating…';
+        progress.classList.remove('d-none');
+        status.textContent = 'The generator is working on this stage…';
+      } else {
+        generateButton.removeAttribute('disabled');
+        generateButton.textContent = 'Generate';
+        progress.classList.add('d-none');
+      }
+    };
 
-    const stageAssistant = document.getElementById('stageAssistant');
-    if (stageAssistant) {
-      const stageEndpoint = stageAssistant.getAttribute('data-stage-endpoint');
-      const csrfMeta = document.querySelector('meta[name="csrf-token"]');
-      const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
-      const tabs = stageAssistant.querySelectorAll('[data-stage-tab]');
-      const panels = stageAssistant.querySelectorAll('[data-stage-panel]');
+    const showError = (message) => {
+      if (!errorBox) {
+        return;
+      }
+      errorBox.textContent = message;
+      errorBox.classList.remove('d-none');
+    };
 
-      tabs.forEach((tab) => {
-        tab.addEventListener('click', () => {
-          const target = tab.getAttribute('data-stage-target');
-          tabs.forEach((btn) => btn.classList.remove('active'));
-          tab.classList.add('active');
-          panels.forEach((panel) => {
-            panel.classList.toggle('active', panel.getAttribute('data-stage-panel') === target);
-          });
+    const hideError = () => {
+      if (!errorBox) {
+        return;
+      }
+      errorBox.classList.add('d-none');
+      errorBox.textContent = '';
+    };
+
+    generateButton.addEventListener('click', async () => {
+      if (!currentStage || !endpoint) {
+        return;
+      }
+
+      const userPrompt = userPromptField.value.trim();
+      if (!userPrompt) {
+        showError('Add a short description so the generator has something to build on.');
+        userPromptField.focus();
+        return;
+      }
+
+      hideError();
+      toggleLoading(true);
+
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken || '',
+            'X-CSRF-Token': csrfToken || '',
+          },
+          body: JSON.stringify({
+            stage: currentStage,
+            prompt: userPrompt,
+            system_prompt: systemPromptField.value,
+          }),
         });
-      });
 
-      const summary = document.querySelector('[data-stage-summary]');
-
-      const updateSummary = (stage, { updated_at: updatedAt, used_fallback: usedFallback }) => {
-        if (!summary) {
-          return;
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Unable to generate text right now.');
         }
-        const detail = summary.querySelector(`[data-stage-summary-detail="${stage}"]`);
-        const state = summary.querySelector(`[data-stage-summary-state="${stage}"]`);
-        if (detail) {
-          if (updatedAt) {
-            const date = new Date(updatedAt);
-            detail.textContent = `Updated ${date.toLocaleString()}`;
-          } else {
-            detail.textContent = usedFallback ? 'Generated with fallback' : 'Awaiting input';
-          }
-        }
-        if (state) {
-          if (updatedAt) {
-            state.textContent = 'Ready';
-            state.classList.remove('bg-dark-subtle', 'text-white-50');
-            state.classList.add('bg-success-subtle', 'text-success-emphasis');
-          } else {
-            state.textContent = 'Pending';
-            state.classList.remove('bg-success-subtle', 'text-success-emphasis');
-            state.classList.add('bg-dark-subtle', 'text-white-50');
-          }
-        }
-      };
 
-      const formatStatus = (dateString) => {
-        if (!dateString) {
-          return 'Ready to generate';
-        }
-        const date = new Date(dateString);
-        return `Synced ${date.toLocaleString()}`;
-      };
+        existingEntries[currentStage] = {
+          system_prompt: payload.system_prompt || systemPromptField.value || '',
+          user_prompt: userPrompt,
+          generated_text: payload.content || '',
+          updated_at: payload.updated_at || null,
+          used_fallback: payload.used_fallback || false,
+        };
 
-      stageAssistant.querySelectorAll('[data-stage-form]').forEach((form) => {
-        form.addEventListener('submit', async (event) => {
-          event.preventDefault();
-          if (!stageEndpoint) {
-            return;
-          }
-          const stage = form.getAttribute('data-stage');
-          const promptField = form.querySelector('textarea[name="prompt"]');
-          const outputField = form.querySelector(`[data-stage-output="${stage}"]`);
-          const progress = form.querySelector(`[data-stage-progress="${stage}"]`);
-          const status = form.querySelector(`[data-stage-status="${stage}"]`);
-          const feedback = form.querySelector(`[data-stage-feedback="${stage}"]`);
-          const error = form.querySelector(`[data-stage-error="${stage}"]`);
-          const submitButton = form.querySelector(`[data-stage-submit="${stage}"]`);
-          const summaryDetail = summary
-            ? summary.querySelector(`[data-stage-summary-detail="${stage}"]`)
-            : null;
-          const summaryState = summary
-            ? summary.querySelector(`[data-stage-summary-state="${stage}"]`)
-            : null;
-          const previousSummaryDetail = summaryDetail ? summaryDetail.textContent : '';
-          const previousSummaryStateClass = summaryState ? summaryState.className : '';
-          const previousSummaryStateText = summaryState ? summaryState.textContent : '';
-          let summaryWasUpdated = false;
+        applyStageState(currentStage);
+        status.textContent = payload.updated_at
+          ? `Saved ${new Date(payload.updated_at).toLocaleString()}`
+          : 'Draft saved.';
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'We could not generate text at the moment.';
+        showError(message);
+        status.textContent = 'Generation failed. Please try again.';
+      } finally {
+        toggleLoading(false);
+      }
+    });
 
-          if (!promptField || !outputField || !submitButton) {
-            return;
-          }
-
-          const prompt = promptField.value.trim();
-          if (!prompt) {
-            if (error) {
-              error.textContent = 'Please describe what you would like the assistant to consider.';
-              error.classList.remove('d-none');
-            }
-            return;
-          }
-
-          if (error) {
-            error.classList.add('d-none');
-            error.textContent = '';
-          }
-
-          const originalLabel = submitButton.getAttribute('data-original-label') || submitButton.textContent;
-          submitButton.setAttribute('disabled', 'disabled');
-          submitButton.textContent = 'Generating…';
-          if (progress) {
-            progress.classList.remove('d-none');
-          }
-          if (status) {
-            status.textContent = 'Working with the Logal LLM…';
-          }
-          if (summary) {
-            if (summaryDetail) {
-              summaryDetail.textContent = 'Syncing with assistant…';
-            }
-            if (summaryState) {
-              summaryState.textContent = 'Working';
-              summaryState.classList.remove(
-                'bg-dark-subtle',
-                'text-white-50',
-                'bg-success-subtle',
-                'text-success-emphasis',
-                'bg-primary-subtle',
-                'text-primary-emphasis'
-              );
-              summaryState.classList.add('bg-primary-subtle', 'text-primary-emphasis');
-            }
-          }
-
-          try {
-            const response = await fetch(stageEndpoint, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrfToken || '',
-                'X-CSRF-Token': csrfToken || '',
-              },
-              body: JSON.stringify({ stage, prompt }),
-            });
-
-            const payload = await response.json();
-            if (!response.ok) {
-              throw new Error(payload.error || 'Unable to generate content.');
-            }
-
-            outputField.value = payload.content || '';
-            if (feedback) {
-              feedback.textContent = payload.used_fallback
-                ? 'Generated using the fallback heuristic while the Logal LLM was offline.'
-                : 'Drafted by the Logal LLM and stored automatically.';
-            }
-            if (status) {
-              status.textContent = formatStatus(payload.updated_at);
-            }
-            if (summary) {
-              if (summaryState) {
-                summaryState.classList.remove('bg-primary-subtle', 'text-primary-emphasis');
-              }
-              updateSummary(stage, payload);
-              summaryWasUpdated = true;
-            }
-          } catch (err) {
-            if (error) {
-              error.textContent = err instanceof Error ? err.message : 'Unable to generate content right now.';
-              error.classList.remove('d-none');
-            }
-            if (status) {
-              status.textContent = 'Something went wrong — try again.';
-            }
-          } finally {
-            submitButton.removeAttribute('disabled');
-            submitButton.textContent = originalLabel;
-            if (progress) {
-              progress.classList.add('d-none');
-            }
-            if (status && !status.textContent) {
-              status.textContent = 'Ready to generate';
-            }
-            if (summary && !summaryWasUpdated) {
-              if (summaryDetail) {
-                summaryDetail.textContent = previousSummaryDetail || 'Awaiting input';
-              }
-              if (summaryState) {
-                summaryState.className = previousSummaryStateClass || summaryState.className;
-                summaryState.textContent = previousSummaryStateText || 'Pending';
-              }
-            }
-          }
-        });
-      });
-
-      stageAssistant.querySelectorAll('[data-stage-submit]').forEach((button) => {
-        button.setAttribute('data-original-label', button.textContent);
-      });
+    if (currentStage) {
+      setActiveStage(currentStage);
     }
   })();
 </script>
