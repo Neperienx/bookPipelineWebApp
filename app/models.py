@@ -49,5 +49,79 @@ class Project(db.Model):
 
     owner_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
 
+    outlines = db.relationship(
+        "OutlineDraft",
+        backref="project",
+        lazy=True,
+        cascade="all, delete-orphan",
+        order_by="OutlineDraft.created_at.desc()",
+    )
+    acts = db.relationship(
+        "ActOutline",
+        backref="project",
+        lazy=True,
+        cascade="all, delete-orphan",
+        order_by="ActOutline.sequence",
+    )
+    characters = db.relationship(
+        "CharacterProfile",
+        backref="project",
+        lazy=True,
+        cascade="all, delete-orphan",
+        order_by="CharacterProfile.name",
+    )
+
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Project {self.title} ({self.status})>"
+
+
+class OutlineDraft(db.Model):
+    __tablename__ = "outline_drafts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("projects.id"), nullable=False, index=True)
+    title = db.Column(db.String(150), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    prompt = db.Column(db.Text, nullable=True)
+    word_count = db.Column(db.Integer, nullable=False, default=0)
+    used_fallback = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<OutlineDraft {self.title} ({self.word_count} words)>"
+
+
+class ActOutline(db.Model):
+    __tablename__ = "act_outlines"
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("projects.id"), nullable=False, index=True)
+    sequence = db.Column(db.Integer, nullable=False, default=1)
+    title = db.Column(db.String(150), nullable=False)
+    summary = db.Column(db.Text, nullable=False)
+    turning_points = db.Column(db.Text, nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<ActOutline {self.sequence}: {self.title}>"
+
+
+class CharacterProfile(db.Model):
+    __tablename__ = "character_profiles"
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("projects.id"), nullable=False, index=True)
+    name = db.Column(db.String(120), nullable=False)
+    background = db.Column(db.Text, nullable=True)
+    role = db.Column(db.String(120), nullable=True)
+    goals = db.Column(db.Text, nullable=True)
+    conflict = db.Column(db.Text, nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<CharacterProfile {self.name}>"

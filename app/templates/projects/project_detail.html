@@ -130,6 +130,228 @@
         {% endif %}
       </div>
     </div>
+
+    <div class="card frosted-card border-0 shadow-sm mb-4" id="outlineLibrary">
+      <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+          <div>
+            <h2 class="h6 text-white fw-semibold mb-1">Saved outlines</h2>
+            <p class="text-white-50 small mb-0">
+              Browse every draft you've generated and refine them inline.
+            </p>
+          </div>
+        </div>
+
+        {% if outlines %}
+        <div class="row g-4 mt-3">
+          <div class="col-lg-4">
+            <div class="list-group outline-list">
+              {% for outline in outlines %}
+              <a
+                class="list-group-item list-group-item-action rounded-3 mb-2 {% if selected_outline and outline.id == selected_outline.id %}active{% endif %}"
+                href="{{ url_for('projects.detail', project_id=project.id, outline_id=outline.id, act_id=request.args.get('act_id'), character_id=request.args.get('character_id')) }}#outlineLibrary"
+              >
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="fw-semibold">{{ outline.title }}</div>
+                    <div class="text-white-50 small">
+                      {{ outline.word_count }} words · {{ outline.created_at.strftime('%b %d, %Y %H:%M') }}
+                    </div>
+                  </div>
+                  {% if outline.used_fallback %}
+                  <span class="badge text-bg-secondary rounded-pill">Fallback</span>
+                  {% endif %}
+                </div>
+              </a>
+              {% endfor %}
+            </div>
+          </div>
+          <div class="col-lg-8">
+            {% if selected_outline %}
+            <form method="post" class="outline-editor">
+              {{ outline_edit_form.hidden_tag() }}
+              {{ outline_edit_form.outline_id(value=selected_outline.id) }}
+              <div class="mb-3">
+                {{ outline_edit_form.title.label(class="form-label text-white fw-semibold") }}
+                {{ outline_edit_form.title(class="form-control form-control-lg", placeholder="Outline title") }}
+                {% for error in outline_edit_form.title.errors %}
+                <div class="text-danger small mt-1">{{ error }}</div>
+                {% endfor %}
+              </div>
+              <div class="mb-3">
+                {{ outline_edit_form.content.label(class="form-label text-white fw-semibold") }}
+                {{ outline_edit_form.content(class="form-control", rows="14") }}
+                {% for error in outline_edit_form.content.errors %}
+                <div class="text-danger small mt-1">{{ error }}</div>
+                {% endfor %}
+              </div>
+              <div class="d-flex justify-content-between align-items-center">
+                <p class="text-white-50 small mb-0">
+                  Prompt snapshot saved {{ selected_outline.created_at.strftime('%b %d, %Y %H:%M') }}
+                </p>
+                {{ outline_edit_form.submit(class="btn btn-primary rounded-pill px-4") }}
+              </div>
+            </form>
+            {% else %}
+            <p class="text-white-50 mb-0">Generate an outline above to start building your library.</p>
+            {% endif %}
+          </div>
+        </div>
+        {% else %}
+        <p class="text-white-50 small mb-0 mt-3">No outlines saved yet. Generate your first draft to begin iterating.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card frosted-card border-0 shadow-sm mb-4" id="actOutlines">
+      <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+          <div>
+            <h2 class="h6 text-white fw-semibold mb-1">Act structure</h2>
+            <p class="text-white-50 small mb-0">Select an act to refine turning points and pacing.</p>
+          </div>
+          <a
+            class="btn btn-outline-light btn-sm rounded-pill"
+            href="{{ url_for('projects.detail', project_id=project.id, outline_id=request.args.get('outline_id'), act_id='new', character_id=request.args.get('character_id')) }}#actOutlines"
+          >
+            New act
+          </a>
+        </div>
+        <div class="row g-4">
+          <div class="col-lg-4">
+            <div class="list-group outline-list">
+              {% for act in acts %}
+              <a
+                class="list-group-item list-group-item-action rounded-3 mb-2 {% if selected_act and act.id == selected_act.id %}active{% endif %}"
+                href="{{ url_for('projects.detail', project_id=project.id, outline_id=request.args.get('outline_id'), act_id=act.id, character_id=request.args.get('character_id')) }}#actOutlines"
+              >
+                <div class="fw-semibold">{{ act.sequence }}. {{ act.title }}</div>
+                <div class="text-white-50 small">Updated {{ act.updated_at.strftime('%b %d, %Y') }}</div>
+              </a>
+              {% endfor %}
+              {% if not acts %}
+              <div class="text-white-50 small">No acts yet — create one to break down your structure.</div>
+              {% endif %}
+            </div>
+          </div>
+          <div class="col-lg-8">
+            <form method="post" class="act-editor">
+              {{ act_form.hidden_tag() }}
+              {{ act_form.act_id() }}
+              <div class="row g-3">
+                <div class="col-sm-4">
+                  {{ act_form.sequence.label(class="form-label text-white fw-semibold") }}
+                  {{ act_form.sequence(class="form-control", placeholder="1") }}
+                  <div class="form-text text-white-50">Used to order your acts.</div>
+                  {% for error in act_form.sequence.errors %}
+                  <div class="text-danger small mt-1">{{ error }}</div>
+                  {% endfor %}
+                </div>
+                <div class="col-sm-8">
+                  {{ act_form.title.label(class="form-label text-white fw-semibold") }}
+                  {{ act_form.title(class="form-control", placeholder="Setup & disruption") }}
+                  {% for error in act_form.title.errors %}
+                  <div class="text-danger small mt-1">{{ error }}</div>
+                  {% endfor %}
+                </div>
+              </div>
+              <div class="mt-3">
+                {{ act_form.summary.label(class="form-label text-white fw-semibold") }}
+                {{ act_form.summary(class="form-control", rows="6") }}
+                {% for error in act_form.summary.errors %}
+                <div class="text-danger small mt-1">{{ error }}</div>
+                {% endfor %}
+              </div>
+              <div class="mt-3">
+                {{ act_form.turning_points.label(class="form-label text-white fw-semibold") }}
+                {{ act_form.turning_points(class="form-control", rows="5", placeholder="List the key reversals and reveals...") }}
+              </div>
+              <div class="mt-3">
+                {{ act_form.notes.label(class="form-label text-white fw-semibold") }}
+                {{ act_form.notes(class="form-control", rows="3", placeholder="Themes, motifs, or reminders") }}
+              </div>
+              <div class="d-flex justify-content-end mt-4">
+                {{ act_form.submit(class="btn btn-primary rounded-pill px-4") }}
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card frosted-card border-0 shadow-sm mb-4" id="characterLibrary">
+      <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+          <div>
+            <h2 class="h6 text-white fw-semibold mb-1">Character roster</h2>
+            <p class="text-white-50 small mb-0">Keep track of your cast and iterate on their core traits.</p>
+          </div>
+          <a
+            class="btn btn-outline-light btn-sm rounded-pill"
+            href="{{ url_for('projects.detail', project_id=project.id, outline_id=request.args.get('outline_id'), act_id=request.args.get('act_id'), character_id='new') }}#characterLibrary"
+          >
+            New character
+          </a>
+        </div>
+        <div class="row g-4">
+          <div class="col-lg-4">
+            <div class="list-group outline-list">
+              {% for character in characters %}
+              <a
+                class="list-group-item list-group-item-action rounded-3 mb-2 {% if selected_character and character.id == selected_character.id %}active{% endif %}"
+                href="{{ url_for('projects.detail', project_id=project.id, outline_id=request.args.get('outline_id'), act_id=request.args.get('act_id'), character_id=character.id) }}#characterLibrary"
+              >
+                <div class="fw-semibold">{{ character.name }}</div>
+                <div class="text-white-50 small">{{ character.role or 'Role TBD' }}</div>
+              </a>
+              {% endfor %}
+              {% if not characters %}
+              <div class="text-white-50 small">No characters yet — add your protagonist to begin.</div>
+              {% endif %}
+            </div>
+          </div>
+          <div class="col-lg-8">
+            <form method="post" class="character-editor">
+              {{ character_form.hidden_tag() }}
+              {{ character_form.character_id() }}
+              <div class="row g-3">
+                <div class="col-sm-6">
+                  {{ character_form.name.label(class="form-label text-white fw-semibold") }}
+                  {{ character_form.name(class="form-control", placeholder="Character name") }}
+                  {% for error in character_form.name.errors %}
+                  <div class="text-danger small mt-1">{{ error }}</div>
+                  {% endfor %}
+                </div>
+                <div class="col-sm-6">
+                  {{ character_form.role.label(class="form-label text-white fw-semibold") }}
+                  {{ character_form.role(class="form-control", placeholder="Protagonist, mentor...") }}
+                </div>
+              </div>
+              <div class="mt-3">
+                <label class="form-label text-white fw-semibold">Background</label>
+                {{ character_form.background(class="form-control", rows="4", placeholder="History, upbringing, key memories") }}
+              </div>
+              <div class="mt-3">
+                <label class="form-label text-white fw-semibold">Goals & desires</label>
+                {{ character_form.goals(class="form-control", rows="4", placeholder="What are they striving for?") }}
+              </div>
+              <div class="mt-3">
+                <label class="form-label text-white fw-semibold">Conflicts & obstacles</label>
+                {{ character_form.conflict(class="form-control", rows="4", placeholder="What stands in their way?") }}
+              </div>
+              <div class="mt-3">
+                {{ character_form.notes.label(class="form-label text-white fw-semibold") }}
+                {{ character_form.notes(class="form-control", rows="3", placeholder="Voice, quirks, or narrative duties") }}
+              </div>
+              <div class="d-flex justify-content-end mt-4">
+                {{ character_form.submit(class="btn btn-primary rounded-pill px-4") }}
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="chat-surface shadow-lg">
       <div class="chat-header d-flex justify-content-between align-items-center">
         <div>
