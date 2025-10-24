@@ -12,6 +12,12 @@ from flask_login import current_user, login_required
 
 from ..extensions import db
 from ..models import ActOutline, CharacterProfile, OutlineDraft, Project, ProjectStage
+from ..services.autofill import (
+    CharacterAutofillError,
+    OutlineAutofillError,
+    autofill_characters_for_project,
+    autofill_outline_for_project,
+)
 from ..services.stage_generation import (
     StageGenerationError,
     generate_stage_content,
@@ -412,17 +418,43 @@ def generate_stage(project_id: int):
     entry.generated_text = result.text
     entry.used_fallback = result.used_fallback
     db.session.add(entry)
+    db.session.flush()
+
+    response_payload = {
+        "stage": stage,
+        "label": STAGE_GENERATION_STEPS[stage]["label"],
+        "content": entry.generated_text,
+        "used_fallback": entry.used_fallback,
+        "updated_at": entry.updated_at.isoformat() if entry.updated_at else None,
+    }
+
+    if stage == "prompt":
+        try:
+            outline_autofill = autofill_outline_for_project(project, prompt)
+        except OutlineAutofillError as exc:
+            current_app.logger.warning("Outline autofill failed: %s", exc)
+        else:
+            response_payload["outline"] = {
+                "id": outline_autofill.draft.id,
+                "title": outline_autofill.draft.title,
+                "word_count": outline_autofill.word_count,
+                "used_fallback": outline_autofill.used_fallback,
+            }
+    elif stage == "characters":
+        try:
+            character_autofill = autofill_characters_for_project(project, prompt)
+        except CharacterAutofillError as exc:
+            current_app.logger.warning("Character autofill failed: %s", exc)
+        else:
+            response_payload["characters"] = {
+                "created_ids": [character.id for character in character_autofill.created],
+                "updated_ids": [character.id for character in character_autofill.updated],
+                "used_fallback": character_autofill.used_fallback,
+            }
+
     db.session.commit()
 
-    return jsonify(
-        {
-            "stage": stage,
-            "label": STAGE_GENERATION_STEPS[stage]["label"],
-            "content": entry.generated_text,
-            "used_fallback": entry.used_fallback,
-            "updated_at": entry.updated_at.isoformat() if entry.updated_at else None,
-        }
-    )
+    return jsonify(response_payload)
 
 
 @bp.route("/<int:project_id>/advance", methods=["POST"])
