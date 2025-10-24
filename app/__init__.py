@@ -16,7 +16,12 @@ load_dotenv(BASE_DIR / ".env")
 
 
 def create_app(config_class: type[Config] = Config) -> Flask:
-    app = Flask(__name__, instance_relative_config=True)
+    app = Flask(
+        __name__,
+        instance_relative_config=True,
+        static_folder=str(BASE_DIR / "static"),
+        static_url_path="/static",
+    )
     app.config.from_object(config_class)
     app.config.setdefault("PROMPT_CONFIG_PATH", str(BASE_DIR / "prompt_config.json"))
     if "TEXT_GENERATOR_MODEL_PATH" not in app.config:
