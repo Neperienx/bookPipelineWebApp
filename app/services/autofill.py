@@ -11,6 +11,7 @@ from ..extensions import db
 from ..models import CharacterProfile, OutlineDraft, Project
 from .story_outline import (
     OutlineGenerationError,
+    _extract_generation_parameters,
     _get_text_generator,
     _load_prompt_entry,
     generate_story_outline,
@@ -142,17 +143,14 @@ def _generate_character_summaries(user_prompt: str, *, project_title: Optional[s
     final_prompt = prompt_template.format(project_title=project_fragment, user_prompt=prompt_text)
 
     generator = _get_text_generator()
-    parameters = config_entry.get("parameters") if isinstance(config_entry, dict) else None
-    max_new_tokens = None
-    if isinstance(parameters, dict):
-        max_new_tokens = parameters.get("max_new_tokens")
+    generation_kwargs = _extract_generation_parameters(config_entry.get("parameters"))
 
     response_text: Optional[str] = None
     used_fallback = False
 
     if generator is not None:
         try:
-            response_text = generator.generate_response(final_prompt, max_new_tokens=max_new_tokens)
+            response_text = generator.generate_response(final_prompt, **generation_kwargs)
         except Exception as exc:  # pragma: no cover - defensive logging for integrations
             current_app.logger.warning(
                 "LLM character autofill failed; falling back to heuristic profiles. Error: %s",

@@ -5,3 +5,7 @@ Flask-WTF==1.2.1
 Flask-Login==0.6.3
 email-validator==2.1.0.post1
 python-dotenv==1.0.1
+torch>=2.1.0
+transformers>=4.37.0
+accelerate>=0.27.0
+sentencepiece>=0.1.99
