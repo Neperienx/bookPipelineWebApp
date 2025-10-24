@@ -32,6 +32,19 @@ def ensure_database_schema() -> None:
             inspector = inspect(db.engine)
             table_names = inspector.get_table_names()
 
+        # Import locally to avoid circular import issues during application setup.
+        from .models import ActOutline, CharacterProfile, OutlineDraft
+
+        required_tables = {
+            "outline_drafts": OutlineDraft.__table__,
+            "act_outlines": ActOutline.__table__,
+            "character_profiles": CharacterProfile.__table__,
+        }
+
+        for table_name, table in required_tables.items():
+            if table_name not in table_names:
+                table.create(bind=db.engine)
+
         if "projects" in table_names:
             project_columns = _get_column_names("projects")
             if "last_outline_prompt" not in project_columns:
