@@ -11,7 +11,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from app import create_app, db
+from app import create_app
+from app.db_utils import ensure_database_schema
 DEFAULT_ENV_PATH = REPO_ROOT / ".env"
 BACKUP_SUFFIX = ".bak"
 
@@ -107,7 +108,7 @@ def update_env_file(args: argparse.Namespace) -> Dict[str, str]:
 def initialize_database() -> None:
     app = create_app()
     with app.app_context():
-        db.create_all()
+        ensure_database_schema()
     print("Database initialized (instance/book_pipeline.db).")
 
 
