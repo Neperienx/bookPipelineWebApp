@@ -43,6 +43,7 @@ class Project(db.Model):
     description = db.Column(db.Text, nullable=True)
     status = db.Column(db.String(50), nullable=False, default="draft")
     current_step = db.Column(db.String(50), nullable=False, default="prompt")
+    last_outline_prompt = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

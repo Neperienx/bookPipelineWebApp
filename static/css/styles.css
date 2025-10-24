@@ -318,6 +318,7 @@ body {
   font-size: 0.9rem;
   line-height: 1.5;
   color: var(--text-primary);
+  background-color: transparent;
 }
 
 .toast {
