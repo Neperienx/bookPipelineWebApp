@@ -1,8 +1,21 @@
-from flask import abort, current_app, flash, redirect, render_template, request, url_for
+from flask import (
+    abort,
+    current_app,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 from flask_login import current_user, login_required
 
 from ..extensions import db
-from ..models import ActOutline, CharacterProfile, OutlineDraft, Project
+from ..models import ActOutline, CharacterProfile, OutlineDraft, Project, ProjectStage
+from ..services.stage_generation import (
+    StageGenerationError,
+    generate_stage_content,
+)
 from ..services.story_outline import OutlineGenerationError, generate_story_outline
 from . import bp
 from .forms import ActOutlineForm, CharacterProfileForm, OutlineDraftForm, OutlineRequestForm
@@ -16,6 +29,26 @@ PROJECT_STEPS = [
     ("scenes", "Scene outline"),
     ("manuscript", "Draft manuscript"),
 ]
+
+
+STAGE_GENERATION_STEPS = {
+    "prompt": {
+        "label": "Initial story prompt",
+        "cta": "Generate project brief",
+        "description": "Capture the core hook, tone, and stakes to guide later stages.",
+        "input_label": "Describe the spark",
+        "input_placeholder": "Summarise the idea, genre, and any must-have beats.",
+        "output_label": "Expanded project brief",
+    },
+    "characters": {
+        "label": "Character development",
+        "cta": "Outline character set",
+        "description": "Sketch the protagonist, opposing force, and key allies.",
+        "input_label": "What do you know about the cast?",
+        "input_placeholder": "Share goals, flaws, relationships, or archetypes.",
+        "output_label": "Suggested character breakdown",
+    },
+}
 
 
 @bp.route("/<int:project_id>", methods=["GET", "POST"])
@@ -191,6 +224,11 @@ def detail(project_id: int):
                 )
             )
 
+    stage_entries = {
+        entry.stage: entry
+        for entry in ProjectStage.query.filter_by(project_id=project.id).all()
+    }
+
     outlines = (
         OutlineDraft.query.filter_by(project_id=project.id)
         .order_by(OutlineDraft.created_at.desc())
@@ -307,6 +345,48 @@ def detail(project_id: int):
         selected_outline=selected_outline,
         selected_act=selected_act,
         selected_character=selected_character,
+        stage_entries=stage_entries,
+        stage_generation_steps=STAGE_GENERATION_STEPS,
+    )
+
+
+@bp.route("/<int:project_id>/stage-content", methods=["POST"])
+@login_required
+def generate_stage(project_id: int):
+    project = Project.query.get_or_404(project_id)
+    if project.owner != current_user:
+        abort(403)
+
+    payload = request.get_json(silent=True) or {}
+    stage = payload.get("stage")
+    prompt = payload.get("prompt", "")
+
+    if stage not in STAGE_GENERATION_STEPS:
+        return jsonify({"error": "Unknown stage requested."}), 400
+
+    try:
+        result = generate_stage_content(stage, prompt, project_title=project.title)
+    except StageGenerationError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    entry = ProjectStage.query.filter_by(project_id=project.id, stage=stage).first()
+    if not entry:
+        entry = ProjectStage(project=project, stage=stage)
+
+    entry.user_prompt = (prompt or "").strip() or None
+    entry.generated_text = result.text
+    entry.used_fallback = result.used_fallback
+    db.session.add(entry)
+    db.session.commit()
+
+    return jsonify(
+        {
+            "stage": stage,
+            "label": STAGE_GENERATION_STEPS[stage]["label"],
+            "content": entry.generated_text,
+            "used_fallback": entry.used_fallback,
+            "updated_at": entry.updated_at.isoformat() if entry.updated_at else None,
+        }
     )
 
 

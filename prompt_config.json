@@ -7,5 +7,23 @@
       "temperature": 0.65,
       "top_p": 0.9
     }
+  },
+  "stage_initial_story_prompt": {
+    "display_name": "Initial story prompt expansion",
+    "prompt_template": "You are the Logal LLM, a development partner helping writers capture production-ready notes. Expand the notes below into a concise project brief with these sections: Hook & Premise (2-3 sentences), Tone & Inspirations (2 sentences), Stakes & Questions (bullet list of 3 items), and Next Experiment (1 short paragraph suggesting what to explore next). Keep the response under 220 words, grounded in the provided idea without repeating it verbatim.\n\nProject title: {project_title}\nWriter notes: {user_prompt}",
+    "parameters": {
+      "max_new_tokens": 450,
+      "temperature": 0.7,
+      "top_p": 0.9
+    }
+  },
+  "stage_character_development": {
+    "display_name": "Character development overview",
+    "prompt_template": "You are the Logal LLM assisting with character discovery. Based on the guidance below, produce a markdown table with the columns Name, Role in Story, Core Drive, Hidden Vulnerability, Relationship Web. Include rows for protagonist, primary opposition, a key ally, and an optional wildcard. Each cell should contain 1-2 crisp sentences or phrases tailored to the supplied idea. Conclude with a short paragraph titled \"Cast Notes\" summarising ensemble dynamics to track. Limit the response to approximately 250 words.\n\nProject title: {project_title}\nWriter notes: {user_prompt}",
+    "parameters": {
+      "max_new_tokens": 520,
+      "temperature": 0.7,
+      "top_p": 0.9
+    }
   }
 }

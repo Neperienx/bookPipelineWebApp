@@ -33,12 +33,13 @@ def ensure_database_schema() -> None:
             table_names = inspector.get_table_names()
 
         # Import locally to avoid circular import issues during application setup.
-        from .models import ActOutline, CharacterProfile, OutlineDraft
+        from .models import ActOutline, CharacterProfile, OutlineDraft, ProjectStage
 
         required_tables = {
             "outline_drafts": OutlineDraft.__table__,
             "act_outlines": ActOutline.__table__,
             "character_profiles": CharacterProfile.__table__,
+            "project_stages": ProjectStage.__table__,
         }
 
         for table_name, table in required_tables.items():
