@@ -160,6 +160,63 @@ def draft_character_profile(
         raise CharacterProfileSuggestionError("Character profile prompt template is missing.")
 
     project_fragment = (project_title or "the story").strip() or "the story"
+
+    field_templates_raw = config_entry.get("field_templates")
+    ordered_fields = ("name", "role", "background", "goals", "conflict", "notes")
+    if isinstance(field_templates_raw, dict) and any(
+        field_templates_raw.get(field) for field in ordered_fields
+    ):
+        generator = _get_text_generator()
+        generation_kwargs = _extract_generation_parameters(config_entry.get("parameters"))
+        fallback_profile = _fallback_single_character(project_fragment, prompt_text)
+        profile: Dict[str, Optional[str]] = {}
+        prompts: List[str] = []
+        used_fallback = False
+
+        for field in ordered_fields:
+            template = field_templates_raw.get(field)
+            if not isinstance(template, str):
+                continue
+
+            field_prompt = template.format(
+                project_title=project_fragment,
+                user_prompt=prompt_text,
+            )
+            prompts.append(field_prompt)
+
+            response_text: Optional[str] = None
+            if generator is not None:
+                try:
+                    response_text = generator.generate_response(field_prompt, **generation_kwargs)
+                except Exception as exc:  # pragma: no cover - defensive logging for integrations
+                    current_app.logger.warning(
+                        "LLM character field generation failed for %s; using fallback. Error: %s",
+                        field,
+                        exc,
+                    )
+
+            value = _parse_single_field_response(response_text, field)
+            if value is None:
+                fallback_value = fallback_profile.get(field)
+                if fallback_value:
+                    profile[field] = fallback_value
+                    used_fallback = True
+                else:
+                    used_fallback = True
+                continue
+
+            profile[field] = value
+
+        if not profile:
+            raise CharacterProfileSuggestionError("The character generator returned an empty profile.")
+
+        prompt_audit = "\n\n".join(prompts)
+        return CharacterProfileSuggestion(
+            profile=profile,
+            used_fallback=used_fallback,
+            prompt=prompt_audit,
+        )
+
     final_prompt = prompt_template.format(project_title=project_fragment, user_prompt=prompt_text)
 
     generator = _get_text_generator()
@@ -288,6 +345,55 @@ def _parse_character_payload(raw_text: str) -> List[Dict[str, Optional[str]]]:
         }
         characters.append(character)
     return characters
+
+
+def _parse_single_field_response(raw_text: Optional[str], field: str) -> Optional[str]:
+    if not raw_text:
+        return None
+
+    text = raw_text.strip()
+    if not text:
+        return None
+
+    fence_match = re.search(r"```json\s*(.*?)```", text, re.DOTALL)
+    if fence_match:
+        text = fence_match.group(1).strip()
+
+    if not text.startswith("{") and not text.startswith("["):
+        brace_index = text.find("{")
+        bracket_index = text.find("[")
+        candidates = [index for index in (brace_index, bracket_index) if index != -1]
+        if candidates:
+            text = text[min(candidates):]
+
+    try:
+        parsed: Any = json.loads(text)
+    except json.JSONDecodeError:
+        cleaned = _clean_field(text.strip('"'))
+        if cleaned:
+            return cleaned
+        current_app.logger.warning(
+            "Unable to parse character field output for %s as JSON: %s",
+            field,
+            text,
+        )
+        return None
+
+    candidate: Optional[object] = None
+    if isinstance(parsed, dict):
+        if field in parsed:
+            candidate = parsed[field]
+        elif "character" in parsed and isinstance(parsed["character"], dict):
+            candidate = parsed["character"].get(field)
+        elif "value" in parsed and field == "notes":
+            candidate = parsed["value"]
+    elif isinstance(parsed, list):
+        for entry in parsed:
+            if isinstance(entry, dict) and field in entry:
+                candidate = entry[field]
+                break
+
+    return _clean_field(candidate)
 
 
 def _parse_character_profile_response(raw_text: str) -> Dict[str, Optional[str]]:
