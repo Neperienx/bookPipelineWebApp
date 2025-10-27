@@ -162,7 +162,10 @@ standalone Flask app included in this repository.
 
    `LOCAL_GPT_MODEL_PATH` should point at the directory used when calling
    `TextGenerator` directly. If you omit `FLASK_SECRET_KEY` the app falls back
-   to a development-only default.
+   to a development-only default. When running on the Windows workstation that
+   hosts the repository, the chat interface automatically falls back to the
+   pre-installed model at `C:\Users\nicol\Documents\01_Code\models\dolphin-2.6-mistral-7b`
+   if `LOCAL_GPT_MODEL_PATH` is not set.
 
 2. Start the chat surface:
 
