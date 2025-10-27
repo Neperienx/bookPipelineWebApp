@@ -67,6 +67,7 @@ bookPipelineWebApp/
 ├── instance/                # Created on first run; holds SQLite database
 ├── requirements.txt         # Python dependencies
 ├── text_generator.py        # Existing script for experimenting with LLM outputs
+├── chat_interface.py        # Standalone ChatGPT-style interface for the local model
 └── wsgi.py                  # App entry point (for flask run / gunicorn)
 ```
 
@@ -146,31 +147,65 @@ bookPipelineWebApp/
 
 ---
 
-## 6. Application Walkthrough
+## 6. Local GPT Chat Interface
 
-### 6.1 Landing Page
+For a lightweight, ChatGPT-style experience backed by your local model, run the
+standalone Flask app included in this repository.
+
+1. Export the environment variables so the app can locate your model and secure
+   session cookies:
+
+   ```bash
+   export LOCAL_GPT_MODEL_PATH="/path/to/your/hf/model"
+   export FLASK_SECRET_KEY="replace-me"
+   ```
+
+   `LOCAL_GPT_MODEL_PATH` should point at the directory used when calling
+   `TextGenerator` directly. If you omit `FLASK_SECRET_KEY` the app falls back
+   to a development-only default.
+
+2. Start the chat surface:
+
+   ```bash
+   flask --app chat_interface run --debug
+   ```
+
+3. Visit [http://localhost:5000](http://localhost:5000) to begin chatting. The
+   interface stores the conversation in your browser session so you can refresh
+   or navigate away without losing the current exchange. Use the **Clear chat**
+   button at the top right to reset the history and start again.
+
+Because the app reuses `text_generator.TextGenerator`, all generation settings
+(`max_new_tokens`, `temperature`, etc.) remain configurable through environment
+variables or by editing `chat_interface.py`.
+
+---
+
+## 7. Application Walkthrough
+
+### 7.1 Landing Page
 - Hero section introduces the pipeline and highlights the connection to a local LLM.
 - Roadmap cards explain how the story will move from idea to manuscript.
 - CTA buttons invite visitors to register or scroll for details.
 
-### 6.2 Authentication
+### 7.2 Authentication
 - Email + password login with hashed credentials (`werkzeug.security`).
 - CSRF protection is enabled application-wide.
 - Flash messaging uses elegant toasts for feedback.
 
-### 6.3 Dashboard
+### 7.3 Dashboard
 - Left side encourages new project creation with a concise form.
 - Right side features a responsive grid of project cards, each with status badges and quick links to the workspace.
 - Projects default to `draft` status and the first pipeline step (`prompt`).
 
-### 6.4 Project Workspace
+### 7.4 Project Workspace
 - Status timeline visualizes the full pipeline (prompt → characters → three-act outline → chapters → scenes → manuscript).
 - Buttons allow you to simulate progress (`Advance step`) or reset to the beginning while persistence logic is built.
 - The chat surface is styled for the upcoming conversational UX. For now it explains what will happen once the local LLM is wired in.
 
 ---
 
-## 7. Connecting the Local LLM (Preview)
+## 8. Connecting the Local LLM (Preview)
 
 We plan to reuse the existing `text_generator.py` module as a staging point for local inference. The future integration will work roughly as follows:
 
@@ -183,7 +218,7 @@ Until the service layer is implemented, the UI highlights that the assistant is 
 
 ---
 
-## 8. Suggested Next Steps
+## 9. Suggested Next Steps
 
 1. **Model migrations**: Introduce Flask-Migrate commands and seed data for development demos.
 2. **Project artefacts**: Create tables for prompts, outlines, and scenes linked to `Project` with revision history.
@@ -193,7 +228,7 @@ Until the service layer is implemented, the UI highlights that the assistant is 
 
 ---
 
-## 9. Design Language
+## 10. Design Language
 
 - **Palette**: Neon gradients with deep navy backgrounds inspired by creative studios.
 - **Typography**: Poppins for a modern and legible interface.
