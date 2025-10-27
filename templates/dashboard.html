@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Story Dashboard{% endblock %}
+{% block content %}
+  <div class="row g-4">
+    <div class="col-lg-5">
+      <div class="card h-100">
+        <div class="card-body">
+          <h2 class="h4 mb-3">Start a new project</h2>
+          <p class="text-secondary">Create a workspace to capture your rough outline and chat with the assistant.</p>
+          {% if error %}
+            <div class="alert alert-danger" role="alert">{{ error }}</div>
+          {% endif %}
+          <form method="post" class="d-flex flex-column gap-3">
+            <div>
+              <label for="name" class="form-label">Project name</label>
+              <input type="text" class="form-control" id="name" name="name" placeholder="Space opera outline" required>
+            </div>
+            <div>
+              <label for="outline" class="form-label">Initial outline (optional)</label>
+              <textarea class="form-control" id="outline" name="outline" rows="4" placeholder="Jot down your core idea..."></textarea>
+            </div>
+            <div class="d-flex justify-content-end">
+              <button type="submit" class="btn btn-primary">Create project</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-7">
+      <div class="card h-100">
+        <div class="card-body d-flex flex-column">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="h4 mb-0">Your projects</h2>
+            <span class="badge bg-secondary">{{ projects|length }}</span>
+          </div>
+          {% if projects %}
+            <div class="list-group list-group-flush flex-grow-1 overflow-auto">
+              {% for project in projects %}
+                <a
+                  href="{{ url_for('project_detail', project_id=project.id) }}"
+                  class="list-group-item list-group-item-action d-flex justify-content-between align-items-start"
+                >
+                  <div>
+                    <h3 class="h5 mb-1">{{ project.name }}</h3>
+                    {% if project.outline %}
+                      <p class="mb-0 text-secondary small">{{ project.outline[:140] }}{% if project.outline|length > 140 %}…{% endif %}</p>
+                    {% else %}
+                      <p class="mb-0 text-secondary small fst-italic">No outline yet</p>
+                    {% endif %}
+                  </div>
+                  <span class="text-secondary small ms-3">{{ project.created_at.strftime('%b %d, %Y') }}</span>
+                </a>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="text-secondary text-center py-5">
+              <p class="mb-1">You have no projects yet.</p>
+              <p class="mb-0">Create one to begin outlining your story.</p>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}

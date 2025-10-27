@@ -15,7 +15,10 @@ import os
 from pathlib import Path
 from typing import Dict, Iterable, List
 
-from flask import Flask, redirect, render_template, request, session, url_for
+from datetime import datetime
+
+from flask import Flask, abort, redirect, render_template, request, session, url_for
+from flask_sqlalchemy import SQLAlchemy
 
 from text_generator import TextGenerator
 
@@ -26,6 +29,22 @@ DEFAULT_SECRET = "dev-secret-key-change-me"
 # ``TextGenerator`` is expensive to initialise, so cache a single instance per
 # process.  It loads lazily on the first request that needs it.
 _generator: TextGenerator | None = None
+
+# Database handle is created globally so unit tests can import the ``db`` object
+# without instantiating the Flask application first.
+db = SQLAlchemy()
+
+
+class Project(db.Model):
+    """Story project persisted in the local SQLite database."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    outline = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    def __repr__(self) -> str:  # pragma: no cover - debug helper
+        return f"<Project {self.id} {self.name!r}>"
 
 # The Windows desktop deployment expects a specific local GGUF/Transformers
 # directory.  Use it as a sensible default when the app is launched on that
@@ -39,36 +58,87 @@ def create_app() -> Flask:
     app = Flask(__name__)
     app.secret_key = os.environ.get("FLASK_SECRET_KEY", DEFAULT_SECRET)
 
+    database_url = os.environ.get("DATABASE_URL")
+    if not database_url:
+        database_url = "sqlite:///book_pipeline.db"
+    app.config["SQLALCHEMY_DATABASE_URI"] = database_url
+    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+    db.init_app(app)
+
+    with app.app_context():
+        db.create_all()
+
     @app.route("/", methods=["GET", "POST"])
-    def chat() -> str:
-        history = session.setdefault("chat_history", [])
+    def dashboard() -> str:
         error = None
 
         if request.method == "POST":
-            if "reset" in request.form:
-                session.pop("chat_history", None)
-                return redirect(url_for("chat"))
+            name = request.form.get("name", "").strip()
+            outline = request.form.get("outline", "").strip() or None
 
-            user_message = request.form.get("message", "").strip()
-            if user_message:
-                history.append({"role": "user", "content": user_message})
-                try:
-                    generator = _get_generator()
-                    assistant_reply = generator.generate_response(
-                        _build_prompt(history)
-                    )
-                except Exception as exc:  # pragma: no cover - defensive
-                    error = f"The local model could not generate a reply: {exc}"
-                    history.pop()  # remove the user message to avoid confusing UX
-                else:
-                    history.append(
-                        {"role": "assistant", "content": assistant_reply or "(no reply)"}
-                    )
-                session.modified = True
+            if not name:
+                error = "Please provide a project name."
             else:
-                error = "Please enter a message before sending."
+                project = Project(name=name, outline=outline)
+                db.session.add(project)
+                db.session.commit()
+                return redirect(url_for("project_detail", project_id=project.id))
 
-        return render_template("chat.html", history=history, error=error)
+        projects = Project.query.order_by(Project.created_at.desc()).all()
+        return render_template("dashboard.html", projects=projects, error=error)
+
+    @app.route("/projects/<int:project_id>", methods=["GET", "POST"])
+    def project_detail(project_id: int) -> str:
+        project = Project.query.get(project_id)
+        if project is None:
+            abort(404)
+
+        session_key = _session_key(project_id)
+        history = session.setdefault(session_key, [])
+        error = None
+        success = None
+
+        if request.method == "POST":
+            if "reset" in request.form:
+                session.pop(session_key, None)
+                return redirect(url_for("project_detail", project_id=project_id))
+
+            action = request.form.get("action")
+            if action == "save_outline":
+                project.outline = request.form.get("outline", "").strip() or None
+                db.session.commit()
+                success = "Outline saved."
+            else:
+                user_message = request.form.get("message", "").strip()
+                if user_message:
+                    history.append({"role": "user", "content": user_message})
+                    try:
+                        generator = _get_generator()
+                        assistant_reply = generator.generate_response(
+                            _build_prompt(history)
+                        )
+                    except Exception as exc:  # pragma: no cover - defensive
+                        error = f"The local model could not generate a reply: {exc}"
+                        history.pop()
+                    else:
+                        history.append(
+                            {
+                                "role": "assistant",
+                                "content": assistant_reply or "(no reply)",
+                            }
+                        )
+                    session.modified = True
+                else:
+                    error = "Please enter a message before sending."
+
+        return render_template(
+            "project.html",
+            project=project,
+            history=history,
+            error=error,
+            success=success,
+        )
 
     return app
 
@@ -106,6 +176,10 @@ def _build_prompt(history: Iterable[Dict[str, str]]) -> str:
         prompt_lines.append(f"{prefix}: {message['content']}")
     prompt_lines.append("Assistant:")
     return "\n".join(prompt_lines)
+
+
+def _session_key(project_id: int) -> str:
+    return f"chat_history_{project_id}"
 
 
 # Allow ``python chat_interface.py`` to run the development server directly.
