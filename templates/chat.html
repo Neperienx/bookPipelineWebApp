@@ -57,6 +57,24 @@
         border-top: 1px solid rgba(148, 163, 184, 0.2);
         background: rgba(15, 23, 42, 0.9);
       }
+      .loading-indicator {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
+        margin-bottom: 0.5rem;
+        border-radius: 0.75rem;
+        background: rgba(30, 41, 59, 0.8);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        color: #e2e8f0;
+      }
+      .loading-indicator .spinner-border {
+        width: 1.25rem;
+        height: 1.25rem;
+      }
+      .loading-indicator.hidden {
+        display: none;
+      }
       textarea.form-control {
         background: rgba(15, 23, 42, 0.6);
         border: 1px solid rgba(148, 163, 184, 0.3);
@@ -101,7 +119,11 @@
         {% if error %}
           <div class="alert alert-danger" role="alert">{{ error }}</div>
         {% endif %}
-        <form method="post" class="d-flex flex-column gap-3">
+        <div id="loadingIndicator" class="loading-indicator hidden" role="status" aria-live="polite">
+          <div class="spinner-border text-info" role="status" aria-hidden="true"></div>
+          <span>Assistant is thinking…</span>
+        </div>
+        <form method="post" id="chatForm" class="d-flex flex-column gap-3">
           <textarea
             class="form-control"
             name="message"
@@ -116,5 +138,31 @@
         </form>
       </div>
     </div>
+    <script>
+      (function () {
+        const form = document.getElementById("chatForm");
+        const loadingIndicator = document.getElementById("loadingIndicator");
+        if (!form || !loadingIndicator) {
+          return;
+        }
+
+        form.addEventListener("submit", function () {
+          const submitButton = form.querySelector("button[type='submit']");
+          const textarea = form.querySelector("textarea[name='message']");
+
+          loadingIndicator.classList.remove("hidden");
+
+          if (submitButton) {
+            submitButton.disabled = true;
+            submitButton.innerHTML =
+              '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Sending…';
+          }
+
+          if (textarea) {
+            textarea.setAttribute("readonly", "readonly");
+          }
+        });
+      })();
+    </script>
   </body>
 </html>
