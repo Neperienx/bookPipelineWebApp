@@ -12,6 +12,7 @@ Run the application with ``flask --app chat_interface run`` after exporting
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Dict, Iterable, List
 
 from flask import Flask, redirect, render_template, request, session, url_for
@@ -25,6 +26,13 @@ DEFAULT_SECRET = "dev-secret-key-change-me"
 # ``TextGenerator`` is expensive to initialise, so cache a single instance per
 # process.  It loads lazily on the first request that needs it.
 _generator: TextGenerator | None = None
+
+# The Windows desktop deployment expects a specific local GGUF/Transformers
+# directory.  Use it as a sensible default when the app is launched on that
+# machine so users are not required to export an environment variable first.
+DEFAULT_WINDOWS_MODEL_PATH = Path(
+    r"C:\Users\nicol\Documents\01_Code\models\dolphin-2.6-mistral-7b"
+)
 
 
 def create_app() -> Flask:
@@ -71,6 +79,11 @@ def _get_generator() -> TextGenerator:
     global _generator
     if _generator is None:
         model_path = os.environ.get("LOCAL_GPT_MODEL_PATH")
+
+        if not model_path and os.name == "nt":
+            if DEFAULT_WINDOWS_MODEL_PATH.exists():
+                model_path = str(DEFAULT_WINDOWS_MODEL_PATH)
+
         if not model_path:
             raise RuntimeError(
                 "Set the LOCAL_GPT_MODEL_PATH environment variable to the directory "
