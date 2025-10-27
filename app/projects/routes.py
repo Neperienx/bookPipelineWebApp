@@ -221,6 +221,21 @@ def detail(project_id: int):
                 )
             )
 
+    elif character_form.submit.data:
+        handled_name_required = False
+        for field_name, errors in character_form.errors.items():
+            for error in errors:
+                normalized = error.strip().lower()
+                if (
+                    field_name == "name"
+                    and "required" in normalized
+                    and not handled_name_required
+                ):
+                    flash("Add a character name before saving.", "danger")
+                    handled_name_required = True
+                else:
+                    flash(error, "danger")
+
     stage_entries = {
         entry.stage: entry
         for entry in ProjectStage.query.filter_by(project_id=project.id).all()

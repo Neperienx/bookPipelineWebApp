@@ -47,6 +47,14 @@
   "single_character_autofill": {
     "display_name": "Single character profile",
     "prompt_template": "You are the Logal LLM preparing a concise character dossier. Using the context below, return JSON matching this schema: {{\"name\": string, \"role\": string, \"background\": string, \"goals\": string, \"conflict\": string, \"notes\": string}}. Keep every field specific to the idea and limit responses to one sentence or under 35 words. Avoid markdown, explanations, or extra keys—respond with JSON only.\n\nProject title: {project_title}\nCharacter concept: {user_prompt}",
+    "field_templates": {
+      "name": "You are the Logal LLM preparing a concise character dossier. Provide only the character's name as a vivid 3-6 word phrase.\n\nProject title: {project_title}\nCharacter concept: {user_prompt}\n\nRespond with JSON containing just the \"name\" key, e.g. {{\"name\": \"Name\"}}.",
+      "role": "You are the Logal LLM preparing a concise character dossier. Describe only the character's role in the story in under 15 words.\n\nProject title: {project_title}\nCharacter concept: {user_prompt}\n\nRespond with JSON containing just the \"role\" key, e.g. {{\"role\": \"Role in story\"}}.",
+      "background": "You are the Logal LLM preparing a concise character dossier. Summarise only the character's background in one sharp sentence.\n\nProject title: {project_title}\nCharacter concept: {user_prompt}\n\nRespond with JSON containing just the \"background\" key, e.g. {{\"background\": \"Background detail\"}}.",
+      "goals": "You are the Logal LLM preparing a concise character dossier. Capture only the character's primary goal or desire in one sentence.\n\nProject title: {project_title}\nCharacter concept: {user_prompt}\n\nRespond with JSON containing just the \"goals\" key, e.g. {{\"goals\": \"Goal description\"}}.",
+      "conflict": "You are the Logal LLM preparing a concise character dossier. Explain only the main source of conflict or opposition they face in one sentence.\n\nProject title: {project_title}\nCharacter concept: {user_prompt}\n\nRespond with JSON containing just the \"conflict\" key, e.g. {{\"conflict\": \"Conflict detail\"}}.",
+      "notes": "You are the Logal LLM preparing a concise character dossier. Offer only one notable relationship or extra note in one sentence.\n\nProject title: {project_title}\nCharacter concept: {user_prompt}\n\nRespond with JSON containing just the \"notes\" key, e.g. {{\"notes\": \"Additional note\"}}."
+    },
     "parameters": {
       "max_new_tokens": 320,
       "temperature": 0.6,
