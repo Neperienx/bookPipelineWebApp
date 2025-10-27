@@ -21,6 +21,7 @@ from flask import Flask, abort, redirect, render_template, request, session, url
 from flask_sqlalchemy import SQLAlchemy
 
 from text_generator import TextGenerator
+from system_prompts import SYSTEM_PROMPTS
 
 # Flask session requires a secret key.  Use an environment variable so the
 # application can be run without editing source code.
@@ -104,33 +105,33 @@ def create_app() -> Flask:
                 session.pop(session_key, None)
                 return redirect(url_for("project_detail", project_id=project_id))
 
-            action = request.form.get("action")
-            if action == "save_outline":
-                project.outline = request.form.get("outline", "").strip() or None
-                db.session.commit()
-                success = "Outline saved."
-            else:
-                user_message = request.form.get("message", "").strip()
-                if user_message:
-                    history.append({"role": "user", "content": user_message})
-                    try:
-                        generator = _get_generator()
-                        assistant_reply = generator.generate_response(
-                            _build_prompt(history)
-                        )
-                    except Exception as exc:  # pragma: no cover - defensive
-                        error = f"The local model could not generate a reply: {exc}"
-                        history.pop()
-                    else:
-                        history.append(
-                            {
-                                "role": "assistant",
-                                "content": assistant_reply or "(no reply)",
-                            }
-                        )
-                    session.modified = True
+            user_message = request.form.get("message", "").strip()
+            if user_message:
+                history.append({"role": "user", "content": user_message})
+                try:
+                    generator = _get_generator()
+                    assistant_reply = generator.generate_response(
+                        _build_prompt(history)
+                    )
+                except Exception as exc:  # pragma: no cover - defensive
+                    error = f"The local model could not generate a reply: {exc}"
+                    history.pop()
                 else:
-                    error = "Please enter a message before sending."
+                    assistant_reply = assistant_reply or "(no reply)"
+                    history.append(
+                        {
+                            "role": "assistant",
+                            "content": assistant_reply,
+                        }
+                    )
+                    clean_outline = assistant_reply.strip()
+                    if clean_outline and clean_outline != "(no reply)":
+                        project.outline = clean_outline
+                        db.session.commit()
+                        success = "Outline updated from assistant."
+                session.modified = True
+            else:
+                error = "Please enter a message before sending."
 
         return render_template(
             "project.html",
@@ -168,6 +169,9 @@ def _build_prompt(history: Iterable[Dict[str, str]]) -> str:
     """Construct a conversation prompt from the stored history."""
 
     prompt_lines: List[str] = []
+    system_prompt = SYSTEM_PROMPTS.get("outline_assistant")
+    if system_prompt:
+        prompt_lines.append(f"System: {system_prompt}")
     for message in history:
         if message["role"] == "user":
             prefix = "User"
