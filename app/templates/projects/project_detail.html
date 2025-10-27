@@ -216,6 +216,7 @@
                   data-title-edit="Edit {name}"
                   data-subtitle-new="Fill in the details below to add them to the roster."
                   data-subtitle-edit="Update the fields and save your changes."
+                  data-autofill-endpoint="{{ url_for('projects.generate_character_profile', project_id=project.id) }}"
                 >
                   {{ character_form.csrf_token }}
                   {{ character_form.character_id(class_='d-none', data_character_field='id') }}
@@ -226,6 +227,33 @@
                     <p class="text-white-50 small mb-0" data-character-form-subtitle>
                       {% if selected_character %}Update the fields and save your changes.{% else %}Fill in the details below to add them to the roster.{% endif %}
                     </p>
+                  </div>
+
+                  <div class="mb-4">
+                    <label class="form-label text-white fw-semibold mb-1" for="{{ character_form.seed_prompt.id }}">
+                      Jump-start with a quick prompt
+                    </label>
+                    <p class="text-white-50 small mb-2">
+                      Describe who this character should be and let the assistant draft concise details for each field.
+                    </p>
+                    {{ character_form.seed_prompt(
+                      class_='form-control',
+                      rows=3,
+                      placeholder='Example: A rebellious botanist leading a covert resistance inside a corporate colony.',
+                      data_character_autofill_field='prompt'
+                    ) }}
+                    <div class="d-flex flex-column flex-sm-row gap-2 align-items-sm-center mt-2">
+                      <button
+                        class="btn btn-outline-light btn-sm rounded-pill"
+                        type="button"
+                        data-character-autofill-button
+                      >
+                        Generate fields
+                      </button>
+                      <div class="text-white-50 small" data-character-autofill-status>
+                        Fields stay blank until you ask for help.
+                      </div>
+                    </div>
                   </div>
 
                   <div class="mb-3">
@@ -570,12 +598,21 @@
       return;
     }
 
+    const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
+
     const fields = Array.from(form.querySelectorAll('[data-character-field]'));
     const titleNode = form.querySelector('[data-character-form-title]');
     const subtitleNode = form.querySelector('[data-character-form-subtitle]');
     const statusNode = form.querySelector('[data-character-form-status]');
     const newButton = document.querySelector('[data-character-new]');
     const tiles = Array.from(roster.querySelectorAll('[data-character-entry]'));
+    const autofillEndpoint = form.getAttribute('data-autofill-endpoint');
+    const autofillField = form.querySelector('[data-character-autofill-field]');
+    const autofillButton = form.querySelector('[data-character-autofill-button]');
+    const autofillStatus = form.querySelector('[data-character-autofill-status]');
+    const idField = form.querySelector('[data-character-field="id"]');
+    const nameInput = form.querySelector('[data-character-field="name"]');
 
     const parseCharacter = (element) => {
       if (!element) {
@@ -650,6 +687,108 @@
       setActiveTile(tile || null);
     };
 
+    const toneClasses = {
+      success: 'text-success',
+      warning: 'text-warning',
+      danger: 'text-danger',
+      muted: 'text-white-50',
+    };
+
+    const setAutofillStatus = (message, tone = 'muted') => {
+      if (!autofillStatus) {
+        return;
+      }
+      Object.values(toneClasses).forEach((cls) => {
+        autofillStatus.classList.remove(cls);
+      });
+      const toneClass = toneClasses[tone] || toneClasses.muted;
+      autofillStatus.classList.add(toneClass);
+      autofillStatus.textContent = message;
+    };
+
+    const autofillButtonLabel = autofillButton ? autofillButton.textContent : '';
+
+    const toggleAutofillLoading = (isLoading) => {
+      if (!autofillButton) {
+        return;
+      }
+      if (isLoading) {
+        autofillButton.setAttribute('disabled', 'disabled');
+        autofillButton.textContent = 'Generating…';
+      } else {
+        autofillButton.removeAttribute('disabled');
+        autofillButton.textContent = autofillButtonLabel || 'Generate fields';
+      }
+    };
+
+    if (autofillButton && autofillField && autofillEndpoint) {
+      autofillButton.addEventListener('click', async () => {
+        if (idField && idField.value) {
+          setAutofillStatus('Switch to “Add new character” to generate a fresh profile.', 'warning');
+          return;
+        }
+
+        const prompt = autofillField.value.trim();
+        if (!prompt) {
+          setAutofillStatus('Add a short description so the assistant knows what to create.', 'warning');
+          autofillField.focus();
+          return;
+        }
+
+        toggleAutofillLoading(true);
+        setAutofillStatus('Asking the assistant for a draft…', 'muted');
+
+        try {
+          const response = await fetch(autofillEndpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': csrfToken || '',
+              'X-CSRF-Token': csrfToken || '',
+            },
+            body: JSON.stringify({ prompt }),
+          });
+
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.error || 'Unable to generate a character profile right now.');
+          }
+
+          const profile = payload.profile || {};
+          const normalized = {};
+          ['name', 'role', 'background', 'goals', 'conflict', 'notes'].forEach((key) => {
+            const value = Object.prototype.hasOwnProperty.call(profile, key) ? profile[key] : '';
+            normalized[key] = typeof value === 'string' ? value : value != null ? String(value) : '';
+          });
+
+          applyFields(normalized);
+          applyCopy(null);
+          setActiveTile(null);
+
+          if (idField) {
+            idField.value = '';
+          }
+          if (statusNode) {
+            statusNode.textContent = 'Draft generated from your prompt. Review before saving.';
+          }
+          if (nameInput) {
+            nameInput.focus();
+          }
+
+          const tone = payload.used_fallback ? 'warning' : 'success';
+          const message = payload.used_fallback
+            ? 'Profile drafted with the backup generator. Refine the details before saving.'
+            : 'Profile drafted. Review the fields and tailor them to your story.';
+          setAutofillStatus(message, tone);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'We could not generate a character right now.';
+          setAutofillStatus(message, 'danger');
+        } finally {
+          toggleAutofillLoading(false);
+        }
+      });
+    }
+
     tiles.forEach((tile) => {
       tile.addEventListener('click', (event) => {
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) {
@@ -659,7 +798,6 @@
         const character = parseCharacter(tile);
         applyCharacter(character, tile);
         updateUrl(character && character.id ? character.id : null);
-        const nameInput = form.querySelector('[data-character-field="name"]');
         if (nameInput) {
           nameInput.focus();
         }
@@ -674,7 +812,6 @@
         event.preventDefault();
         applyCharacter(null, null);
         updateUrl(null);
-        const nameInput = form.querySelector('[data-character-field="name"]');
         if (nameInput) {
           nameInput.focus();
         }

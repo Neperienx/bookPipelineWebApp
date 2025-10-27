@@ -12,10 +12,11 @@ from flask_login import current_user, login_required
 
 from ..extensions import db
 from ..models import ActOutline, CharacterProfile, OutlineDraft, Project, ProjectStage
-from ..services.stage_generation import (
-    StageGenerationError,
-    generate_stage_content,
+from ..services.autofill import (
+    CharacterProfileSuggestionError,
+    draft_character_profile,
 )
+from ..services.stage_generation import StageGenerationError, generate_stage_content
 from ..services.story_outline import OutlineGenerationError, generate_story_outline
 from . import bp
 from .forms import ActOutlineForm, CharacterProfileForm, OutlineDraftForm, OutlineRequestForm
@@ -336,6 +337,7 @@ def detail(project_id: int):
         character_form.goals.data = selected_character.goals or ""
         character_form.conflict.data = selected_character.conflict or ""
         character_form.notes.data = selected_character.notes or ""
+        character_form.seed_prompt.data = ""
     elif character_query_id == "new" and (request.method == "GET" or not character_form.submit.data):
         character_form.character_id.data = ""
         character_form.name.data = ""
@@ -344,6 +346,7 @@ def detail(project_id: int):
         character_form.goals.data = ""
         character_form.conflict.data = ""
         character_form.notes.data = ""
+        character_form.seed_prompt.data = ""
 
     return render_template(
         "projects/project_detail.html",
@@ -365,6 +368,31 @@ def detail(project_id: int):
         stage_generation_steps=STAGE_GENERATION_STEPS,
         stage_client_config=stage_client_config,
         stage_client_entries=stage_client_entries,
+    )
+
+
+@bp.route("/<int:project_id>/character-profile", methods=["POST"])
+@login_required
+def generate_character_profile(project_id: int):
+    project = Project.query.get_or_404(project_id)
+    if project.owner != current_user:
+        abort(403)
+
+    payload = request.get_json(silent=True) or {}
+    prompt_raw = payload.get("prompt", "")
+    prompt = prompt_raw if isinstance(prompt_raw, str) else str(prompt_raw or "")
+
+    try:
+        result = draft_character_profile(prompt, project_title=project.title)
+    except CharacterProfileSuggestionError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    return jsonify(
+        {
+            "profile": result.profile,
+            "used_fallback": result.used_fallback,
+            "prompt": result.prompt,
+        }
     )
 
 

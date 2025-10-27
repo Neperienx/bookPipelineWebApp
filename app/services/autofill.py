@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from flask import current_app
 
@@ -26,6 +26,10 @@ class CharacterAutofillError(RuntimeError):
     """Raised when the character autofill cannot update the roster."""
 
 
+class CharacterProfileSuggestionError(RuntimeError):
+    """Raised when a single-character suggestion cannot be generated."""
+
+
 @dataclass
 class OutlineAutofillResult:
     draft: OutlineDraft
@@ -42,7 +46,15 @@ class CharacterAutofillResult:
     prompt: str
 
 
+@dataclass
+class CharacterProfileSuggestion:
+    profile: Dict[str, Optional[str]]
+    used_fallback: bool
+    prompt: str
+
+
 _CHARACTER_AUTOFILL_PROMPT_KEY = "character_autofill"
+_SINGLE_CHARACTER_AUTOFILL_PROMPT_KEY = "single_character_autofill"
 
 
 def autofill_outline_for_project(project: Project, user_prompt: str) -> OutlineAutofillResult:
@@ -122,6 +134,61 @@ def autofill_characters_for_project(project: Project, user_prompt: str) -> Chara
         updated=updated,
         used_fallback=result["used_fallback"],
         prompt=result["prompt"],
+    )
+
+
+def draft_character_profile(
+    user_prompt: str,
+    *,
+    project_title: Optional[str] = None,
+) -> CharacterProfileSuggestion:
+    """Generate a single character profile from ``user_prompt``."""
+
+    prompt_text = (user_prompt or "").strip()
+    if not prompt_text:
+        raise CharacterProfileSuggestionError(
+            "Share a short description so the assistant can draft the profile."
+        )
+
+    try:
+        config_entry = _load_prompt_entry(_SINGLE_CHARACTER_AUTOFILL_PROMPT_KEY)
+    except OutlineGenerationError as exc:
+        raise CharacterProfileSuggestionError(str(exc)) from exc
+
+    prompt_template = config_entry.get("prompt_template")
+    if not prompt_template:
+        raise CharacterProfileSuggestionError("Character profile prompt template is missing.")
+
+    project_fragment = (project_title or "the story").strip() or "the story"
+    final_prompt = prompt_template.format(project_title=project_fragment, user_prompt=prompt_text)
+
+    generator = _get_text_generator()
+    generation_kwargs = _extract_generation_parameters(config_entry.get("parameters"))
+
+    response_text: Optional[str] = None
+    used_fallback = False
+
+    if generator is not None:
+        try:
+            response_text = generator.generate_response(final_prompt, **generation_kwargs)
+        except Exception as exc:  # pragma: no cover - defensive logging for integrations
+            current_app.logger.warning(
+                "LLM character profile generation failed; using fallback profile. Error: %s",
+                exc,
+            )
+
+    if not response_text:
+        response_text = json.dumps(_fallback_single_character(project_fragment, prompt_text))
+        used_fallback = True
+
+    profile = _parse_character_profile_response(response_text)
+    if not profile:
+        raise CharacterProfileSuggestionError("The character generator returned an empty profile.")
+
+    return CharacterProfileSuggestion(
+        profile=profile,
+        used_fallback=used_fallback,
+        prompt=final_prompt,
     )
 
 
@@ -223,6 +290,60 @@ def _parse_character_payload(raw_text: str) -> List[Dict[str, Optional[str]]]:
     return characters
 
 
+def _parse_character_profile_response(raw_text: str) -> Dict[str, Optional[str]]:
+    text = (raw_text or "").strip()
+    if not text:
+        return {}
+
+    fence_match = re.search(r"```json\s*(.*?)```", text, re.DOTALL)
+    if fence_match:
+        text = fence_match.group(1).strip()
+
+    if not text.startswith("{") and not text.startswith("["):
+        brace_index = text.find("{")
+        bracket_index = text.find("[")
+        candidates = [index for index in (brace_index, bracket_index) if index != -1]
+        if candidates:
+            text = text[min(candidates):]
+
+    try:
+        parsed: Any = json.loads(text)
+    except json.JSONDecodeError:
+        current_app.logger.warning("Unable to parse character profile output as JSON: %s", text)
+        return {}
+
+    candidate: Optional[Dict[str, Optional[str]]] = None
+
+    if isinstance(parsed, dict):
+        if "character" in parsed and isinstance(parsed["character"], dict):
+            parsed = parsed["character"]
+        elif "characters" in parsed and isinstance(parsed["characters"], list) and parsed["characters"]:
+            first = parsed["characters"][0]
+            if isinstance(first, dict):
+                parsed = first
+        if isinstance(parsed, dict):
+            candidate = parsed  # type: ignore[assignment]
+    elif isinstance(parsed, list) and parsed:
+        first = parsed[0]
+        if isinstance(first, dict):
+            candidate = first
+
+    if not isinstance(candidate, dict):
+        current_app.logger.warning("Character profile generator returned an unexpected payload: %s", parsed)
+        return {}
+
+    profile = {
+        "name": _clean_field(candidate.get("name")),
+        "role": _clean_field(candidate.get("role") or candidate.get("role_in_story")),
+        "background": _clean_field(candidate.get("background")),
+        "goals": _clean_field(candidate.get("goals") or candidate.get("core_drive")),
+        "conflict": _clean_field(candidate.get("conflict") or candidate.get("primary_conflict")),
+        "notes": _clean_field(candidate.get("notes") or candidate.get("relationship_web")),
+    }
+
+    return {key: value for key, value in profile.items() if value}
+
+
 def _clean_field(value: object) -> Optional[str]:
     if not isinstance(value, str):
         return None
@@ -261,3 +382,22 @@ def _fallback_characters(project_title: str, prompt_text: str) -> List[Dict[str,
             "notes": "Use them to surface exposition organically and introduce unexpected strategy shifts.",
         },
     ]
+
+
+def _fallback_single_character(project_title: str, prompt_text: str) -> Dict[str, Optional[str]]:
+    concept_excerpt = prompt_text[:160].rstrip()
+    if len(prompt_text) > 160:
+        concept_excerpt += "…"
+
+    title_fragment = project_title or "the story"
+
+    return {
+        "name": "Provisional Lead",
+        "role": f"Key figure shaping {title_fragment}",
+        "background": _clean_field(
+            f"Known for navigating {concept_excerpt or 'uncertain terrain'} with quiet resilience."
+        ),
+        "goals": "Determined to push the story's central promise into action without wasting words.",
+        "conflict": "Faces escalating pressure that exposes their sharpest vulnerability.",
+        "notes": "Track how alliances shift around them as the plot accelerates.",
+    }
