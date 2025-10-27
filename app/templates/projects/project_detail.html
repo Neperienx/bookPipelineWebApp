@@ -23,7 +23,14 @@
           <ul class="list-group">
             {% for stage_id, stage_data in stage_generation_steps.items() %}
             {% set entry = stage_entries.get(stage_id) %}
-            <li class="list-group-item d-flex justify-content-between align-items-start flex-column flex-md-row gap-3">
+            <li
+              class="list-group-item d-flex justify-content-between align-items-start flex-column flex-md-row gap-3 stage-status-item"
+              data-stage-status
+              data-stage="{{ stage_id }}"
+              data-stage-label="{{ stage_data.label | e }}"
+              role="button"
+              tabindex="0"
+            >
               <div>
                 <div class="text-white fw-semibold">{{ stage_data.label }}</div>
                 <div class="small text-white-50">
@@ -40,6 +47,36 @@
             </li>
             {% endfor %}
           </ul>
+        </div>
+
+        <div class="stage-detail-panel" id="stageDetailPanel">
+          <div class="card frosted-card border-0 shadow-sm">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-start mb-3">
+                <div>
+                  <h3 class="h6 text-white mb-1" id="stageDetailLabel">Stage detail</h3>
+                  <div class="text-white-50 small" id="stageDetailUpdated">Select a stage to preview its saved content.</div>
+                </div>
+                <span class="badge rounded-pill bg-dark-subtle text-white-50" id="stageDetailStatus">Pending</span>
+              </div>
+              <div class="text-warning small d-none" id="stageDetailFallback">This result used the fallback generator.</div>
+              <div class="text-white-50" id="stageDetailEmpty">Pick a stage from the list to view the latest prompts and generated text.</div>
+              <div class="stage-detail-content d-none" id="stageDetailContent">
+                <div class="mb-3">
+                  <div class="text-white-50 text-uppercase small fw-semibold mb-2">System prompt</div>
+                  <div class="stage-detail-field" id="stageDetailSystem">No system prompt saved yet.</div>
+                </div>
+                <div class="mb-3">
+                  <div class="text-white-50 text-uppercase small fw-semibold mb-2">User input</div>
+                  <div class="stage-detail-field" id="stageDetailUser">No user input saved yet.</div>
+                </div>
+                <div>
+                  <div class="text-white-50 text-uppercase small fw-semibold mb-2">Generated output</div>
+                  <div class="stage-detail-field" id="stageDetailOutput">No generated output saved yet.</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div
@@ -113,6 +150,7 @@
     const existingEntries = JSON.parse(workspace.getAttribute('data-stage-entries') || '{}');
 
     const stageButtons = workspace.querySelectorAll('[data-stage-button]');
+    const stageStatusItems = document.querySelectorAll('[data-stage-status]');
     const description = workspace.querySelector('[data-stage-description]');
     const systemPromptField = document.getElementById('systemPrompt');
     const userPromptField = document.getElementById('userPrompt');
@@ -123,11 +161,98 @@
     const outputHeading = document.getElementById('outputHeading');
     const outputMeta = document.getElementById('outputMeta');
     const errorBox = document.getElementById('generationError');
+    const detailPanel = document.getElementById('stageDetailPanel');
+    const detailLabel = document.getElementById('stageDetailLabel');
+    const detailUpdated = document.getElementById('stageDetailUpdated');
+    const detailStatus = document.getElementById('stageDetailStatus');
+    const detailContent = document.getElementById('stageDetailContent');
+    const detailEmpty = document.getElementById('stageDetailEmpty');
+    const detailSystem = document.getElementById('stageDetailSystem');
+    const detailUser = document.getElementById('stageDetailUser');
+    const detailOutput = document.getElementById('stageDetailOutput');
+    const detailFallback = document.getElementById('stageDetailFallback');
 
     const csrfMeta = document.querySelector('meta[name="csrf-token"]');
     const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
 
     let currentStage = stageButtons.length ? stageButtons[0].getAttribute('data-stage') : null;
+
+    const getStageLabel = (stageId) => {
+      if (!stageId) {
+        return '';
+      }
+      const matchingItem = Array.from(stageStatusItems || []).find(
+        (item) => item.getAttribute('data-stage') === stageId,
+      );
+      if (matchingItem) {
+        return matchingItem.getAttribute('data-stage-label') || '';
+      }
+      const defaults = config[stageId] || {};
+      return defaults.label || stageId.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    };
+
+    const setStatusBadge = (badge, isComplete) => {
+      if (!badge) {
+        return;
+      }
+      badge.className = `badge rounded-pill ${
+        isComplete ? 'bg-success-subtle text-success-emphasis' : 'bg-dark-subtle text-white-50'
+      }`;
+      badge.textContent = isComplete ? 'Complete' : 'Pending';
+    };
+
+    const updateStageDetail = (stageId) => {
+      if (!detailPanel || !stageId) {
+        return;
+      }
+
+      const defaults = config[stageId] || {};
+      const history = existingEntries[stageId] || null;
+
+      const label = getStageLabel(stageId);
+      if (detailLabel) {
+        detailLabel.textContent = label || 'Stage detail';
+      }
+
+      if (detailUpdated) {
+        if (history && history.updated_at) {
+          detailUpdated.textContent = `Updated ${new Date(history.updated_at).toLocaleString()}`;
+        } else {
+          detailUpdated.textContent = history ? 'Saved result (timestamp unavailable).' : 'Awaiting input';
+        }
+      }
+
+      setStatusBadge(detailStatus, Boolean(history));
+
+      if (detailFallback) {
+        if (history && history.used_fallback) {
+          detailFallback.classList.remove('d-none');
+        } else {
+          detailFallback.classList.add('d-none');
+        }
+      }
+
+      if (detailEmpty) {
+        detailEmpty.classList.add('d-none');
+      }
+      if (detailContent) {
+        detailContent.classList.remove('d-none');
+      }
+
+      const systemPrompt = (history && history.system_prompt) || defaults.system_prompt || '';
+      const userPrompt = history && history.user_prompt ? history.user_prompt : '';
+      const generatedText = history && history.generated_text ? history.generated_text : '';
+
+      if (detailSystem) {
+        detailSystem.textContent = systemPrompt || 'No system prompt saved yet.';
+      }
+      if (detailUser) {
+        detailUser.textContent = userPrompt || 'No user input saved yet.';
+      }
+      if (detailOutput) {
+        detailOutput.textContent = generatedText || 'No generated output saved yet.';
+      }
+    };
 
     const applyStageState = (stageId) => {
       const defaults = config[stageId] || {};
@@ -149,7 +274,7 @@
       } else {
         output.innerText = 'Run a generation to see results here.';
         output.classList.remove('has-content');
-        outputMeta.textContent = 'No generation yet';
+      outputMeta.textContent = 'No generation yet';
       }
 
       outputHeading.textContent = defaults.label ? `${defaults.label} output` : 'Latest output';
@@ -166,7 +291,15 @@
         const matches = button.getAttribute('data-stage') === stageId;
         button.classList.toggle('active', matches);
       });
+      if (stageStatusItems && stageStatusItems.length) {
+        stageStatusItems.forEach((item) => {
+          const matches = item.getAttribute('data-stage') === stageId;
+          item.classList.toggle('active', matches);
+          item.setAttribute('aria-pressed', matches ? 'true' : 'false');
+        });
+      }
       applyStageState(stageId);
+      updateStageDetail(stageId);
     };
 
     stageButtons.forEach((button) => {
@@ -178,6 +311,27 @@
         setActiveStage(stageId);
       });
     });
+
+    if (stageStatusItems && stageStatusItems.length) {
+      const handleStageStatusSelection = (stageId) => {
+        if (!stageId) {
+          return;
+        }
+        setActiveStage(stageId);
+      };
+
+      stageStatusItems.forEach((item) => {
+        item.addEventListener('click', () => {
+          handleStageStatusSelection(item.getAttribute('data-stage'));
+        });
+        item.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            handleStageStatusSelection(item.getAttribute('data-stage'));
+          }
+        });
+      });
+    }
 
     const toggleLoading = (isLoading) => {
       if (isLoading) {
@@ -255,6 +409,7 @@
         status.textContent = payload.updated_at
           ? `Saved ${new Date(payload.updated_at).toLocaleString()}`
           : 'Draft saved.';
+        updateStageDetail(currentStage);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'We could not generate text at the moment.';
         showError(message);
@@ -266,6 +421,11 @@
 
     if (currentStage) {
       setActiveStage(currentStage);
+    } else if (stageStatusItems && stageStatusItems.length) {
+      const firstStage = stageStatusItems[0].getAttribute('data-stage');
+      if (firstStage) {
+        updateStageDetail(firstStage);
+      }
     }
   })();
 </script>
