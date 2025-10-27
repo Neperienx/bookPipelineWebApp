@@ -46,4 +46,5 @@ class CharacterProfileForm(FlaskForm):
     goals = TextAreaField("Goals & desires", validators=[Optional()])
     conflict = TextAreaField("Conflicts & obstacles", validators=[Optional()])
     notes = TextAreaField("Additional notes", validators=[Optional()])
+    seed_prompt = TextAreaField("Idea prompt", validators=[Optional(), Length(max=2000)])
     submit = SubmitField("Save character")
