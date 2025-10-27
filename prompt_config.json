@@ -37,7 +37,7 @@
   },
   "character_autofill": {
     "display_name": "Character roster autofill",
-    "prompt_template": "You are the Logal LLM drafting detailed character records for the project database. Using the notes below, generate JSON matching this schema: {\"characters\": [{\"name\": string, \"role\": string, \"background\": string, \"goals\": string, \"conflict\": string, \"notes\": string}]}. Provide at least three characters (protagonist, opposition, key ally) and optionally one wildcard. Each string should be concise but specific to the supplied concept. Avoid commentary or markdown — return valid JSON only.\n\nProject title: {project_title}\nWriter notes: {user_prompt}",
+    "prompt_template": "You are the Logal LLM drafting detailed character records for the project database. Using the notes below, generate JSON matching this schema: {{\"characters\": [{{\"name\": string, \"role\": string, \"background\": string, \"goals\": string, \"conflict\": string, \"notes\": string}}]}}. Provide at least three characters (protagonist, opposition, key ally) and optionally one wildcard. Each string should be concise but specific to the supplied concept. Avoid commentary or markdown — return valid JSON only.\n\nProject title: {project_title}\nWriter notes: {user_prompt}",
     "parameters": {
       "max_new_tokens": 520,
       "temperature": 0.65,
@@ -46,7 +46,7 @@
   },
   "single_character_autofill": {
     "display_name": "Single character profile",
-    "prompt_template": "You are the Logal LLM preparing a concise character dossier. Using the context below, return JSON matching this schema: {\"name\": string, \"role\": string, \"background\": string, \"goals\": string, \"conflict\": string, \"notes\": string}. Keep every field specific to the idea and limit responses to one sentence or under 35 words. Avoid markdown, explanations, or extra keys—respond with JSON only.\n\nProject title: {project_title}\nCharacter concept: {user_prompt}",
+    "prompt_template": "You are the Logal LLM preparing a concise character dossier. Using the context below, return JSON matching this schema: {{\"name\": string, \"role\": string, \"background\": string, \"goals\": string, \"conflict\": string, \"notes\": string}}. Keep every field specific to the idea and limit responses to one sentence or under 35 words. Avoid markdown, explanations, or extra keys—respond with JSON only.\n\nProject title: {project_title}\nCharacter concept: {user_prompt}",
     "parameters": {
       "max_new_tokens": 320,
       "temperature": 0.6,
