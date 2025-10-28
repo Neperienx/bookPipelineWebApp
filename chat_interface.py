@@ -21,7 +21,7 @@ from flask import Flask, abort, redirect, render_template, request, session, url
 from flask_sqlalchemy import SQLAlchemy
 
 from text_generator import TextGenerator
-from system_prompts import SYSTEM_PROMPTS
+from system_prompts import SYSTEM_PROMPTS, get_character_fields
 
 # Flask session requires a secret key.  Use an environment variable so the
 # application can be run without editing source code.
@@ -44,8 +44,43 @@ class Project(db.Model):
     outline = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
+    characters = db.relationship(
+        "Character",
+        back_populates="project",
+        order_by="Character.created_at.desc()",
+        cascade="all, delete-orphan",
+    )
+
     def __repr__(self) -> str:  # pragma: no cover - debug helper
         return f"<Project {self.id} {self.name!r}>"
+
+
+class Character(db.Model):
+    """Character profile associated with a project."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=False)
+    name = db.Column(db.String(160), nullable=True)
+    age = db.Column(db.String(60), nullable=True)
+    gender_pronouns = db.Column(db.String(120), nullable=True)
+    basic_information = db.Column(db.Text, nullable=True)
+    physical_appearance = db.Column(db.Text, nullable=True)
+    personality = db.Column(db.Text, nullable=True)
+    background = db.Column(db.Text, nullable=True)
+    psychology = db.Column(db.Text, nullable=True)
+    in_story = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    project = db.relationship("Project", back_populates="characters")
+
+    def __repr__(self) -> str:  # pragma: no cover - debug helper
+        return f"<Character {self.id} project={self.project_id}>"
 
 # The Windows desktop deployment expects a specific local GGUF/Transformers
 # directory.  Use it as a sensible default when the app is launched on that
@@ -141,6 +176,123 @@ def create_app() -> Flask:
             success=success,
         )
 
+    @app.route(
+        "/projects/<int:project_id>/characters",
+        methods=["POST"],
+    )
+    def character_create(project_id: int) -> str:
+        project = Project.query.get(project_id)
+        if project is None:
+            abort(404)
+
+        character = Character(project=project)
+        db.session.add(character)
+        db.session.commit()
+
+        return redirect(
+            url_for(
+                "character_detail",
+                project_id=project_id,
+                character_id=character.id,
+            )
+        )
+
+    @app.route(
+        "/projects/<int:project_id>/characters/<int:character_id>",
+        methods=["GET", "POST"],
+    )
+    def character_detail(project_id: int, character_id: int) -> str:
+        project = Project.query.get(project_id)
+        if project is None:
+            abort(404)
+
+        character = Character.query.filter_by(
+            id=character_id, project_id=project_id
+        ).first()
+        if character is None:
+            abort(404)
+
+        character_fields = get_character_fields()
+        history_key = _character_session_key(project_id, character_id)
+        history = session.setdefault(history_key, [])
+
+        error = None
+        success = None
+
+        if request.method == "POST":
+            if "reset" in request.form:
+                session.pop(history_key, None)
+                return redirect(
+                    url_for(
+                        "character_detail",
+                        project_id=project_id,
+                        character_id=character_id,
+                    )
+                )
+
+            user_message = request.form.get("message", "").strip()
+            if not user_message:
+                error = "Please enter a message before sending."
+            else:
+                history.append({"role": "user", "content": user_message})
+                try:
+                    generator = _get_generator()
+                    outline_text_raw = project.outline or "no outline has been provided yet"
+                    outline_text = " ".join(outline_text_raw.split())
+                    base_prompt = SYSTEM_PROMPTS.get("character_creation", {}).get(
+                        "base",
+                        "You are a writing assistant and we want to create a character.",
+                    )
+                    assistant_sections: List[str] = []
+
+                    for field in character_fields:
+                        prompt = _build_character_prompt(
+                            base_prompt,
+                            outline_text,
+                            field,
+                            history,
+                        )
+                        response = generator.generate_response(prompt) or ""
+                        clean_response = response.strip()
+                        setattr(character, field["key"], clean_response or None)
+                        assistant_sections.append(
+                            f"{field['label']}:\n{clean_response or '(no response)'}"
+                        )
+
+                    character.updated_at = datetime.utcnow()
+                    db.session.commit()
+                    success = "Character profile updated from assistant."
+
+                    assistant_reply = "\n\n".join(assistant_sections).strip()
+                    if assistant_reply:
+                        history.append(
+                            {
+                                "role": "assistant",
+                                "content": assistant_reply,
+                            }
+                        )
+                except Exception as exc:  # pragma: no cover - defensive
+                    error = f"The local model could not generate a reply: {exc}"
+                    history.pop()
+
+                session.modified = True
+
+        character_data = {
+            field["key"]: getattr(character, field["key"])
+            for field in character_fields
+        }
+
+        return render_template(
+            "character.html",
+            project=project,
+            character=character,
+            character_fields=character_fields,
+            character_data=character_data,
+            history=history,
+            error=error,
+            success=success,
+        )
+
     return app
 
 
@@ -182,8 +334,35 @@ def _build_prompt(history: Iterable[Dict[str, str]]) -> str:
     return "\n".join(prompt_lines)
 
 
+def _build_character_prompt(
+    base_prompt: str,
+    outline_text: str,
+    field: Dict[str, str],
+    history: Iterable[Dict[str, str]],
+) -> str:
+    """Construct a prompt for the character creation flow."""
+
+    system_line = (
+        f"System: {base_prompt} "
+        f"The story outline so far will be about {outline_text}. "
+        f"In this step of the process we want to define a specific aspect of the character "
+        f"{field['label']}: {field['description']}, please do so in {field['word_count']} words."
+    )
+
+    prompt_lines: List[str] = [system_line]
+    for message in history:
+        prefix = "User" if message["role"] == "user" else "Assistant"
+        prompt_lines.append(f"{prefix}: {message['content']}")
+    prompt_lines.append("Assistant:")
+    return "\n".join(prompt_lines)
+
+
 def _session_key(project_id: int) -> str:
     return f"chat_history_{project_id}"
+
+
+def _character_session_key(project_id: int, character_id: int) -> str:
+    return f"character_chat_{project_id}_{character_id}"
 
 
 # Allow ``python chat_interface.py`` to run the development server directly.
