@@ -121,7 +121,13 @@
             </button>
             <button class="overview-tile" type="button" data-target="charactersPanel" aria-controls="charactersPanel" aria-selected="false">
               <h2 class="h6 mb-1">Characters</h2>
-              <p>Character planning is coming soon.</p>
+              <p>
+                {% if project.characters %}
+                  Manage {{ project.characters|length }} character{{ project.characters|length != 1 and 's' or '' }} and generate new profiles.
+                {% else %}
+                  Create richly detailed characters for your story.
+                {% endif %}
+              </p>
             </button>
           </div>
           <div class="tile-detail active" id="outlinePanel" role="tabpanel">
@@ -137,8 +143,43 @@
             </div>
           </div>
           <div class="tile-detail" id="charactersPanel" role="tabpanel">
-            <div class="outline-content">
-              <div class="text-secondary">Character details will live here in a future update.</div>
+            <div class="outline-content d-flex flex-column gap-3">
+              <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                  <h3 class="h6 mb-1">Characters</h3>
+                  <p class="text-secondary mb-0 small">Select a character to open their workspace or add a new one.</p>
+                </div>
+                <form method="post" action="{{ url_for('character_create', project_id=project.id) }}">
+                  <button type="submit" class="btn btn-sm btn-outline-light">Add new character</button>
+                </form>
+              </div>
+              {% if project.characters %}
+                <div class="list-group list-group-flush">
+                  {% for character in project.characters %}
+                    <a
+                      href="{{ url_for('character_detail', project_id=project.id, character_id=character.id) }}"
+                      class="list-group-item list-group-item-action d-flex justify-content-between align-items-start"
+                    >
+                      <div>
+                        <div class="fw-semibold">{{ character.name or 'Untitled character' }}</div>
+                        <div class="text-secondary small">{{ character.age or 'Age not set yet' }}</div>
+                      </div>
+                      <span class="text-secondary small ms-3">
+                        {% if character.updated_at %}
+                          Updated {{ character.updated_at.strftime('%b %d, %Y') }}
+                        {% else %}
+                          Created {{ character.created_at.strftime('%b %d, %Y') }}
+                        {% endif %}
+                      </span>
+                    </a>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div class="text-secondary text-center py-4">
+                  <p class="mb-1">No characters yet.</p>
+                  <p class="mb-0">Use the button above to generate your first character profile.</p>
+                </div>
+              {% endif %}
             </div>
           </div>
         </div>
