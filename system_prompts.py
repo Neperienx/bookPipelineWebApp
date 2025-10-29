@@ -16,27 +16,27 @@ SYSTEM_PROMPTS = {
                 "description": (
                     "Provide the character’s full name and any commonly used nickname(s). "
                     "The name should reflect the character’s cultural background, era, "
-                    "and tone of the story."
+                    "and tone of the story. You should strickly stick to the format 'Name: XYZ, Nickname:ABC'"
                 ),
-                "word_count": 40,
+                "word_count": 5,
             },
             {
                 "key": "age",
                 "label": "Age",
                 "description": (
                     "State the character’s exact or approximate age. Optionally include "
-                    "how old they appear versus how old they are if relevant to the story."
+                    "how old they appear versus how old they are if relevant to the story. Our answer should not be longer than 5 words"
                 ),
-                "word_count": 35,
+                "word_count": 5,
             },
             {
                 "key": "gender_pronouns",
                 "label": "Gender / Pronouns",
                 "description": (
-                    "Specify gender identity and pronouns. Mention how this influences "
-                    "their self-presentation or relationships if it matters to the story."
+                    "Specify gender identity and pronouns."
+                    "Your answer should not exceed 5 words"
                 ),
-                "word_count": 40,
+                "word_count": 4,
             },
             {
                 "key": "basic_information",
@@ -45,9 +45,9 @@ SYSTEM_PROMPTS = {
                     "Summarise foundational context: date and place of birth, nationality "
                     "or ethnicity, occupation or role, and current residence. Mention "
                     "social or economic status and education level when it defines their "
-                    "situation."
+                    "situation. Your answer should not exceed 80 words"
                 ),
-                "word_count": 85,
+                "word_count": 80,
             },
             {
                 "key": "physical_appearance",
@@ -55,8 +55,9 @@ SYSTEM_PROMPTS = {
                 "description": (
                     "Describe height, build, posture, hair and eye colour, skin tone, "
                     "distinguishing features, clothing style, and general demeanour in 4–6 sentences."
+                    "situation. Your answer should not exceed 80 words"
                 ),
-                "word_count": 95,
+                "word_count": 80,
             },
             {
                 "key": "personality",
@@ -64,8 +65,9 @@ SYSTEM_PROMPTS = {
                 "description": (
                     "Summarise behavioural and emotional traits, strengths and weaknesses, "
                     "motivations and fears, guiding values, and notable habits or mannerisms."
+                    "situation. Your answer should not exceed 80 words"
                 ),
-                "word_count": 110,
+                "word_count": 80,
             },
             {
                 "key": "background",
@@ -73,6 +75,7 @@ SYSTEM_PROMPTS = {
                 "description": (
                     "Outline upbringing, education or training, key life events or traumas, "
                     "accomplishments or failures, and major relationships that shaped them."
+                    "situation. Your answer should not exceed 130 words"
                 ),
                 "word_count": 130,
             },
@@ -82,8 +85,9 @@ SYSTEM_PROMPTS = {
                 "description": (
                     "Explore core wound or psychological drive, main internal conflict, "
                     "what they want versus need, coping mechanisms, and how they rationalise decisions."
+                    "situation. Your answer should not exceed 80 words"
                 ),
-                "word_count": 120,
+                "word_count": 80,
             },
             {
                 "key": "in_story",
@@ -91,8 +95,9 @@ SYSTEM_PROMPTS = {
                 "description": (
                     "Explain their narrative role and function, primary goal and obstacles, "
                     "arc from beginning to end, and thematic or symbolic importance within the setting."
+                    "situation. Your answer should not exceed 80 words"
                 ),
-                "word_count": 120,
+                "word_count": 80,
             },
         ],
     },
