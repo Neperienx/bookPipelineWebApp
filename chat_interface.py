@@ -17,7 +17,16 @@ from typing import Dict, Iterable, List
 
 from datetime import datetime
 
-from flask import Flask, abort, redirect, render_template, request, session, url_for
+from flask import (
+    Flask,
+    abort,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 from flask_sqlalchemy import SQLAlchemy
 
 from text_generator import TextGenerator
@@ -291,6 +300,102 @@ def create_app() -> Flask:
             history=history,
             error=error,
             success=success,
+        )
+
+    @app.route(
+        "/projects/<int:project_id>/characters/<int:character_id>/generate",
+        methods=["POST"],
+    )
+    def character_generate(project_id: int, character_id: int):
+        project = Project.query.get(project_id)
+        if project is None:
+            return jsonify({"error": "Project not found."}), 404
+
+        character = Character.query.filter_by(
+            id=character_id, project_id=project_id
+        ).first()
+        if character is None:
+            return jsonify({"error": "Character not found."}), 404
+
+        payload = request.get_json(silent=True) or {}
+        message = (payload.get("message") or "").strip()
+        field_key = payload.get("field_key")
+        is_first = bool(payload.get("is_first"))
+
+        character_fields = get_character_fields()
+        field = next((f for f in character_fields if f["key"] == field_key), None)
+        if field is None:
+            return jsonify({"error": "Unknown character field."}), 400
+
+        if is_first and not message:
+            return jsonify({"error": "Message content is required."}), 400
+
+        history_key = _character_session_key(project_id, character_id)
+        history = session.setdefault(history_key, [])
+
+        try:
+            generator = _get_generator()
+        except Exception as exc:  # pragma: no cover - defensive
+            return (
+                jsonify(
+                    {
+                        "error": "The local model could not be initialised.",
+                        "detail": str(exc),
+                    }
+                ),
+                500,
+            )
+
+        if is_first:
+            history.append({"role": "user", "content": message})
+            session.modified = True
+
+        outline_text_raw = project.outline or "no outline has been provided yet"
+        outline_text = " ".join(outline_text_raw.split())
+        base_prompt = SYSTEM_PROMPTS.get("character_creation", {}).get(
+            "base",
+            "You are a writing assistant and we want to create a character.",
+        )
+
+        try:
+            prompt = _build_character_prompt(
+                base_prompt,
+                outline_text,
+                field,
+                history,
+            )
+            response = generator.generate_response(prompt) or ""
+            clean_response = response.strip()
+        except Exception as exc:  # pragma: no cover - defensive
+            if is_first:
+                history.pop()
+                session.modified = True
+            return (
+                jsonify(
+                    {
+                        "error": "The local model could not generate a reply.",
+                        "detail": str(exc),
+                    }
+                ),
+                500,
+            )
+
+        setattr(character, field_key, clean_response or None)
+        character.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        assistant_content = (
+            f"{field['label']}:\n{clean_response or '(no response)'}"
+        )
+        history.append({"role": "assistant", "content": assistant_content})
+        session.modified = True
+
+        return jsonify(
+            {
+                "field_key": field_key,
+                "field_label": field["label"],
+                "content": clean_response,
+            }
         )
 
     return app
