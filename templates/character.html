@@ -103,14 +103,21 @@
           <h2 class="h5 mb-3">Character template</h2>
           <div class="character-traits">
             {% for field in character_fields %}
-              <section class="trait-card">
+              <section
+                class="trait-card"
+                data-field-key="{{ field.key }}"
+                data-field-label="{{ field.label }}"
+              >
                 <div class="d-flex justify-content-between align-items-start gap-2">
                   <h2 class="h6 mb-0">{{ field.label }}</h2>
                   <span class="badge bg-secondary">{{ field.word_count }} words</span>
                 </div>
                 <p class="description">{{ field.description }}</p>
                 {% set value = character_data[field['key']] %}
-                <div class="trait-content {{ 'trait-empty' if not value }}">
+                <div
+                  id="traitContent-{{ field.key }}"
+                  class="trait-content {{ 'trait-empty' if not value }}"
+                >
                   {{ value or 'Not set yet. Use the chat to generate this section.' }}
                 </div>
               </section>
@@ -148,11 +155,17 @@
           {% if success %}
             <div class="alert alert-success" role="alert">{{ success }}</div>
           {% endif %}
+          <div id="characterMessageArea" class="mb-2"></div>
           <div id="characterLoadingIndicator" class="loading-indicator" role="status" aria-live="polite">
             <div class="spinner-border text-info" role="status" aria-hidden="true"></div>
-            <span>Assistant is thinking…</span>
+            <span id="characterLoadingMessage">Assistant is thinking…</span>
           </div>
-          <form method="post" id="characterChatForm" class="d-flex flex-column gap-3">
+          <form
+            method="post"
+            id="characterChatForm"
+            class="d-flex flex-column gap-3"
+            data-generate-url="{{ url_for('character_generate', project_id=project.id, character_id=character.id) }}"
+          >
             <textarea
               class="form-control"
               name="message"
@@ -174,15 +187,49 @@
     (function () {
       const form = document.getElementById("characterChatForm");
       const loadingIndicator = document.getElementById("characterLoadingIndicator");
-      if (!form || !loadingIndicator) {
+      const loadingMessage = document.getElementById("characterLoadingMessage");
+      const messageArea = document.getElementById("characterMessageArea");
+      const chatMessages = document.querySelector(".chat-messages");
+      if (!form || !loadingIndicator || !loadingMessage || !chatMessages) {
         return;
       }
 
-      form.addEventListener("submit", function () {
+      const renderAlert = (type, text) => {
+        if (!messageArea) {
+          return;
+        }
+        messageArea.innerHTML = "";
+        const alert = document.createElement("div");
+        alert.className = `alert alert-${type}`;
+        alert.setAttribute("role", "alert");
+        alert.textContent = text;
+        messageArea.appendChild(alert);
+      };
+
+      form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+
         const submitButton = form.querySelector("button[type='submit']");
         const textarea = form.querySelector("textarea[name='message']");
+        const generateUrl = form.getAttribute("data-generate-url");
+        const fieldSections = Array.from(
+          document.querySelectorAll(".trait-card[data-field-key]")
+        );
 
+        if (!textarea || !generateUrl || fieldSections.length === 0) {
+          return;
+        }
+
+        const originalMessage = textarea.value;
+        const userMessage = originalMessage.trim();
+        if (!userMessage) {
+          renderAlert("danger", "Please enter a message before sending.");
+          return;
+        }
+
+        renderAlert("info", "Starting the character autofill process.");
         loadingIndicator.classList.add("visible");
+        loadingMessage.textContent = "Preparing prompts…";
 
         if (submitButton) {
           submitButton.disabled = true;
@@ -190,9 +237,106 @@
             '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Sending…';
         }
 
-        if (textarea) {
-          textarea.setAttribute("readonly", "readonly");
+        textarea.setAttribute("readonly", "readonly");
+
+        const assistantSections = [];
+        let isFirst = true;
+        let encounteredError = false;
+
+        for (const section of fieldSections) {
+          const fieldKey = section.getAttribute("data-field-key");
+          const fieldLabel = section.getAttribute("data-field-label") || fieldKey;
+          const contentContainer = section.querySelector(".trait-content");
+
+          loadingMessage.textContent = `Our assistant is working on ${fieldLabel}…`;
+
+          try {
+            const response = await fetch(generateUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                message: userMessage,
+                field_key: fieldKey,
+                is_first: isFirst,
+              }),
+            });
+
+            const data = await response.json().catch(() => null);
+            if (!response.ok) {
+              const errorMessage = data && data.error
+                ? data.error
+                : `Request failed with status ${response.status}`;
+              throw new Error(errorMessage);
+            }
+
+            if (!data || typeof data !== "object") {
+              throw new Error("Unexpected response from the server.");
+            }
+
+            if (data.error) {
+              throw new Error(data.error);
+            }
+
+            const content = data.content && data.content.trim();
+            assistantSections.push(`${data.field_label}:\n${content || "(no response)"}`);
+
+            if (contentContainer) {
+              contentContainer.classList.toggle("trait-empty", !content);
+              contentContainer.textContent = content || "Not set yet. Use the chat to generate this section.";
+            }
+          } catch (err) {
+            encounteredError = true;
+            const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+            renderAlert(
+              "danger",
+              `The assistant could not finish generating ${fieldLabel}. ${message}`
+            );
+            break;
+          }
+
+          isFirst = false;
         }
+
+        if (!encounteredError) {
+          loadingMessage.textContent = "Character sections updated.";
+          renderAlert("success", "Character profile updated from assistant.");
+
+          const userBubble = document.createElement("div");
+          userBubble.className = "message user";
+          const userLabel = document.createElement("strong");
+          userLabel.className = "d-block mb-1 text-uppercase small";
+          userLabel.textContent = "user";
+          const userContent = document.createElement("div");
+          userContent.textContent = userMessage;
+          userBubble.appendChild(userLabel);
+          userBubble.appendChild(userContent);
+
+          const assistantBubble = document.createElement("div");
+          assistantBubble.className = "message assistant";
+          const assistantLabel = document.createElement("strong");
+          assistantLabel.className = "d-block mb-1 text-uppercase small";
+          assistantLabel.textContent = "assistant";
+          const assistantContent = document.createElement("div");
+          assistantContent.textContent = assistantSections.join("\n\n");
+          assistantBubble.appendChild(assistantLabel);
+          assistantBubble.appendChild(assistantContent);
+
+          chatMessages.appendChild(userBubble);
+          chatMessages.appendChild(assistantBubble);
+          chatMessages.scrollTop = chatMessages.scrollHeight;
+          textarea.value = "";
+        } else {
+          textarea.value = originalMessage;
+        }
+
+        loadingIndicator.classList.remove("visible");
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = "Send";
+        }
+        textarea.removeAttribute("readonly");
       });
     })();
   </script>
