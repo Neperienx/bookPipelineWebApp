@@ -9,6 +9,11 @@ SYSTEM_PROMPTS = {
     ),
     "character_creation": {
         "base": "You are a writing assistant and we want to create a character.",
+        "json_format_rules": (
+            "Respond exclusively with a single valid JSON object that follows the provided schema. "
+            "Use double quotes for all keys and string values, avoid trailing commas, and do not wrap the JSON "
+            "in Markdown code fences or add any explanatory prose before or after it."
+        ),
         "fields": [
             {
                 "key": "name",

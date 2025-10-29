@@ -12,8 +12,10 @@ Run the application with ``flask --app chat_interface run`` after exporting
 from __future__ import annotations
 
 import os
+import json
+import re
 from pathlib import Path
-from typing import Dict, Iterable, List
+from typing import Any, Dict, Iterable, List
 
 from datetime import datetime
 
@@ -248,31 +250,32 @@ def create_app() -> Flask:
                     generator = _get_generator()
                     outline_text_raw = project.outline or "no outline has been provided yet"
                     outline_text = " ".join(outline_text_raw.split())
-                    base_prompt = SYSTEM_PROMPTS.get("character_creation", {}).get(
+                    config = SYSTEM_PROMPTS.get("character_creation", {})
+                    base_prompt = config.get(
                         "base",
                         "You are a writing assistant and we want to create a character.",
                     )
-                    assistant_sections: List[str] = []
-
-                    for field in character_fields:
-                        prompt = _build_character_prompt(
-                            base_prompt,
-                            outline_text,
-                            field,
-                            history,
-                        )
-                        response = generator.generate_response(prompt) or ""
-                        clean_response = response.strip()
-                        setattr(character, field["key"], clean_response or None)
-                        assistant_sections.append(
-                            f"{field['label']}:\n{clean_response or '(no response)'}"
-                        )
-
+                    json_rules = config.get("json_format_rules", "")
+                    profile_data, _sections, assistant_reply = _run_character_profile_generation(
+                        generator,
+                        base_prompt,
+                        json_rules,
+                        outline_text,
+                        character_fields,
+                        history,
+                    )
+                except ValueError as exc:
+                    error = str(exc)
+                    history.pop()
+                except Exception as exc:  # pragma: no cover - defensive
+                    error = f"The local model could not generate a reply: {exc}"
+                    history.pop()
+                else:
+                    _apply_character_profile(character, character_fields, profile_data)
                     character.updated_at = datetime.utcnow()
                     db.session.commit()
                     success = "Character profile updated from assistant."
 
-                    assistant_reply = "\n\n".join(assistant_sections).strip()
                     if assistant_reply:
                         history.append(
                             {
@@ -280,9 +283,6 @@ def create_app() -> Flask:
                                 "content": assistant_reply,
                             }
                         )
-                except Exception as exc:  # pragma: no cover - defensive
-                    error = f"The local model could not generate a reply: {exc}"
-                    history.pop()
 
                 session.modified = True
 
@@ -319,23 +319,22 @@ def create_app() -> Flask:
 
         payload = request.get_json(silent=True) or {}
         message = (payload.get("message") or "").strip()
-        field_key = payload.get("field_key")
-        is_first = bool(payload.get("is_first"))
 
-        character_fields = get_character_fields()
-        field = next((f for f in character_fields if f["key"] == field_key), None)
-        if field is None:
-            return jsonify({"error": "Unknown character field."}), 400
-
-        if is_first and not message:
+        if not message:
             return jsonify({"error": "Message content is required."}), 400
 
+        character_fields = get_character_fields()
         history_key = _character_session_key(project_id, character_id)
         history = session.setdefault(history_key, [])
+
+        history.append({"role": "user", "content": message})
+        session.modified = True
 
         try:
             generator = _get_generator()
         except Exception as exc:  # pragma: no cover - defensive
+            history.pop()
+            session.modified = True
             return (
                 jsonify(
                     {
@@ -346,30 +345,31 @@ def create_app() -> Flask:
                 500,
             )
 
-        if is_first:
-            history.append({"role": "user", "content": message})
-            session.modified = True
-
         outline_text_raw = project.outline or "no outline has been provided yet"
         outline_text = " ".join(outline_text_raw.split())
-        base_prompt = SYSTEM_PROMPTS.get("character_creation", {}).get(
+        config = SYSTEM_PROMPTS.get("character_creation", {})
+        base_prompt = config.get(
             "base",
             "You are a writing assistant and we want to create a character.",
         )
+        json_rules = config.get("json_format_rules", "")
 
         try:
-            prompt = _build_character_prompt(
+            profile_data, sections, assistant_reply = _run_character_profile_generation(
+                generator,
                 base_prompt,
+                json_rules,
                 outline_text,
-                field,
+                character_fields,
                 history,
             )
-            response = generator.generate_response(prompt) or ""
-            clean_response = response.strip()
+        except ValueError as exc:
+            history.pop()
+            session.modified = True
+            return jsonify({"error": str(exc)}), 422
         except Exception as exc:  # pragma: no cover - defensive
-            if is_first:
-                history.pop()
-                session.modified = True
+            history.pop()
+            session.modified = True
             return (
                 jsonify(
                     {
@@ -380,21 +380,25 @@ def create_app() -> Flask:
                 500,
             )
 
-        setattr(character, field_key, clean_response or None)
+        _apply_character_profile(character, character_fields, profile_data)
         character.updated_at = datetime.utcnow()
         db.session.commit()
 
-        assistant_content = (
-            f"{field['label']}:\n{clean_response or '(no response)'}"
-        )
-        history.append({"role": "assistant", "content": assistant_content})
-        session.modified = True
+        if assistant_reply:
+            history.append({"role": "assistant", "content": assistant_reply})
+            session.modified = True
+
+        character_data = {
+            field["key"]: getattr(character, field["key"])
+            for field in character_fields
+        }
 
         return jsonify(
             {
-                "field_key": field_key,
-                "field_label": field["label"],
-                "content": clean_response,
+                "character_data": character_data,
+                "sections": sections,
+                "assistant_reply": assistant_reply,
+                "message": "Character profile updated from assistant.",
             }
         )
 
@@ -439,20 +443,100 @@ def _build_prompt(history: Iterable[Dict[str, str]]) -> str:
     return "\n".join(prompt_lines)
 
 
-def _build_character_prompt(
+def _run_character_profile_generation(
+    generator: TextGenerator,
     base_prompt: str,
+    json_rules: str,
     outline_text: str,
-    field: Dict[str, str],
+    character_fields: Iterable[Dict[str, Any]],
+    history: Iterable[Dict[str, str]],
+) -> tuple[Dict[str, str], List[Dict[str, str]], str]:
+    """Generate a complete character profile and return structured results."""
+
+    fields = list(character_fields)
+    prompt = _build_character_json_prompt(
+        base_prompt,
+        json_rules,
+        outline_text,
+        fields,
+        history,
+    )
+    response = generator.generate_response(prompt) or ""
+    profile_data = _parse_character_json(response, fields)
+
+    sections: List[Dict[str, str]] = []
+    for field in fields:
+        key = field["key"]
+        content = profile_data.get(key, "").strip()
+        sections.append(
+            {
+                "key": key,
+                "label": field.get("label", key),
+                "content": content,
+            }
+        )
+
+    assistant_reply = "\n\n".join(
+        f"{section['label']}:\n{section['content'] or '(no response)'}"
+        for section in sections
+    ).strip()
+
+    return profile_data, sections, assistant_reply
+
+
+def _build_character_json_prompt(
+    base_prompt: str,
+    json_rules: str,
+    outline_text: str,
+    character_fields: Iterable[Dict[str, Any]],
     history: Iterable[Dict[str, str]],
 ) -> str:
-    """Construct a prompt for the character creation flow."""
+    """Construct a single prompt that enforces JSON output for character fields."""
 
-    system_line = (
-        f"System: {base_prompt} "
-        f"The story outline so far will be about {outline_text}. "
-        f"In this step of the process we want to define a specific aspect of the character "
-        f"{field['label']}: {field['description']}, please do so in {field['word_count']} words."
+    fields = list(character_fields)
+    expected_keys = ", ".join(
+        f'"{field["key"]}"' for field in fields
     )
+    template_lines = [
+        f'  "{field["key"]}": ""' for field in fields
+    ]
+    json_template = "{\n" + ",\n".join(template_lines) + "\n}"
+
+    field_guidance_lines = [
+        f'- "{field["key"]}" ({field.get("label", field["key"])}): {field.get("description", "")}'
+        for field in fields
+    ]
+
+    system_parts = [
+        base_prompt.strip(),
+        "Follow these rules exactly:",
+        (
+            "1. Respond exclusively with a single valid JSON object using double quotes and no "
+            "trailing commas."
+        ),
+        (
+            "2. Include exactly these keys in the root object and populate each one: "
+            f"{expected_keys}."
+        ),
+        "3. Do not include Markdown fences, code blocks, or commentary outside the JSON.",
+    ]
+
+    if json_rules.strip():
+        system_parts.append(json_rules.strip())
+
+    system_parts.extend(
+        [
+            f"The story outline so far is: {outline_text}.",
+            "Return JSON that matches this template:",
+            json_template,
+        ]
+    )
+
+    if field_guidance_lines:
+        system_parts.append("Field guidance:")
+        system_parts.extend(field_guidance_lines)
+
+    system_line = "System: " + "\n".join(part for part in system_parts if part)
 
     prompt_lines: List[str] = [system_line]
     for message in history:
@@ -460,6 +544,114 @@ def _build_character_prompt(
         prompt_lines.append(f"{prefix}: {message['content']}")
     prompt_lines.append("Assistant:")
     return "\n".join(prompt_lines)
+
+
+def _parse_character_json(
+    raw_response: str,
+    character_fields: Iterable[Dict[str, Any]],
+) -> Dict[str, str]:
+    """Parse and validate the JSON response from the assistant."""
+
+    fields = list(character_fields)
+    cleaned = _strip_json_code_fences(raw_response)
+    json_block = _extract_json_object(cleaned)
+    if not json_block:
+        raise ValueError(
+            "The assistant response did not contain the expected JSON object. Please try again."
+        )
+
+    try:
+        payload = json.loads(json_block)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            "The assistant returned invalid JSON. Please try again."
+        ) from exc
+
+    if not isinstance(payload, dict):
+        raise ValueError(
+            "The assistant response was not a JSON object. Please try again."
+        )
+
+    parsed: Dict[str, str] = {}
+    expected_keys = [field["key"] for field in fields]
+    missing = [key for key in expected_keys if key not in payload]
+    if missing:
+        raise ValueError(
+            "The assistant response was missing required fields. Please try again."
+        )
+
+    for key in expected_keys:
+        value = payload.get(key, "")
+        if isinstance(value, (dict, list)):
+            value_text = json.dumps(value, ensure_ascii=False)
+        elif value is None:
+            value_text = ""
+        else:
+            value_text = str(value)
+        parsed[key] = value_text.strip()
+
+    return parsed
+
+
+def _strip_json_code_fences(text: str) -> str:
+    """Remove Markdown code fences from ``text`` if they are present."""
+
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+        cleaned = cleaned.strip()
+    return cleaned
+
+
+def _extract_json_object(text: str) -> str | None:
+    """Return the first JSON object found in ``text`` or ``None``."""
+
+    start = None
+    depth = 0
+    in_string = False
+    escape = False
+    for index, char in enumerate(text):
+        if start is None:
+            if char == "{":
+                start = index
+                depth = 1
+            continue
+
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+
+        if char == '"':
+            in_string = True
+            continue
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0 and start is not None:
+                return text[start : index + 1]
+
+    return None
+
+
+def _apply_character_profile(
+    character: Character,
+    character_fields: Iterable[Dict[str, Any]],
+    profile_data: Dict[str, str],
+) -> None:
+    """Persist the generated character profile to the database model."""
+
+    fields = list(character_fields)
+    for field in fields:
+        key = field["key"]
+        value = profile_data.get(key, "").strip()
+        setattr(character, key, value or None)
 
 
 def _session_key(project_id: int) -> str:

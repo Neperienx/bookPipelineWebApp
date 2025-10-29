@@ -212,11 +212,8 @@
         const submitButton = form.querySelector("button[type='submit']");
         const textarea = form.querySelector("textarea[name='message']");
         const generateUrl = form.getAttribute("data-generate-url");
-        const fieldSections = Array.from(
-          document.querySelectorAll(".trait-card[data-field-key]")
-        );
 
-        if (!textarea || !generateUrl || fieldSections.length === 0) {
+        if (!textarea || !generateUrl) {
           return;
         }
 
@@ -227,9 +224,9 @@
           return;
         }
 
-        renderAlert("info", "Starting the character autofill process.");
+        renderAlert("info", "Requesting a complete character profile from the assistant.");
         loadingIndicator.classList.add("visible");
-        loadingMessage.textContent = "Preparing prompts…";
+        loadingMessage.textContent = "Generating character profile…";
 
         if (submitButton) {
           submitButton.disabled = true;
@@ -239,69 +236,69 @@
 
         textarea.setAttribute("readonly", "readonly");
 
-        const assistantSections = [];
-        let isFirst = true;
-        let encounteredError = false;
+        try {
+          const response = await fetch(generateUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              message: userMessage,
+            }),
+          });
 
-        for (const section of fieldSections) {
-          const fieldKey = section.getAttribute("data-field-key");
-          const fieldLabel = section.getAttribute("data-field-label") || fieldKey;
-          const contentContainer = section.querySelector(".trait-content");
-
-          loadingMessage.textContent = `Our assistant is working on ${fieldLabel}…`;
-
-          try {
-            const response = await fetch(generateUrl, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                message: userMessage,
-                field_key: fieldKey,
-                is_first: isFirst,
-              }),
-            });
-
-            const data = await response.json().catch(() => null);
-            if (!response.ok) {
-              const errorMessage = data && data.error
-                ? data.error
-                : `Request failed with status ${response.status}`;
-              throw new Error(errorMessage);
-            }
-
-            if (!data || typeof data !== "object") {
-              throw new Error("Unexpected response from the server.");
-            }
-
-            if (data.error) {
-              throw new Error(data.error);
-            }
-
-            const content = data.content && data.content.trim();
-            assistantSections.push(`${data.field_label}:\n${content || "(no response)"}`);
-
-            if (contentContainer) {
-              contentContainer.classList.toggle("trait-empty", !content);
-              contentContainer.textContent = content || "Not set yet. Use the chat to generate this section.";
-            }
-          } catch (err) {
-            encounteredError = true;
-            const message = err instanceof Error ? err.message : "An unexpected error occurred.";
-            renderAlert(
-              "danger",
-              `The assistant could not finish generating ${fieldLabel}. ${message}`
-            );
-            break;
+          const data = await response.json().catch(() => null);
+          if (!response.ok) {
+            const errorMessage = data && data.error
+              ? data.error
+              : `Request failed with status ${response.status}`;
+            throw new Error(errorMessage);
           }
 
-          isFirst = false;
-        }
+          if (!data || typeof data !== "object") {
+            throw new Error("Unexpected response from the server.");
+          }
 
-        if (!encounteredError) {
-          loadingMessage.textContent = "Character sections updated.";
-          renderAlert("success", "Character profile updated from assistant.");
+          if (data.error) {
+            throw new Error(data.error);
+          }
+
+          const sections = Array.isArray(data.sections) ? data.sections : [];
+          sections.forEach((section) => {
+            if (!section || typeof section !== "object") {
+              return;
+            }
+            const fieldKey = section.key;
+            if (!fieldKey) {
+              return;
+            }
+            const selectorKey =
+              window.CSS && typeof window.CSS.escape === "function"
+                ? window.CSS.escape(fieldKey)
+                : String(fieldKey).replace(/"/g, '\\"');
+            const content = typeof section.content === "string" ? section.content.trim() : "";
+            const traitCard = document.querySelector(
+              `.trait-card[data-field-key="${selectorKey}"]`
+            );
+            if (!traitCard) {
+              return;
+            }
+            const contentContainer = traitCard.querySelector(".trait-content");
+            if (!contentContainer) {
+              return;
+            }
+            contentContainer.classList.toggle("trait-empty", !content);
+            contentContainer.textContent = content || "Not set yet. Use the chat to generate this section.";
+          });
+
+          const characterData = data.character_data && typeof data.character_data === "object"
+            ? data.character_data
+            : {};
+          const nameHeading = document.querySelector(".character-header h1");
+          if (nameHeading && typeof characterData.name === "string") {
+            const trimmedName = characterData.name.trim();
+            nameHeading.textContent = trimmedName || "Untitled character";
+          }
 
           const userBubble = document.createElement("div");
           userBubble.className = "message user";
@@ -319,15 +316,37 @@
           assistantLabel.className = "d-block mb-1 text-uppercase small";
           assistantLabel.textContent = "assistant";
           const assistantContent = document.createElement("div");
-          assistantContent.textContent = assistantSections.join("\n\n");
+          const assistantReply = typeof data.assistant_reply === "string"
+            ? data.assistant_reply
+            : sections
+                .map((section) => {
+                  if (!section || typeof section !== "object") {
+                    return "";
+                  }
+                  const label = section.label || section.key;
+                  const value = typeof section.content === "string" ? section.content : "";
+                  return `${label}:\n${value}`;
+                })
+                .filter(Boolean)
+                .join("\n\n");
+          assistantContent.textContent = assistantReply;
           assistantBubble.appendChild(assistantLabel);
           assistantBubble.appendChild(assistantContent);
 
           chatMessages.appendChild(userBubble);
           chatMessages.appendChild(assistantBubble);
           chatMessages.scrollTop = chatMessages.scrollHeight;
+
+          loadingMessage.textContent = "Character profile updated.";
+          renderAlert("success", data.message || "Character profile updated from assistant.");
           textarea.value = "";
-        } else {
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+          loadingMessage.textContent = "The assistant could not complete the request.";
+          renderAlert(
+            "danger",
+            `The assistant could not generate the character profile. ${message}`
+          );
           textarea.value = originalMessage;
         }
 
