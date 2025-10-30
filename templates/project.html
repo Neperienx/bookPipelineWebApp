@@ -50,6 +50,14 @@
     .tile-detail.active {
       display: block;
     }
+    .chat-panel {
+      display: none;
+      flex-direction: column;
+      height: 100%;
+    }
+    .chat-panel.active {
+      display: flex;
+    }
     .outline-content {
       border-radius: 1rem;
       border: 1px solid rgba(148, 163, 184, 0.2);
@@ -57,6 +65,18 @@
       padding: 1.5rem;
       white-space: pre-wrap;
       min-height: 200px;
+    }
+    .act-outline-box {
+      border-radius: 0.9rem;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: rgba(15, 23, 42, 0.7);
+      padding: 1rem;
+      white-space: pre-wrap;
+    }
+    .act-empty-textarea {
+      background: rgba(15, 23, 42, 0.4);
+      border-color: rgba(148, 163, 184, 0.2);
+      color: rgba(226, 232, 240, 0.7);
     }
     .chat-messages {
       height: 50vh;
@@ -115,11 +135,42 @@
       <div class="card h-100">
         <div class="card-body">
           <div class="tile-grid" role="tablist" aria-label="Project sections">
-            <button class="overview-tile active" type="button" data-target="outlinePanel" aria-controls="outlinePanel" aria-selected="true">
+            <button
+              class="overview-tile active"
+              type="button"
+              data-target="outlinePanel"
+              data-chat-target="outlineChatPanel"
+              aria-controls="outlinePanel"
+              aria-selected="true"
+            >
               <h2 class="h6 mb-1">Outline</h2>
               <p>{% if project.outline %}View the latest story outline.{% else %}Create a story outline with the assistant.{% endif %}</p>
             </button>
-            <button class="overview-tile" type="button" data-target="charactersPanel" aria-controls="charactersPanel" aria-selected="false">
+            <button
+              class="overview-tile"
+              type="button"
+              data-target="actsPanel"
+              data-chat-target="actChatPanel"
+              aria-controls="actsPanel"
+              aria-selected="false"
+            >
+              <h2 class="h6 mb-1">Act by act</h2>
+              <p>
+                {% if project.act1_outline or project.act2_outline or project.act3_outline %}
+                  Review and refine the generated three-act structure.
+                {% else %}
+                  Generate a detailed outline for each act of your story.
+                {% endif %}
+              </p>
+            </button>
+            <button
+              class="overview-tile"
+              type="button"
+              data-target="charactersPanel"
+              data-chat-target="outlineChatPanel"
+              aria-controls="charactersPanel"
+              aria-selected="false"
+            >
               <h2 class="h6 mb-1">Characters</h2>
               <p>
                 {% if project.characters %}
@@ -182,55 +233,138 @@
               {% endif %}
             </div>
           </div>
+          <div class="tile-detail" id="actsPanel" role="tabpanel">
+            <div class="outline-content d-flex flex-column gap-3">
+              <div>
+                <h3 class="h6 mb-1">Act by act outline</h3>
+                <p class="text-secondary mb-0 small">Each act summary is stored for easy reference.</p>
+              </div>
+              {% if project.act1_outline or project.act2_outline or project.act3_outline %}
+                <div class="d-flex flex-column gap-3">
+                  <div>
+                    <h4 class="h6 mb-1 text-info">Act I</h4>
+                    <div class="act-outline-box">{{ project.act1_outline or 'No outline generated yet.' }}</div>
+                  </div>
+                  <div>
+                    <h4 class="h6 mb-1 text-info">Act II</h4>
+                    <div class="act-outline-box">{{ project.act2_outline or 'No outline generated yet.' }}</div>
+                  </div>
+                  <div>
+                    <h4 class="h6 mb-1 text-info">Act III</h4>
+                    <div class="act-outline-box">{{ project.act3_outline or 'No outline generated yet.' }}</div>
+                  </div>
+                </div>
+              {% else %}
+                <div class="d-flex flex-column gap-3">
+                  <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act I outline will appear here." readonly></textarea>
+                  <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act II outline will appear here." readonly></textarea>
+                  <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act III outline will appear here." readonly></textarea>
+                </div>
+              {% endif %}
+            </div>
+          </div>
         </div>
       </div>
     </div>
     <div class="col-xl-7">
       <div class="card h-100">
-        <div class="card-body d-flex flex-column">
-          <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
-            <div>
-              <h2 class="h5 mb-1">Outline assistant</h2>
-              <p class="text-secondary mb-0">Tell me about the story you want to write.</p>
+        <div class="card-body d-flex flex-column gap-4">
+          <div id="outlineChatPanel" class="chat-panel active" role="tabpanel" aria-labelledby="outlinePanel">
+            <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
+              <div>
+                <h2 class="h5 mb-1">Outline assistant</h2>
+                <p class="text-secondary mb-0">Tell me about the story you want to write.</p>
+              </div>
+              <form method="post">
+                <input type="hidden" name="chat_type" value="outline" />
+                <button type="submit" name="reset" value="1" class="btn btn-outline-light btn-sm">Clear chat</button>
+              </form>
             </div>
-            <form method="post">
-              <button type="submit" name="reset" value="1" class="btn btn-outline-light btn-sm">Clear chat</button>
+            <div class="chat-messages flex-grow-1 mb-3">
+              {% if history %}
+                {% for message in history %}
+                  <div class="message {{ message.role }}">
+                    <strong class="d-block mb-1 text-uppercase small">{{ message.role }}</strong>
+                    <div>{{ message.content }}</div>
+                  </div>
+                {% endfor %}
+              {% else %}
+                <div class="text-secondary text-center w-100 my-auto">
+                  Share your story idea to generate a structured outline.
+                </div>
+              {% endif %}
+            </div>
+            {% if error %}
+              <div class="alert alert-danger" role="alert">{{ error }}</div>
+            {% endif %}
+            <div id="outlineLoadingIndicator" class="loading-indicator" role="status" aria-live="polite">
+              <div class="spinner-border text-info" role="status" aria-hidden="true"></div>
+              <span>Assistant is thinking…</span>
+            </div>
+            <form method="post" id="outlineChatForm" data-chat-form data-loading-target="outlineLoadingIndicator" class="d-flex flex-column gap-3">
+              <input type="hidden" name="chat_type" value="outline" />
+              <textarea
+                class="form-control"
+                name="message"
+                rows="3"
+                placeholder="Tell me about the story you want to write."
+                required
+              ></textarea>
+              <div class="d-flex justify-content-end gap-2">
+                <button type="submit" class="btn btn-primary">Send</button>
+              </div>
             </form>
           </div>
-          <div class="chat-messages flex-grow-1 mb-3">
-            {% if history %}
-              {% for message in history %}
-                <div class="message {{ message.role }}">
-                  <strong class="d-block mb-1 text-uppercase small">{{ message.role }}</strong>
-                  <div>{{ message.content }}</div>
-                </div>
-              {% endfor %}
-            {% else %}
-              <div class="text-secondary text-center w-100 my-auto">
-                Share your story idea to generate a structured outline.
+          <div id="actChatPanel" class="chat-panel" role="tabpanel" aria-labelledby="actsPanel">
+            <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
+              <div>
+                <h2 class="h5 mb-1">Three-act assistant</h2>
+                <p class="text-secondary mb-0">Refine each act with targeted guidance.</p>
               </div>
-            {% endif %}
-          </div>
-          {% if error %}
-            <div class="alert alert-danger" role="alert">{{ error }}</div>
-          {% endif %}
-          <div id="loadingIndicator" class="loading-indicator" role="status" aria-live="polite">
-            <div class="spinner-border text-info" role="status" aria-hidden="true"></div>
-            <span>Assistant is thinking…</span>
-          </div>
-          <form method="post" id="chatForm" class="d-flex flex-column gap-3">
-            <textarea
-              class="form-control"
-              name="message"
-              rows="3"
-              placeholder="Tell me about the story you want to write."
-              autofocus
-              required
-            ></textarea>
-            <div class="d-flex justify-content-end gap-2">
-              <button type="submit" class="btn btn-primary">Send</button>
+              <form method="post">
+                <input type="hidden" name="chat_type" value="acts" />
+                <button type="submit" name="reset" value="1" class="btn btn-outline-light btn-sm">Clear chat</button>
+              </form>
             </div>
-          </form>
+            <div class="chat-messages flex-grow-1 mb-3">
+              {% if act_history %}
+                {% for message in act_history %}
+                  <div class="message {{ message.role }}">
+                    <strong class="d-block mb-1 text-uppercase small">{{ message.role }}</strong>
+                    <div>{{ message.content }}</div>
+                  </div>
+                {% endfor %}
+              {% else %}
+                <div class="message assistant">
+                  <strong class="d-block mb-1 text-uppercase small">assistant</strong>
+                  <div>If you are happy with the outline and your character we can start getting into more details. Do you want to add some final notes?</div>
+                </div>
+              {% endif %}
+            </div>
+            {% if act_error %}
+              <div class="alert alert-danger" role="alert">{{ act_error }}</div>
+            {% endif %}
+            {% if act_success %}
+              <div class="alert alert-success" role="alert">{{ act_success }}</div>
+            {% endif %}
+            <div id="actLoadingIndicator" class="loading-indicator" role="status" aria-live="polite">
+              <div class="spinner-border text-info" role="status" aria-hidden="true"></div>
+              <span>Assistant is thinking…</span>
+            </div>
+            <form method="post" id="actChatForm" data-chat-form data-loading-target="actLoadingIndicator" class="d-flex flex-column gap-3">
+              <input type="hidden" name="chat_type" value="acts" />
+              <textarea
+                class="form-control"
+                name="message"
+                rows="3"
+                placeholder="Share any final notes before generating the acts."
+                required
+              ></textarea>
+              <div class="d-flex justify-content-end gap-2">
+                <button type="submit" class="btn btn-primary">Send</button>
+              </div>
+            </form>
+          </div>
         </div>
       </div>
     </div>
@@ -239,17 +373,24 @@
 {% block scripts %}
   <script>
     (function () {
-      const form = document.getElementById("chatForm");
-      const loadingIndicator = document.getElementById("loadingIndicator");
       const tiles = Array.from(document.querySelectorAll(".overview-tile"));
       const panels = Array.from(document.querySelectorAll(".tile-detail"));
+      const chatPanels = Array.from(document.querySelectorAll(".chat-panel"));
+      const chatForms = Array.from(document.querySelectorAll("[data-chat-form]")); 
 
-      if (form && loadingIndicator) {
+      chatForms.forEach(function (form) {
+        const loadingTargetId = form.getAttribute("data-loading-target");
+        const indicator = loadingTargetId
+          ? document.getElementById(loadingTargetId)
+          : null;
+
         form.addEventListener("submit", function () {
           const submitButton = form.querySelector("button[type='submit']");
           const textarea = form.querySelector("textarea[name='message']");
 
-          loadingIndicator.classList.add("visible");
+          if (indicator) {
+            indicator.classList.add("visible");
+          }
 
           if (submitButton) {
             submitButton.disabled = true;
@@ -261,12 +402,13 @@
             textarea.setAttribute("readonly", "readonly");
           }
         });
-      }
+      });
 
       tiles.forEach(function (tile) {
         tile.addEventListener("click", function () {
           const targetId = tile.getAttribute("data-target");
           const targetPanel = targetId ? document.getElementById(targetId) : null;
+          const chatTargetId = tile.getAttribute("data-chat-target");
 
           tiles.forEach(function (btn) {
             btn.classList.toggle("active", btn === tile);
@@ -276,6 +418,12 @@
           panels.forEach(function (panel) {
             panel.classList.toggle("active", panel === targetPanel);
           });
+
+          if (chatTargetId) {
+            chatPanels.forEach(function (panel) {
+              panel.classList.toggle("active", panel.id === chatTargetId);
+            });
+          }
         });
       });
     })();

@@ -15,7 +15,7 @@ import os
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Sequence, Tuple
 
 from datetime import datetime
 
@@ -61,6 +61,10 @@ class Project(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
     outline = db.Column(db.Text, nullable=True)
+    act1_outline = db.Column(db.Text, nullable=True)
+    act2_outline = db.Column(db.Text, nullable=True)
+    act3_outline = db.Column(db.Text, nullable=True)
+    act_final_notes = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
     characters = db.relationship(
@@ -121,6 +125,38 @@ def _ensure_character_columns() -> None:
             connection.execute(text(statement))
         connection.commit()
 
+
+def _ensure_project_columns() -> None:
+    """Add newly introduced project columns when they are missing."""
+
+    inspector = inspect(db.engine)
+    try:
+        existing_columns = {
+            column["name"] for column in inspector.get_columns("project")
+        }
+    except Exception:  # pragma: no cover - defensive fallback
+        return
+
+    alterations: List[str] = []
+    column_specs = {
+        "act1_outline": "ALTER TABLE project ADD COLUMN act1_outline TEXT",
+        "act2_outline": "ALTER TABLE project ADD COLUMN act2_outline TEXT",
+        "act3_outline": "ALTER TABLE project ADD COLUMN act3_outline TEXT",
+        "act_final_notes": "ALTER TABLE project ADD COLUMN act_final_notes TEXT",
+    }
+
+    for column_name, statement in column_specs.items():
+        if column_name not in existing_columns:
+            alterations.append(statement)
+
+    if not alterations:
+        return
+
+    with db.engine.connect() as connection:
+        for statement in alterations:
+            connection.execute(text(statement))
+        connection.commit()
+
 # The Windows desktop deployment expects a specific local GGUF/Transformers
 # directory.  Use it as a sensible default when the app is launched on that
 # machine so users are not required to export an environment variable first.
@@ -144,6 +180,7 @@ def create_app() -> Flask:
     with app.app_context():
         db.create_all()
         _ensure_character_columns()
+        _ensure_project_columns()
 
     @app.route("/", methods=["GET", "POST"])
     def dashboard() -> str:
@@ -172,41 +209,91 @@ def create_app() -> Flask:
 
         session_key = _session_key(project_id)
         history = session.setdefault(session_key, [])
+        act_session_key = _act_session_key(project_id)
+        act_history = session.setdefault(act_session_key, [])
         error = None
         success = None
+        act_error = None
+        act_success = None
 
         if request.method == "POST":
+            chat_type = request.form.get("chat_type", "outline")
+
             if "reset" in request.form:
-                session.pop(session_key, None)
+                if chat_type == "acts":
+                    session.pop(act_session_key, None)
+                else:
+                    session.pop(session_key, None)
                 return redirect(url_for("project_detail", project_id=project_id))
 
             user_message = request.form.get("message", "").strip()
-            if user_message:
-                history.append({"role": "user", "content": user_message})
-                try:
-                    generator = _get_generator()
-                    assistant_reply = generator.generate_response(
-                        _build_prompt(history)
-                    )
-                except Exception as exc:  # pragma: no cover - defensive
-                    error = f"The local model could not generate a reply: {exc}"
-                    history.pop()
-                else:
-                    assistant_reply = assistant_reply or "(no reply)"
-                    history.append(
-                        {
-                            "role": "assistant",
-                            "content": assistant_reply,
-                        }
-                    )
-                    clean_outline = assistant_reply.strip()
-                    if clean_outline and clean_outline != "(no reply)":
-                        project.outline = clean_outline
+            if chat_type == "acts":
+                if user_message:
+                    act_history.append({"role": "user", "content": user_message})
+                    try:
+                        generator = _get_generator()
+                        act_results = _generate_three_act_outline(
+                            generator,
+                            project,
+                            user_message,
+                        )
+                    except Exception as exc:  # pragma: no cover - defensive
+                        act_error = (
+                            "The local model could not generate the act outline: "
+                            f"{exc}"
+                        )
+                        act_history.pop()
+                    else:
+                        acts = [result.strip() for result in act_results]
+                        labels = ["Act I", "Act II", "Act III"]
+                        for label, content in zip(labels, acts):
+                            response_text = (
+                                f"{label} outline:\n{content or '(no reply)'}"
+                            )
+                            act_history.append(
+                                {
+                                    "role": "assistant",
+                                    "content": response_text,
+                                }
+                            )
+                        project.act_final_notes = user_message
+                        project.act1_outline = acts[0] if acts else ""
+                        project.act2_outline = acts[1] if len(acts) > 1 else ""
+                        project.act3_outline = acts[2] if len(acts) > 2 else ""
                         db.session.commit()
-                        success = "Outline updated from assistant."
-                session.modified = True
+                        act_success = "Act-by-act outline updated from assistant."
+                    session.modified = True
+                else:
+                    act_error = "Please enter a message before sending."
             else:
-                error = "Please enter a message before sending."
+                if user_message:
+                    history.append({"role": "user", "content": user_message})
+                    try:
+                        generator = _get_generator()
+                        assistant_reply = generator.generate_response(
+                            _build_prompt(history)
+                        )
+                    except Exception as exc:  # pragma: no cover - defensive
+                        error = (
+                            "The local model could not generate a reply: " f"{exc}"
+                        )
+                        history.pop()
+                    else:
+                        assistant_reply = assistant_reply or "(no reply)"
+                        history.append(
+                            {
+                                "role": "assistant",
+                                "content": assistant_reply,
+                            }
+                        )
+                        clean_outline = assistant_reply.strip()
+                        if clean_outline and clean_outline != "(no reply)":
+                            project.outline = clean_outline
+                            db.session.commit()
+                            success = "Outline updated from assistant."
+                    session.modified = True
+                else:
+                    error = "Please enter a message before sending."
 
         return render_template(
             "project.html",
@@ -214,6 +301,9 @@ def create_app() -> Flask:
             history=history,
             error=error,
             success=success,
+            act_history=act_history,
+            act_error=act_error,
+            act_success=act_success,
         )
 
     @app.route(
@@ -427,6 +517,12 @@ def _get_generator() -> TextGenerator:
     return _generator
 
 
+def _act_session_key(project_id: int) -> str:
+    """Return the session key used for act outline conversations."""
+
+    return f"act_chat_history_{project_id}"
+
+
 def _build_prompt(history: Iterable[Dict[str, str]]) -> str:
     """Construct a conversation prompt from the stored history."""
 
@@ -443,6 +539,136 @@ def _build_prompt(history: Iterable[Dict[str, str]]) -> str:
     prompt_lines.append("Assistant:")
     return "\n".join(prompt_lines)
 
+
+def _generate_three_act_outline(
+    generator: TextGenerator,
+    project: Project,
+    final_notes: str,
+) -> Tuple[str, str, str]:
+    """Generate a three-act outline informed by project context."""
+
+    outline_text = (project.outline or "No outline has been provided yet.").strip()
+    character_context = _collect_character_context(project.characters)
+    notes_text = final_notes.strip() or "No final notes provided."
+
+    results: List[str] = []
+    previous_acts: List[Tuple[int, str]] = []
+
+    for act_number in (1, 2, 3):
+        prompt = _build_act_prompt(
+            act_number,
+            outline_text,
+            character_context,
+            notes_text,
+            previous_acts,
+        )
+        response = generator.generate_response(prompt) or ""
+        response_clean = response.strip()
+        results.append(response_clean)
+        previous_acts.append((act_number, response_clean))
+
+    while len(results) < 3:
+        results.append("")
+
+    return results[0], results[1], results[2]
+
+
+def _collect_character_context(characters: Iterable["Character"]) -> str:
+    """Build a readable summary of all available character descriptions."""
+
+    entries: List[str] = []
+    for character in characters:
+        sections: List[str] = []
+        if character.name:
+            sections.append(f"Name: {character.name}")
+        if character.role_in_story:
+            sections.append(f"Role in story: {character.role_in_story}")
+        if character.character_outline:
+            sections.append(f"Character outline: {character.character_outline}")
+        if sections:
+            entries.append("\n".join(sections))
+
+    if not entries:
+        return "No character descriptions available."
+
+    return "\n\n".join(entries)
+
+
+def _build_act_prompt(
+    act_number: int,
+    outline_text: str,
+    character_context: str,
+    final_notes: str,
+    previous_acts: Sequence[Tuple[int, str]],
+) -> str:
+    """Construct a tailored prompt for the requested act."""
+
+    act_labels = {1: "Act I", 2: "Act II", 3: "Act III"}
+    label = act_labels.get(act_number, f"Act {act_number}")
+
+    config = SYSTEM_PROMPTS.get("act_outline", {})
+    base_prompt = config.get(
+        "base",
+        (
+            "You are a collaborative narrative designer tasked with producing a "
+            "beat-by-beat act outline that is vivid, coherent, and firmly rooted "
+            "in the provided story materials."
+        ),
+    )
+    act_guidance_map = config.get("acts", {})
+    act_guidance = act_guidance_map.get(
+        act_number,
+        "Ensure the act fulfils its role in classic three-act structure.",
+    )
+
+    user_sections: List[str] = [
+        f"Create {label} of a three-act outline while respecting the context below.",
+        "",
+        "Project outline:",
+        outline_text or "No outline has been provided yet.",
+        "",
+        "Character roster:",
+        character_context or "No character descriptions available.",
+        "",
+        "Author final notes:",
+        final_notes or "No final notes provided.",
+    ]
+
+    if previous_acts:
+        user_sections.append("")
+        user_sections.append("Previous acts for continuity:")
+        for previous_act_number, summary in previous_acts:
+            previous_label = act_labels.get(
+                previous_act_number,
+                f"Act {previous_act_number}",
+            )
+            cleaned_summary = summary.strip() or "(no summary available)"
+            user_sections.append(f"{previous_label} summary:\n{cleaned_summary}")
+
+    user_sections.extend(
+        [
+            "",
+            f"Guidance for {label}:",
+            act_guidance.strip(),
+            "",
+            (
+                "Deliver the response as 4-6 numbered beats. Each beat should be "
+                "one or two sentences that emphasise goals, conflicts, and "
+                "reversals relevant to this act."
+            ),
+        ]
+    )
+
+    user_message = "\n".join(user_sections).strip()
+
+    return "\n".join(
+        [
+            f"System: {base_prompt}",
+            "User:",
+            user_message,
+            "Assistant:",
+        ]
+    )
 
 def _run_character_profile_generation(
     generator: TextGenerator,
