@@ -9,6 +9,11 @@ SYSTEM_PROMPTS = {
     ),
     "character_creation": {
         "base": "You are a writing assistant and we want to create a character.",
+        "json_format_rules": (
+            "Respond exclusively with a single valid JSON object that follows the provided schema. "
+            "Use double quotes for all keys and string values, avoid trailing commas, and do not wrap the JSON "
+            "in Markdown code fences or add any explanatory prose before or after it."
+        ),
         "fields": [
             {
                 "key": "name",
@@ -16,9 +21,9 @@ SYSTEM_PROMPTS = {
                 "description": (
                     "Provide the character’s full name and any commonly used nickname(s). "
                     "The name should reflect the character’s cultural background, era, "
-                    "and tone of the story. You should strickly stick to the format 'Name: XYZ Lastname: ABC, Nickname:DEF'"
+                    "and tone of the story. You should strickly stick to the format 'Name: XYZ, Nickname:ABC'"
                 ),
-                "word_count": 6,
+                "word_count": 5,
             },
             {
                 "key": "age",
@@ -33,7 +38,7 @@ SYSTEM_PROMPTS = {
                 "key": "gender_pronouns",
                 "label": "Gender / Pronouns",
                 "description": (
-                    "Specify gender pronouns. For example he his, or she/her"
+                    "Specify gender identity and pronouns."
                     "Your answer should not exceed 5 words"
                 ),
                 "word_count": 4,
