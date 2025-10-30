@@ -106,6 +106,14 @@
       background: rgba(15, 23, 42, 0.9);
       border: 1px solid rgba(148, 163, 184, 0.2);
     }
+    .message-device {
+      margin-top: 0.5rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: rgba(148, 163, 184, 0.85);
+    }
     .loading-indicator {
       display: none;
       align-items: center;
@@ -333,6 +341,9 @@
                   <div class="message {{ message.role }}">
                     <strong class="d-block mb-1 text-uppercase small">{{ message.role }}</strong>
                     <div>{{ message.content }}</div>
+                    {% if message.device_type %}
+                      <div class="message-device">Generated using the {{ message.device_type }} backend.</div>
+                    {% endif %}
                   </div>
                 {% endfor %}
               {% else %}
@@ -379,6 +390,9 @@
                   <div class="message {{ message.role }}">
                     <strong class="d-block mb-1 text-uppercase small">{{ message.role }}</strong>
                     <div>{{ message.content }}</div>
+                    {% if message.device_type %}
+                      <div class="message-device">Generated using the {{ message.device_type }} backend.</div>
+                    {% endif %}
                   </div>
                 {% endfor %}
               {% else %}
@@ -429,6 +443,9 @@
                   <div class="message {{ message.role }}">
                     <strong class="d-block mb-1 text-uppercase small">{{ message.role }}</strong>
                     <div>{{ message.content }}</div>
+                    {% if message.device_type %}
+                      <div class="message-device">Generated using the {{ message.device_type }} backend.</div>
+                    {% endif %}
                   </div>
                 {% endfor %}
               {% else %}

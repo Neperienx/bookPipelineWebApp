@@ -260,6 +260,9 @@ def create_app() -> Flask:
                         )
                         act_history.pop()
                     else:
+                        device_type = generator.get_compute_device()
+                        device_label = _normalise_device_label(device_type)
+                        device_sentence = _device_usage_sentence(device_type)
                         acts = [result.strip() for result in act_results]
                         labels = ["Act I", "Act II", "Act III"]
                         for label, content in zip(labels, acts):
@@ -270,6 +273,7 @@ def create_app() -> Flask:
                                 {
                                     "role": "assistant",
                                     "content": response_text,
+                                    "device_type": device_label,
                                 }
                             )
                         project.act_final_notes = user_message
@@ -277,7 +281,10 @@ def create_app() -> Flask:
                         project.act2_outline = acts[1] if len(acts) > 1 else ""
                         project.act3_outline = acts[2] if len(acts) > 2 else ""
                         db.session.commit()
-                        act_success = "Act-by-act outline updated from assistant."
+                        act_success = (
+                            "Act-by-act outline updated from assistant."
+                            f"{device_sentence}"
+                        )
                     session.modified = True
                 else:
                     act_error = "Please enter a message before sending."
@@ -317,6 +324,9 @@ def create_app() -> Flask:
                             )
                             chapter_history.pop()
                         else:
+                            device_type = generator.get_compute_device()
+                            device_label = _normalise_device_label(device_type)
+                            device_sentence = _device_usage_sentence(device_type)
                             chapters = [result.strip() for result in chapter_results]
                             labels = ["Act I", "Act II", "Act III"]
                             for label, content in zip(labels, chapters):
@@ -324,7 +334,11 @@ def create_app() -> Flask:
                                     f"{label} chapters:\n{content or '(no reply)'}"
                                 )
                                 chapter_history.append(
-                                    {"role": "assistant", "content": response_text}
+                                    {
+                                        "role": "assistant",
+                                        "content": response_text,
+                                        "device_type": device_label,
+                                    }
                                 )
                             project.chapters_final_notes = user_message
                             project.act1_chapters = chapters[0] if chapters else ""
@@ -335,14 +349,17 @@ def create_app() -> Flask:
                                 chapters[2] if len(chapters) > 2 else ""
                             )
                             db.session.commit()
-                            chapter_success = "Chapter-by-chapter outline updated from assistant."
+                            chapter_success = (
+                                "Chapter-by-chapter outline updated from assistant."
+                                f"{device_sentence}"
+                            )
                         session.modified = True
             else:
                 if user_message:
                     history.append({"role": "user", "content": user_message})
                     try:
                         generator = _get_generator()
-                        assistant_reply = generator.generate_response(
+                        assistant_reply_raw = generator.generate_response(
                             _build_prompt(history)
                         )
                     except Exception as exc:  # pragma: no cover - defensive
@@ -351,18 +368,24 @@ def create_app() -> Flask:
                         )
                         history.pop()
                     else:
-                        assistant_reply = assistant_reply or "(no reply)"
+                        device_type = generator.get_compute_device()
+                        assistant_reply = assistant_reply_raw or "(no reply)"
                         history.append(
                             {
                                 "role": "assistant",
                                 "content": assistant_reply,
+                                "device_type": _normalise_device_label(device_type),
                             }
                         )
                         clean_outline = assistant_reply.strip()
                         if clean_outline and clean_outline != "(no reply)":
                             project.outline = clean_outline
                             db.session.commit()
-                            success = "Outline updated from assistant."
+                            success_suffix = _device_usage_sentence(device_type)
+                            success = (
+                                "Outline updated from assistant."
+                                f"{success_suffix}"
+                            )
                     session.modified = True
                 else:
                     error = "Please enter a message before sending."
@@ -1169,6 +1192,26 @@ def _apply_character_profile(
         key = field["key"]
         value = profile_data.get(key, "").strip()
         setattr(character, key, value or None)
+
+
+def _normalise_device_label(device_type: str | None) -> str:
+    """Return an uppercase device label for UI display."""
+
+    if not device_type:
+        return ""
+    label = str(device_type).strip()
+    if not label:
+        return ""
+    return label.upper()
+
+
+def _device_usage_sentence(device_type: str | None) -> str:
+    """Return a sentence fragment describing the compute backend used."""
+
+    label = _normalise_device_label(device_type)
+    if not label:
+        return ""
+    return f" Generated using the {label} backend."
 
 
 def _compute_device_hint() -> str:
