@@ -292,7 +292,12 @@
             <div class="outline-content d-flex flex-column gap-3">
               <div>
                 <h3 class="h6 mb-1">Chapter by chapter outline</h3>
-                <p class="text-secondary mb-0 small">Track the scene-level flow for every act.</p>
+                <p class="text-secondary mb-0 small">
+                  Track the scene-level flow for every act.
+                  {% if device_hint %}
+                    <span class="d-block">Text generation currently runs on the {{ device_hint }} backend.</span>
+                  {% endif %}
+                </p>
               </div>
               {% if project.act1_chapters or project.act2_chapters or project.act3_chapters %}
                 <div class="d-flex flex-column gap-3">
