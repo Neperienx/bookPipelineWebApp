@@ -390,6 +390,8 @@ def create_app() -> Flask:
                 else:
                     error = "Please enter a message before sending."
 
+        device_hint = _compute_device_hint()
+
         return render_template(
             "project.html",
             project=project,
@@ -403,6 +405,7 @@ def create_app() -> Flask:
             chapter_error=chapter_error,
             chapter_success=chapter_success,
             chapter_count_value=chapter_count_value,
+            device_hint=device_hint,
         )
 
     @app.route(
