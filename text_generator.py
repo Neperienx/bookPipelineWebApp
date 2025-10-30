@@ -141,6 +141,11 @@ class TextGenerator:
             not provided the generator wide default configured at
             instantiation time is used.
         """
+        LOGGER.info(
+            "Text generation requested; running on %s.",
+            self._describe_execution_device(),
+        )
+
         tokens_to_generate = self.max_new_tokens if max_new_tokens is None else max_new_tokens
         if tokens_to_generate <= 0:
             raise ValueError("max_new_tokens must be a positive integer")
@@ -247,3 +252,36 @@ class TextGenerator:
             return ""
         response_text = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
         return response_text.strip()
+
+    def _describe_execution_device(self) -> str:
+        """Return a human readable description of the current execution device."""
+
+        device = None
+        try:
+            parameter = next(self.model.parameters())
+        except (AttributeError, StopIteration):
+            parameter = None
+
+        if parameter is not None:
+            device = getattr(parameter, "device", None)
+
+        if device is None:
+            model_device = getattr(self.model, "device", None)
+            if isinstance(model_device, torch.device):
+                device = model_device
+
+        if not isinstance(device, torch.device):
+            return "an unknown device"
+
+        if device.type == "cuda":
+            index = device.index if device.index is not None else torch.cuda.current_device()
+            try:
+                name = torch.cuda.get_device_name(index)
+            except Exception:  # pragma: no cover - best effort description
+                name = f"cuda:{index}"
+            return f"GPU ({name})"
+
+        if device.type == "cpu":
+            return "CPU"
+
+        return device.type
