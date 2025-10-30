@@ -39,33 +39,26 @@
       color: rgba(226, 232, 240, 0.5);
       font-style: italic;
     }
-    .chat-messages {
-      height: 50vh;
-      overflow-y: auto;
-      padding: 1.25rem;
+    .character-form {
+      width: 100%;
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.25rem;
+    }
+    .form-field {
       display: flex;
       flex-direction: column;
-      gap: 1rem;
-      background: rgba(15, 23, 42, 0.7);
-      border-radius: 1rem;
-      border: 1px solid rgba(148, 163, 184, 0.2);
+      gap: 0.5rem;
     }
-    .message {
-      padding: 0.85rem 1.1rem;
-      border-radius: 0.9rem;
-      max-width: 85%;
-      white-space: pre-wrap;
-      font-size: 0.95rem;
+    .form-field textarea {
+      min-height: 8rem;
     }
-    .message.user {
-      align-self: flex-end;
-      background: linear-gradient(135deg, #2563eb, #38bdf8);
-      color: #fff;
-    }
-    .message.assistant {
-      align-self: flex-start;
-      background: rgba(15, 23, 42, 0.9);
-      border: 1px solid rgba(148, 163, 184, 0.2);
+    .form-helper {
+      font-size: 0.85rem;
+      color: rgba(226, 232, 240, 0.7);
+      margin-top: -0.25rem;
     }
     .loading-indicator {
       display: none;
@@ -81,18 +74,21 @@
     .loading-indicator.visible {
       display: flex;
     }
+    .loading-indicator .badge {
+      font-size: 0.75rem;
+    }
   </style>
 {% endblock %}
 {% block content %}
   <div class="character-header">
     <div>
       <h1 class="h3 mb-1">{{ character.name or 'Untitled character' }}</h1>
-      <p class="text-secondary mb-0">Develop a complete character profile for {{ project.name }}.</p>
+      <p class="text-secondary mb-0">Role in story: <span id="characterRoleText">{{ character.role_in_story or 'Not specified yet.' }}</span></p>
     </div>
-    <div class="d-flex gap-2">
+    <div class="d-flex gap-2 flex-wrap">
       <a href="{{ url_for('project_detail', project_id=project.id) }}" class="btn btn-outline-light btn-sm">Back to project</a>
-      <form method="post" action="{{ url_for('character_detail', project_id=project.id, character_id=character.id) }}">
-        <button type="submit" name="reset" value="1" class="btn btn-outline-light btn-sm">Clear chat</button>
+      <form method="post">
+        <button type="submit" name="reset_form" value="1" class="btn btn-outline-light btn-sm">Clear form</button>
       </form>
     </div>
   </div>
@@ -100,7 +96,7 @@
     <div class="col-xl-5">
       <div class="card h-100">
         <div class="card-body">
-          <h2 class="h5 mb-3">Character template</h2>
+          <h2 class="h5 mb-3">Character outline</h2>
           <div class="character-traits">
             {% for field in character_fields %}
               <section
@@ -110,15 +106,17 @@
               >
                 <div class="d-flex justify-content-between align-items-start gap-2">
                   <h2 class="h6 mb-0">{{ field.label }}</h2>
-                  <span class="badge bg-secondary">{{ field.word_count }} words</span>
+                  {% if field.word_count %}
+                    <span class="badge bg-secondary">{{ field.word_count }} words</span>
+                  {% endif %}
                 </div>
                 <p class="description">{{ field.description }}</p>
-                {% set value = character_data[field['key']] %}
+                {% set value = character|attr(field.key) %}
                 <div
                   id="traitContent-{{ field.key }}"
                   class="trait-content {{ 'trait-empty' if not value }}"
                 >
-                  {{ value or 'Not set yet. Use the chat to generate this section.' }}
+                  {{ value or 'No outline yet. Complete the form to generate one.' }}
                 </div>
               </section>
             {% endfor %}
@@ -129,52 +127,55 @@
     <div class="col-xl-7">
       <div class="card h-100">
         <div class="card-body d-flex flex-column">
-          <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
-            <div>
-              <h2 class="h5 mb-1">Character assistant</h2>
-              <p class="text-secondary mb-0">Describe your vision and the assistant will draft each section.</p>
-            </div>
+          <div class="mb-3">
+            <h2 class="h5 mb-1">Character brief</h2>
+            <p class="text-secondary mb-0">Provide as many details as you know. Leave fields blank to give the assistant creative freedom.</p>
           </div>
-          <div class="chat-messages flex-grow-1 mb-3">
-            {% if history %}
-              {% for message in history %}
-                <div class="message {{ message.role }}">
-                  <strong class="d-block mb-1 text-uppercase small">{{ message.role }}</strong>
-                  <div>{{ message.content }}</div>
-                </div>
-              {% endfor %}
-            {% else %}
-              <div class="text-secondary text-center w-100 my-auto">
-                Share what makes this character important to the story to begin generating the template.
-              </div>
-            {% endif %}
-          </div>
-          {% if error %}
-            <div class="alert alert-danger" role="alert">{{ error }}</div>
-          {% endif %}
-          {% if success %}
-            <div class="alert alert-success" role="alert">{{ success }}</div>
-          {% endif %}
           <div id="characterMessageArea" class="mb-2"></div>
           <div id="characterLoadingIndicator" class="loading-indicator" role="status" aria-live="polite">
             <div class="spinner-border text-info" role="status" aria-hidden="true"></div>
-            <span id="characterLoadingMessage">Assistant is thinking…</span>
+            <span id="characterLoadingMessage">Preparing assistant…</span>
+            <span id="characterDeviceBadge" class="badge bg-secondary ms-auto"></span>
           </div>
           <form
             method="post"
-            id="characterChatForm"
-            class="d-flex flex-column gap-3"
+            id="characterForm"
+            class="character-form d-flex flex-column gap-3 flex-grow-1"
             data-generate-url="{{ url_for('character_generate', project_id=project.id, character_id=character.id) }}"
+            data-device-hint="{{ device_hint }}"
           >
-            <textarea
-              class="form-control"
-              name="message"
-              rows="3"
-              placeholder="Describe your character’s role, personality, or any details you already know."
-              required
-            ></textarea>
-            <div class="d-flex justify-content-end gap-2">
-              <button type="submit" class="btn btn-primary">Send</button>
+            <div class="form-grid">
+              {% for field in input_fields %}
+                <div class="form-field">
+                  <label class="form-label" for="field-{{ field.key }}">
+                    {{ field.label }}{% if field.required %} <span class="text-danger">*</span>{% endif %}
+                  </label>
+                  {% if field.description %}
+                    <div class="form-helper">{{ field.description }}</div>
+                  {% endif %}
+                  {% if field.input_type == 'textarea' %}
+                    <textarea
+                      class="form-control"
+                      id="field-{{ field.key }}"
+                      name="{{ field.key }}"
+                      rows="4"
+                      {% if field.required %}required{% endif %}
+                    >{{ form_data.get(field.key, '') | trim }}</textarea>
+                  {% else %}
+                    <input
+                      type="text"
+                      class="form-control"
+                      id="field-{{ field.key }}"
+                      name="{{ field.key }}"
+                      value="{{ form_data.get(field.key, '') }}"
+                      {% if field.required %}required{% endif %}
+                    />
+                  {% endif %}
+                </div>
+              {% endfor %}
+            </div>
+            <div class="d-flex justify-content-end gap-2 mt-auto">
+              <button type="submit" class="btn btn-primary">Generate outline</button>
             </div>
           </form>
         </div>
@@ -185,14 +186,34 @@
 {% block scripts %}
   <script>
     (function () {
-      const form = document.getElementById("characterChatForm");
+      const form = document.getElementById("characterForm");
       const loadingIndicator = document.getElementById("characterLoadingIndicator");
       const loadingMessage = document.getElementById("characterLoadingMessage");
+      const deviceBadge = document.getElementById("characterDeviceBadge");
       const messageArea = document.getElementById("characterMessageArea");
-      const chatMessages = document.querySelector(".chat-messages");
-      if (!form || !loadingIndicator || !loadingMessage || !chatMessages) {
+      if (!form || !loadingIndicator || !loadingMessage) {
         return;
       }
+
+      const deviceHint = form.getAttribute("data-device-hint") || "";
+
+      const setDeviceBadge = (deviceType) => {
+        if (!deviceBadge) {
+          return;
+        }
+        const normalized = (deviceType || "").toString().toUpperCase();
+        deviceBadge.textContent = normalized ? `${normalized} mode` : "";
+        deviceBadge.classList.remove("bg-secondary", "bg-warning", "bg-success");
+        if (!normalized) {
+          deviceBadge.classList.add("bg-secondary");
+          return;
+        }
+        if (normalized === "GPU") {
+          deviceBadge.classList.add("bg-success");
+        } else {
+          deviceBadge.classList.add("bg-warning");
+        }
+      };
 
       const renderAlert = (type, text) => {
         if (!messageArea) {
@@ -206,35 +227,78 @@
         messageArea.appendChild(alert);
       };
 
-      form.addEventListener("submit", async function (event) {
+      const updateOutlineSection = (sections, fallbackOutline) => {
+        const updates = Array.isArray(sections) && sections.length ? sections : [
+          { key: "character_outline", content: fallbackOutline }
+        ];
+        updates.forEach((section) => {
+          if (!section || typeof section !== "object") {
+            return;
+          }
+          const key = section.key;
+          const content = typeof section.content === "string" ? section.content.trim() : "";
+          if (!key) {
+            return;
+          }
+          const selectorKey = window.CSS && typeof window.CSS.escape === "function"
+            ? window.CSS.escape(key)
+            : String(key).replace(/"/g, '\\"');
+          const card = document.querySelector(`.trait-card[data-field-key="${selectorKey}"]`);
+          if (!card) {
+            return;
+          }
+          const contentContainer = card.querySelector(".trait-content");
+          if (!contentContainer) {
+            return;
+          }
+          contentContainer.classList.toggle("trait-empty", !content);
+          contentContainer.textContent = content || "No outline yet. Complete the form to generate one.";
+        });
+      };
+
+      form.addEventListener("submit", async (event) => {
         event.preventDefault();
 
         const submitButton = form.querySelector("button[type='submit']");
-        const textarea = form.querySelector("textarea[name='message']");
         const generateUrl = form.getAttribute("data-generate-url");
-
-        if (!textarea || !generateUrl) {
+        if (!generateUrl) {
+          renderAlert("danger", "Generation endpoint is not configured.");
           return;
         }
 
-        const originalMessage = textarea.value;
-        const userMessage = originalMessage.trim();
-        if (!userMessage) {
-          renderAlert("danger", "Please enter a message before sending.");
+        const formData = new FormData(form);
+        const payload = {};
+        formData.forEach((value, key) => {
+          if (typeof value === "string") {
+            payload[key] = value.trim();
+          } else {
+            payload[key] = value;
+          }
+        });
+
+        if (!payload.name) {
+          renderAlert("danger", "Name is a required field.");
+          return;
+        }
+        if (!payload.role_in_story) {
+          renderAlert("danger", "Role in the story is a required field.");
           return;
         }
 
-        renderAlert("info", "Requesting a complete character profile from the assistant.");
+        renderAlert("info", "Sending your brief to the assistant.");
         loadingIndicator.classList.add("visible");
-        loadingMessage.textContent = "Generating character profile…";
+        if (deviceHint) {
+          loadingMessage.textContent = `Generating character outline… (expected ${deviceHint})`;
+          setDeviceBadge(deviceHint);
+        } else {
+          loadingMessage.textContent = "Generating character outline…";
+          setDeviceBadge("");
+        }
 
         if (submitButton) {
           submitButton.disabled = true;
-          submitButton.innerHTML =
-            '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Sending…';
+          submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Generating…';
         }
-
-        textarea.setAttribute("readonly", "readonly");
 
         try {
           const response = await fetch(generateUrl, {
@@ -242,9 +306,7 @@
             headers: {
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-              message: userMessage,
-            }),
+            body: JSON.stringify({ inputs: payload }),
           });
 
           const data = await response.json().catch(() => null);
@@ -255,107 +317,45 @@
             throw new Error(errorMessage);
           }
 
-          if (!data || typeof data !== "object") {
-            throw new Error("Unexpected response from the server.");
+          updateOutlineSection(Array.isArray(data.sections) ? data.sections : [], data.character_outline || "");
+
+          if (data.character && typeof data.character === "object") {
+            const nameHeading = document.querySelector(".character-header h1");
+            if (nameHeading && typeof data.character.name === "string") {
+              const trimmedName = data.character.name.trim();
+              nameHeading.textContent = trimmedName || "Untitled character";
+            }
+            const roleElement = document.getElementById("characterRoleText");
+            if (roleElement && typeof data.character.role_in_story === "string") {
+              const trimmedRole = data.character.role_in_story.trim();
+              roleElement.textContent = trimmedRole || "Not specified yet.";
+            }
           }
 
-          if (data.error) {
-            throw new Error(data.error);
+          if (data.device_type) {
+            loadingMessage.textContent = `Character outline generated using the ${data.device_type.toUpperCase()} backend.`;
+            setDeviceBadge(data.device_type);
+          } else {
+            loadingMessage.textContent = "Character outline generated.";
+            setDeviceBadge(deviceHint);
           }
 
-          const sections = Array.isArray(data.sections) ? data.sections : [];
-          sections.forEach((section) => {
-            if (!section || typeof section !== "object") {
-              return;
-            }
-            const fieldKey = section.key;
-            if (!fieldKey) {
-              return;
-            }
-            const selectorKey =
-              window.CSS && typeof window.CSS.escape === "function"
-                ? window.CSS.escape(fieldKey)
-                : String(fieldKey).replace(/"/g, '\\"');
-            const content = typeof section.content === "string" ? section.content.trim() : "";
-            const traitCard = document.querySelector(
-              `.trait-card[data-field-key="${selectorKey}"]`
-            );
-            if (!traitCard) {
-              return;
-            }
-            const contentContainer = traitCard.querySelector(".trait-content");
-            if (!contentContainer) {
-              return;
-            }
-            contentContainer.classList.toggle("trait-empty", !content);
-            contentContainer.textContent = content || "Not set yet. Use the chat to generate this section.";
-          });
-
-          const characterData = data.character_data && typeof data.character_data === "object"
-            ? data.character_data
-            : {};
-          const nameHeading = document.querySelector(".character-header h1");
-          if (nameHeading && typeof characterData.name === "string") {
-            const trimmedName = characterData.name.trim();
-            nameHeading.textContent = trimmedName || "Untitled character";
-          }
-
-          const userBubble = document.createElement("div");
-          userBubble.className = "message user";
-          const userLabel = document.createElement("strong");
-          userLabel.className = "d-block mb-1 text-uppercase small";
-          userLabel.textContent = "user";
-          const userContent = document.createElement("div");
-          userContent.textContent = userMessage;
-          userBubble.appendChild(userLabel);
-          userBubble.appendChild(userContent);
-
-          const assistantBubble = document.createElement("div");
-          assistantBubble.className = "message assistant";
-          const assistantLabel = document.createElement("strong");
-          assistantLabel.className = "d-block mb-1 text-uppercase small";
-          assistantLabel.textContent = "assistant";
-          const assistantContent = document.createElement("div");
-          const assistantReply = typeof data.assistant_reply === "string"
-            ? data.assistant_reply
-            : sections
-                .map((section) => {
-                  if (!section || typeof section !== "object") {
-                    return "";
-                  }
-                  const label = section.label || section.key;
-                  const value = typeof section.content === "string" ? section.content : "";
-                  return `${label}:\n${value}`;
-                })
-                .filter(Boolean)
-                .join("\n\n");
-          assistantContent.textContent = assistantReply;
-          assistantBubble.appendChild(assistantLabel);
-          assistantBubble.appendChild(assistantContent);
-
-          chatMessages.appendChild(userBubble);
-          chatMessages.appendChild(assistantBubble);
-          chatMessages.scrollTop = chatMessages.scrollHeight;
-
-          loadingMessage.textContent = "Character profile updated.";
-          renderAlert("success", data.message || "Character profile updated from assistant.");
-          textarea.value = "";
+          renderAlert("success", data.message || "Character outline updated from assistant.");
         } catch (err) {
           const message = err instanceof Error ? err.message : "An unexpected error occurred.";
           loadingMessage.textContent = "The assistant could not complete the request.";
+          setDeviceBadge("");
           renderAlert(
             "danger",
-            `The assistant could not generate the character profile. ${message}`
+            `The assistant could not generate the character outline. ${message}`
           );
-          textarea.value = originalMessage;
         }
 
-        loadingIndicator.classList.remove("visible");
         if (submitButton) {
           submitButton.disabled = false;
-          submitButton.textContent = "Send";
+          submitButton.textContent = "Generate outline";
         }
-        textarea.removeAttribute("readonly");
+        loadingIndicator.classList.remove("visible");
       });
     })();
   </script>

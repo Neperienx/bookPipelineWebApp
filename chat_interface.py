@@ -31,8 +31,16 @@ from flask import (
 )
 from flask_sqlalchemy import SQLAlchemy
 
+from sqlalchemy import inspect, text
+
+import torch
+
 from text_generator import TextGenerator
-from system_prompts import SYSTEM_PROMPTS, get_character_fields
+from system_prompts import (
+    SYSTEM_PROMPTS,
+    get_character_fields,
+    get_character_input_fields,
+)
 
 # Flask session requires a secret key.  Use an environment variable so the
 # application can be run without editing source code.
@@ -72,14 +80,8 @@ class Character(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=False)
     name = db.Column(db.String(160), nullable=True)
-    age = db.Column(db.String(60), nullable=True)
-    gender_pronouns = db.Column(db.String(120), nullable=True)
-    basic_information = db.Column(db.Text, nullable=True)
-    physical_appearance = db.Column(db.Text, nullable=True)
-    personality = db.Column(db.Text, nullable=True)
-    background = db.Column(db.Text, nullable=True)
-    psychology = db.Column(db.Text, nullable=True)
-    in_story = db.Column(db.Text, nullable=True)
+    role_in_story = db.Column(db.String(160), nullable=True)
+    character_outline = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,
@@ -92,6 +94,32 @@ class Character(db.Model):
 
     def __repr__(self) -> str:  # pragma: no cover - debug helper
         return f"<Character {self.id} project={self.project_id}>"
+
+
+def _ensure_character_columns() -> None:
+    """Add missing columns required by the updated character schema."""
+
+    inspector = inspect(db.engine)
+    try:
+        existing_columns = {
+            column["name"] for column in inspector.get_columns("character")
+        }
+    except Exception:  # pragma: no cover - defensive fallback
+        return
+
+    alterations: List[str] = []
+    if "role_in_story" not in existing_columns:
+        alterations.append("ALTER TABLE character ADD COLUMN role_in_story VARCHAR(160)")
+    if "character_outline" not in existing_columns:
+        alterations.append("ALTER TABLE character ADD COLUMN character_outline TEXT")
+
+    if not alterations:
+        return
+
+    with db.engine.connect() as connection:
+        for statement in alterations:
+            connection.execute(text(statement))
+        connection.commit()
 
 # The Windows desktop deployment expects a specific local GGUF/Transformers
 # directory.  Use it as a sensible default when the app is launched on that
@@ -115,6 +143,7 @@ def create_app() -> Flask:
 
     with app.app_context():
         db.create_all()
+        _ensure_character_columns()
 
     @app.route("/", methods=["GET", "POST"])
     def dashboard() -> str:
@@ -224,82 +253,42 @@ def create_app() -> Flask:
             abort(404)
 
         character_fields = get_character_fields()
-        history_key = _character_session_key(project_id, character_id)
-        history = session.setdefault(history_key, [])
+        input_fields = get_character_input_fields()
+        form_key = _character_form_state_key(project_id, character_id)
 
-        error = None
-        success = None
-
-        if request.method == "POST":
-            if "reset" in request.form:
-                session.pop(history_key, None)
-                return redirect(
-                    url_for(
-                        "character_detail",
-                        project_id=project_id,
-                        character_id=character_id,
-                    )
+        if request.method == "POST" and "reset_form" in request.form:
+            session.pop(form_key, None)
+            session.modified = True
+            return redirect(
+                url_for(
+                    "character_detail",
+                    project_id=project_id,
+                    character_id=character_id,
                 )
+            )
 
-            user_message = request.form.get("message", "").strip()
-            if not user_message:
-                error = "Please enter a message before sending."
+        stored_form = session.get(form_key, {})
+        form_data: Dict[str, str] = {}
+        for field in input_fields:
+            key = field["key"]
+            if key == "name":
+                default_value = character.name or stored_form.get(key, "")
+            elif key == "role_in_story":
+                default_value = character.role_in_story or stored_form.get(key, "")
             else:
-                history.append({"role": "user", "content": user_message})
-                try:
-                    generator = _get_generator()
-                    outline_text_raw = project.outline or "no outline has been provided yet"
-                    outline_text = " ".join(outline_text_raw.split())
-                    config = SYSTEM_PROMPTS.get("character_creation", {})
-                    base_prompt = config.get(
-                        "base",
-                        "You are a writing assistant and we want to create a character.",
-                    )
-                    json_rules = config.get("json_format_rules", "")
-                    profile_data, _sections, assistant_reply = _run_character_profile_generation(
-                        generator,
-                        base_prompt,
-                        json_rules,
-                        outline_text,
-                        character_fields,
-                        history,
-                    )
-                except ValueError as exc:
-                    error = str(exc)
-                    history.pop()
-                except Exception as exc:  # pragma: no cover - defensive
-                    error = f"The local model could not generate a reply: {exc}"
-                    history.pop()
-                else:
-                    _apply_character_profile(character, character_fields, profile_data)
-                    character.updated_at = datetime.utcnow()
-                    db.session.commit()
-                    success = "Character profile updated from assistant."
+                default_value = stored_form.get(key, "")
+            form_data[key] = default_value or ""
 
-                    if assistant_reply:
-                        history.append(
-                            {
-                                "role": "assistant",
-                                "content": assistant_reply,
-                            }
-                        )
-
-                session.modified = True
-
-        character_data = {
-            field["key"]: getattr(character, field["key"])
-            for field in character_fields
-        }
+        device_hint = _compute_device_hint()
 
         return render_template(
             "character.html",
             project=project,
             character=character,
             character_fields=character_fields,
-            character_data=character_data,
-            history=history,
-            error=error,
-            success=success,
+            input_fields=input_fields,
+            form_data=form_data,
+            device_hint=device_hint,
         )
 
     @app.route(
@@ -318,23 +307,40 @@ def create_app() -> Flask:
             return jsonify({"error": "Character not found."}), 404
 
         payload = request.get_json(silent=True) or {}
-        message = (payload.get("message") or "").strip()
+        inputs_payload = payload.get("inputs")
+        if not isinstance(inputs_payload, dict):
+            return jsonify({"error": "Invalid request payload."}), 400
 
-        if not message:
-            return jsonify({"error": "Message content is required."}), 400
+        input_fields = get_character_input_fields()
+        trimmed_inputs: Dict[str, str] = {}
+        for field in input_fields:
+            key = field["key"]
+            raw_value = inputs_payload.get(key, "")
+            if raw_value is None:
+                value_text = ""
+            else:
+                value_text = str(raw_value).strip()
+            trimmed_inputs[key] = value_text
+
+        name = trimmed_inputs.get("name", "")
+        role = trimmed_inputs.get("role_in_story", "")
+        if not name or not role:
+            return (
+                jsonify({"error": "Name and role in the story are required."}),
+                422,
+            )
+
+        prompt_inputs = {key: value for key, value in trimmed_inputs.items() if value}
+
+        form_key = _character_form_state_key(project_id, character_id)
+        session[form_key] = trimmed_inputs
+        session.modified = True
 
         character_fields = get_character_fields()
-        history_key = _character_session_key(project_id, character_id)
-        history = session.setdefault(history_key, [])
-
-        history.append({"role": "user", "content": message})
-        session.modified = True
 
         try:
             generator = _get_generator()
         except Exception as exc:  # pragma: no cover - defensive
-            history.pop()
-            session.modified = True
             return (
                 jsonify(
                     {
@@ -361,15 +367,12 @@ def create_app() -> Flask:
                 json_rules,
                 outline_text,
                 character_fields,
-                history,
+                prompt_inputs,
+                input_fields,
             )
         except ValueError as exc:
-            history.pop()
-            session.modified = True
             return jsonify({"error": str(exc)}), 422
         except Exception as exc:  # pragma: no cover - defensive
-            history.pop()
-            session.modified = True
             return (
                 jsonify(
                     {
@@ -381,23 +384,21 @@ def create_app() -> Flask:
             )
 
         _apply_character_profile(character, character_fields, profile_data)
+        character.name = name
+        character.role_in_story = role
         character.updated_at = datetime.utcnow()
         db.session.commit()
 
-        if assistant_reply:
-            history.append({"role": "assistant", "content": assistant_reply})
-            session.modified = True
-
-        character_data = {
-            field["key"]: getattr(character, field["key"])
-            for field in character_fields
-        }
-
         return jsonify(
             {
-                "character_data": character_data,
+                "character": {
+                    "name": character.name,
+                    "role_in_story": character.role_in_story,
+                },
+                "character_outline": profile_data.get("character_outline", ""),
                 "sections": sections,
                 "assistant_reply": assistant_reply,
+                "device_type": generator.get_compute_device(),
                 "message": "Character profile updated from assistant.",
             }
         )
@@ -449,7 +450,8 @@ def _run_character_profile_generation(
     json_rules: str,
     outline_text: str,
     character_fields: Iterable[Dict[str, Any]],
-    history: Iterable[Dict[str, str]],
+    user_inputs: Dict[str, str],
+    input_fields: Iterable[Dict[str, Any]],
 ) -> tuple[Dict[str, str], List[Dict[str, str]], str]:
     """Generate a complete character profile and return structured results."""
 
@@ -459,7 +461,8 @@ def _run_character_profile_generation(
         json_rules,
         outline_text,
         fields,
-        history,
+        user_inputs,
+        list(input_fields),
     )
     response = generator.generate_response(prompt) or ""
     profile_data = _parse_character_json(response, fields)
@@ -489,9 +492,10 @@ def _build_character_json_prompt(
     json_rules: str,
     outline_text: str,
     character_fields: Iterable[Dict[str, Any]],
-    history: Iterable[Dict[str, str]],
+    user_inputs: Dict[str, str],
+    input_fields: Iterable[Dict[str, Any]],
 ) -> str:
-    """Construct a single prompt that enforces JSON output for character fields."""
+    """Construct a prompt that enforces JSON output for the character outline."""
 
     fields = list(character_fields)
     expected_keys = ", ".join(
@@ -507,41 +511,60 @@ def _build_character_json_prompt(
         for field in fields
     ]
 
-    system_parts = [
-        base_prompt.strip(),
-        "Follow these rules exactly:",
-        (
-            "1. Respond exclusively with a single valid JSON object using double quotes and no "
-            "trailing commas."
-        ),
-        (
-            "2. Include exactly these keys in the root object and populate each one: "
-            f"{expected_keys}."
-        ),
-        "3. Do not include Markdown fences, code blocks, or commentary outside the JSON.",
-    ]
-
+    system_parts: List[str] = []
+    if base_prompt.strip():
+        system_parts.append(base_prompt.strip())
     if json_rules.strip():
         system_parts.append(json_rules.strip())
 
     system_parts.extend(
         [
-            f"The story outline so far is: {outline_text}.",
-            "Return JSON that matches this template:",
+            "Follow these rules exactly:",
+            (
+                "1. Respond exclusively with a single valid JSON object using double quotes and no "
+                "trailing commas."
+            ),
+            (
+                "2. Include exactly these keys in the root object and populate each one: "
+                f"{expected_keys}."
+            ),
+            "3. Do not include Markdown fences, code blocks, or commentary outside the JSON.",
+            "4. Limit \"character_outline\" to 100 words or fewer, writing in a vivid third-person voice.",
+            "\nJSON schema template:",
             json_template,
+            "\nGuidance for each field:",
+            *field_guidance_lines,
         ]
     )
 
-    if field_guidance_lines:
-        system_parts.append("Field guidance:")
-        system_parts.extend(field_guidance_lines)
+    user_lines: List[str] = []
+    if outline_text.strip():
+        user_lines.append(f"Project outline: {outline_text.strip()}")
 
-    system_line = "System: " + "\n".join(part for part in system_parts if part)
+    provided_details: List[str] = []
+    for field in input_fields:
+        key = field.get("key")
+        value = user_inputs.get(key, "")
+        if not value:
+            continue
+        label = field.get("label", key)
+        provided_details.append(f"- {label}: {value}")
 
-    prompt_lines: List[str] = [system_line]
-    for message in history:
-        prefix = "User" if message["role"] == "user" else "Assistant"
-        prompt_lines.append(f"{prefix}: {message['content']}")
+    if provided_details:
+        user_lines.append("Character details supplied by the author:")
+        user_lines.extend(provided_details)
+        user_lines.append(
+            "Incorporate every provided detail. Invent any missing aspects so the outline feels cohesive."
+        )
+    else:
+        user_lines.append(
+            "No specific character details were supplied. Invent fitting information that supports the story."
+        )
+
+    user_lines.append("Return only the JSON object and nothing else.")
+
+    prompt_lines: List[str] = ["System: " + "\n".join(system_parts)]
+    prompt_lines.append("User: " + "\n".join(user_lines))
     prompt_lines.append("Assistant:")
     return "\n".join(prompt_lines)
 
@@ -654,12 +677,23 @@ def _apply_character_profile(
         setattr(character, key, value or None)
 
 
+def _compute_device_hint() -> str:
+    """Return a best-effort guess at the compute device available to the model."""
+
+    if torch.cuda.is_available():
+        return "GPU"
+    mps_backend = getattr(torch.backends, "mps", None)
+    if mps_backend is not None and getattr(mps_backend, "is_available", lambda: False)():
+        return "GPU"
+    return "CPU"
+
+
 def _session_key(project_id: int) -> str:
     return f"chat_history_{project_id}"
 
 
-def _character_session_key(project_id: int, character_id: int) -> str:
-    return f"character_chat_{project_id}_{character_id}"
+def _character_form_state_key(project_id: int, character_id: int) -> str:
+    return f"character_form_{project_id}_{character_id}"
 
 
 # Allow ``python chat_interface.py`` to run the development server directly.
