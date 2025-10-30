@@ -32,6 +32,22 @@ SYSTEM_PROMPTS = {
             ),
         },
     },
+    "chapter_outline": {
+        "base": (
+            "You are a creative writing assistant specialising in expanding act-level "
+            "plans into vivid, sequential chapter breakdowns that honour continuity "
+            "and escalate drama."
+        ),
+        "act_focus": (
+            "Concentrate solely on {act_label}. Draw on earlier acts for continuity but do not plan beyond the specified act."
+        ),
+        "chapter_count": (
+            "Outline this act in exactly {chapter_count} chapters, making sure every chapter meaningfully advances the plot and character arcs."
+        ),
+        "format": (
+            "Format the response as a numbered list where each entry reads 'Chapter <number>: <evocative title> — <2-3 sentence summary>'."
+        ),
+    },
     "character_creation": {
         "base": "You are a writing assistant and we want to create a character.",
         "json_format_rules": (

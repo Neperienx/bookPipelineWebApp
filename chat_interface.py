@@ -65,6 +65,10 @@ class Project(db.Model):
     act2_outline = db.Column(db.Text, nullable=True)
     act3_outline = db.Column(db.Text, nullable=True)
     act_final_notes = db.Column(db.Text, nullable=True)
+    act1_chapters = db.Column(db.Text, nullable=True)
+    act2_chapters = db.Column(db.Text, nullable=True)
+    act3_chapters = db.Column(db.Text, nullable=True)
+    chapters_final_notes = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
     characters = db.relationship(
@@ -143,6 +147,10 @@ def _ensure_project_columns() -> None:
         "act2_outline": "ALTER TABLE project ADD COLUMN act2_outline TEXT",
         "act3_outline": "ALTER TABLE project ADD COLUMN act3_outline TEXT",
         "act_final_notes": "ALTER TABLE project ADD COLUMN act_final_notes TEXT",
+        "act1_chapters": "ALTER TABLE project ADD COLUMN act1_chapters TEXT",
+        "act2_chapters": "ALTER TABLE project ADD COLUMN act2_chapters TEXT",
+        "act3_chapters": "ALTER TABLE project ADD COLUMN act3_chapters TEXT",
+        "chapters_final_notes": "ALTER TABLE project ADD COLUMN chapters_final_notes TEXT",
     }
 
     for column_name, statement in column_specs.items():
@@ -211,10 +219,16 @@ def create_app() -> Flask:
         history = session.setdefault(session_key, [])
         act_session_key = _act_session_key(project_id)
         act_history = session.setdefault(act_session_key, [])
+        chapter_session_key = _chapter_session_key(project_id)
+        chapter_history = session.setdefault(chapter_session_key, [])
         error = None
         success = None
         act_error = None
         act_success = None
+        chapter_error = None
+        chapter_success = None
+        chapter_count_default = 10
+        chapter_count_value = chapter_count_default
 
         if request.method == "POST":
             chat_type = request.form.get("chat_type", "outline")
@@ -222,6 +236,8 @@ def create_app() -> Flask:
             if "reset" in request.form:
                 if chat_type == "acts":
                     session.pop(act_session_key, None)
+                elif chat_type == "chapters":
+                    session.pop(chapter_session_key, None)
                 else:
                     session.pop(session_key, None)
                 return redirect(url_for("project_detail", project_id=project_id))
@@ -265,6 +281,62 @@ def create_app() -> Flask:
                     session.modified = True
                 else:
                     act_error = "Please enter a message before sending."
+            elif chat_type == "chapters":
+                chapters_count_raw = request.form.get("chapters_count", "").strip()
+                try:
+                    chapters_per_act = int(
+                        chapters_count_raw or chapter_count_default
+                    )
+                except ValueError:
+                    chapter_error = "Please enter a valid positive number of chapters."
+                    chapters_per_act = chapter_count_default
+                else:
+                    chapter_count_value = chapters_per_act
+
+                if chapter_error is None:
+                    if chapters_per_act <= 0:
+                        chapter_error = "Please enter a valid positive number of chapters."
+                    elif not user_message:
+                        chapter_error = "Please enter a message before sending."
+                    else:
+                        chapter_history.append(
+                            {"role": "user", "content": user_message}
+                        )
+                        try:
+                            generator = _get_generator()
+                            chapter_results = _generate_chapter_outlines(
+                                generator,
+                                project,
+                                user_message,
+                                chapters_per_act,
+                            )
+                        except Exception as exc:  # pragma: no cover - defensive
+                            chapter_error = (
+                                "The local model could not generate the chapter outline: "
+                                f"{exc}"
+                            )
+                            chapter_history.pop()
+                        else:
+                            chapters = [result.strip() for result in chapter_results]
+                            labels = ["Act I", "Act II", "Act III"]
+                            for label, content in zip(labels, chapters):
+                                response_text = (
+                                    f"{label} chapters:\n{content or '(no reply)'}"
+                                )
+                                chapter_history.append(
+                                    {"role": "assistant", "content": response_text}
+                                )
+                            project.chapters_final_notes = user_message
+                            project.act1_chapters = chapters[0] if chapters else ""
+                            project.act2_chapters = (
+                                chapters[1] if len(chapters) > 1 else ""
+                            )
+                            project.act3_chapters = (
+                                chapters[2] if len(chapters) > 2 else ""
+                            )
+                            db.session.commit()
+                            chapter_success = "Chapter-by-chapter outline updated from assistant."
+                        session.modified = True
             else:
                 if user_message:
                     history.append({"role": "user", "content": user_message})
@@ -304,6 +376,10 @@ def create_app() -> Flask:
             act_history=act_history,
             act_error=act_error,
             act_success=act_success,
+            chapter_history=chapter_history,
+            chapter_error=chapter_error,
+            chapter_success=chapter_success,
+            chapter_count_value=chapter_count_value,
         )
 
     @app.route(
@@ -523,6 +599,12 @@ def _act_session_key(project_id: int) -> str:
     return f"act_chat_history_{project_id}"
 
 
+def _chapter_session_key(project_id: int) -> str:
+    """Return the session key used for chapter outline conversations."""
+
+    return f"chapter_chat_history_{project_id}"
+
+
 def _build_prompt(history: Iterable[Dict[str, str]]) -> str:
     """Construct a conversation prompt from the stored history."""
 
@@ -566,6 +648,51 @@ def _generate_three_act_outline(
         response_clean = response.strip()
         results.append(response_clean)
         previous_acts.append((act_number, response_clean))
+
+    while len(results) < 3:
+        results.append("")
+
+    return results[0], results[1], results[2]
+
+
+def _generate_chapter_outlines(
+    generator: TextGenerator,
+    project: Project,
+    final_notes: str,
+    chapters_per_act: int,
+) -> Tuple[str, str, str]:
+    """Generate chapter-by-chapter outlines for each act."""
+
+    if chapters_per_act <= 0:
+        raise ValueError("chapters_per_act must be a positive integer")
+
+    outline_text = (project.outline or "No outline has been provided yet.").strip()
+    character_context = _collect_character_context(project.characters)
+    notes_text = final_notes.strip() or "No additional notes provided."
+
+    act_outlines = [
+        (1, (project.act1_outline or "No outline generated yet.").strip()),
+        (2, (project.act2_outline or "No outline generated yet.").strip()),
+        (3, (project.act3_outline or "No outline generated yet.").strip()),
+    ]
+
+    results: List[str] = []
+    previous_chapters: List[Tuple[int, str]] = []
+
+    for act_number in (1, 2, 3):
+        prompt = _build_chapter_prompt(
+            act_number,
+            outline_text,
+            act_outlines,
+            character_context,
+            notes_text,
+            previous_chapters,
+            chapters_per_act,
+        )
+        response = generator.generate_response(prompt) or ""
+        response_clean = response.strip()
+        results.append(response_clean)
+        previous_chapters.append((act_number, response_clean))
 
     while len(results) < 3:
         results.append("")
@@ -656,6 +783,147 @@ def _build_act_prompt(
                 "one or two sentences that emphasise goals, conflicts, and "
                 "reversals relevant to this act."
             ),
+        ]
+    )
+
+    user_message = "\n".join(user_sections).strip()
+
+    return "\n".join(
+        [
+            f"System: {base_prompt}",
+            "User:",
+            user_message,
+            "Assistant:",
+        ]
+    )
+
+
+def _build_chapter_prompt(
+    act_number: int,
+    outline_text: str,
+    act_outlines: Sequence[Tuple[int, str]],
+    character_context: str,
+    final_notes: str,
+    previous_chapters: Sequence[Tuple[int, str]],
+    chapters_per_act: int,
+) -> str:
+    """Construct a prompt for the requested chapter-by-chapter outline."""
+
+    act_labels = {1: "Act I", 2: "Act II", 3: "Act III"}
+    label = act_labels.get(act_number, f"Act {act_number}")
+
+    config = SYSTEM_PROMPTS.get("chapter_outline", {})
+    base_prompt = config.get(
+        "base",
+        (
+            "You are a creative writing assistant who expands beat outlines into "
+            "detailed, chapter-by-chapter plans while preserving continuity and "
+            "dramatic momentum."
+        ),
+    )
+    format_instructions = config.get(
+        "format",
+        (
+            "Present each chapter as a numbered list entry in the form "
+            "'Chapter <number>: <evocative title> — <2-3 sentence summary>'."
+        ),
+    )
+    focus_instructions = config.get(
+        "act_focus",
+        "Focus exclusively on {act_label}. Reference earlier acts only for continuity and do not plan future acts.",
+    )
+    count_instructions = config.get(
+        "chapter_count",
+        "Outline this act in exactly {chapter_count} chapters, ensuring each advances tension and character arcs.",
+    )
+
+    try:
+        focus_line = focus_instructions.format(act_label=label)
+    except KeyError:
+        focus_line = focus_instructions
+
+    try:
+        count_line = count_instructions.format(
+            chapter_count=chapters_per_act, act_label=label
+        )
+    except KeyError:
+        count_line = count_instructions
+
+    try:
+        format_line = format_instructions.format(
+            chapter_count=chapters_per_act, act_label=label
+        )
+    except KeyError:
+        format_line = format_instructions
+
+    outline_sections: List[str] = []
+    for outline_act_number, outline_text_value in act_outlines:
+        outline_label = act_labels.get(
+            outline_act_number, f"Act {outline_act_number}"
+        )
+        cleaned_outline = outline_text_value.strip() or "(no outline provided)"
+        outline_sections.append(
+            f"{outline_label} outline:\n{cleaned_outline}"
+        )
+
+    if not outline_sections:
+        outline_sections.append("(no act outlines provided)")
+
+    chapter_sections: List[str] = []
+    for chapter_act_number, chapters_text in previous_chapters:
+        chapter_label = act_labels.get(
+            chapter_act_number, f"Act {chapter_act_number}"
+        )
+        cleaned_chapters = chapters_text.strip() or "(no chapters available)"
+        chapter_sections.append(
+            f"{chapter_label} chapters so far:\n{cleaned_chapters}"
+        )
+
+    user_sections: List[str] = [
+        "You are a creative writing assistant working from a complete three-act outline.",
+        f"Your role now is to write a chapter-by-chapter outline of this act: {label}.",
+        f"You will outline this act in {chapters_per_act} chapters.",
+        "",
+        "Story overview:",
+        outline_text or "No broad outline has been provided yet.",
+        "",
+        "Full three-act outline for context:",
+        "\n\n".join(outline_sections),
+        "",
+        f"Focus on {label}. To reinforce the target, the act outline is repeated below:",
+    ]
+
+    current_outline = next(
+        (
+            outline_text_value.strip()
+            for outline_act_number, outline_text_value in act_outlines
+            if outline_act_number == act_number
+        ),
+        "(no outline provided)",
+    )
+    user_sections.append(current_outline or "(no outline provided)")
+
+    user_sections.extend(
+        [
+            "",
+            "Character roster:",
+            character_context or "No character descriptions available.",
+        ]
+    )
+
+    if chapter_sections:
+        user_sections.extend(["", "Previous chapters for continuity:", "\n\n".join(chapter_sections)])
+
+    user_sections.extend(
+        [
+            "",
+            "Author notes for this pass:",
+            final_notes or "No additional notes provided.",
+            "",
+            focus_line,
+            count_line,
+            format_line,
+            "Ensure chapter arcs build naturally from prior acts and prepare the next act where appropriate without jumping ahead.",
         ]
     )
 

@@ -166,6 +166,23 @@
             <button
               class="overview-tile"
               type="button"
+              data-target="chaptersPanel"
+              data-chat-target="chapterChatPanel"
+              aria-controls="chaptersPanel"
+              aria-selected="false"
+            >
+              <h2 class="h6 mb-1">Chapter by chapter</h2>
+              <p>
+                {% if project.act1_chapters or project.act2_chapters or project.act3_chapters %}
+                  Review the generated chapter plans for each act.
+                {% else %}
+                  Break down every act into detailed chapters.
+                {% endif %}
+              </p>
+            </button>
+            <button
+              class="overview-tile"
+              type="button"
               data-target="charactersPanel"
               data-chat-target="outlineChatPanel"
               aria-controls="charactersPanel"
@@ -259,6 +276,36 @@
                   <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act I outline will appear here." readonly></textarea>
                   <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act II outline will appear here." readonly></textarea>
                   <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act III outline will appear here." readonly></textarea>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+          <div class="tile-detail" id="chaptersPanel" role="tabpanel">
+            <div class="outline-content d-flex flex-column gap-3">
+              <div>
+                <h3 class="h6 mb-1">Chapter by chapter outline</h3>
+                <p class="text-secondary mb-0 small">Track the scene-level flow for every act.</p>
+              </div>
+              {% if project.act1_chapters or project.act2_chapters or project.act3_chapters %}
+                <div class="d-flex flex-column gap-3">
+                  <div>
+                    <h4 class="h6 mb-1 text-info">Act I</h4>
+                    <div class="act-outline-box">{{ project.act1_chapters or 'No chapter outline generated yet.' }}</div>
+                  </div>
+                  <div>
+                    <h4 class="h6 mb-1 text-info">Act II</h4>
+                    <div class="act-outline-box">{{ project.act2_chapters or 'No chapter outline generated yet.' }}</div>
+                  </div>
+                  <div>
+                    <h4 class="h6 mb-1 text-info">Act III</h4>
+                    <div class="act-outline-box">{{ project.act3_chapters or 'No chapter outline generated yet.' }}</div>
+                  </div>
+                </div>
+              {% else %}
+                <div class="d-flex flex-column gap-3">
+                  <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act I chapters will appear here." readonly></textarea>
+                  <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act II chapters will appear here." readonly></textarea>
+                  <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act III chapters will appear here." readonly></textarea>
                 </div>
               {% endif %}
             </div>
@@ -362,6 +409,80 @@
               ></textarea>
               <div class="d-flex justify-content-end gap-2">
                 <button type="submit" class="btn btn-primary">Send</button>
+              </div>
+            </form>
+          </div>
+          <div id="chapterChatPanel" class="chat-panel" role="tabpanel" aria-labelledby="chaptersPanel">
+            <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
+              <div>
+                <h2 class="h5 mb-1">Chapter breakdown assistant</h2>
+                <p class="text-secondary mb-0">Transform each act into a chapter-by-chapter roadmap.</p>
+              </div>
+              <form method="post">
+                <input type="hidden" name="chat_type" value="chapters" />
+                <button type="submit" name="reset" value="1" class="btn btn-outline-light btn-sm">Clear chat</button>
+              </form>
+            </div>
+            <div class="chat-messages flex-grow-1 mb-3">
+              {% if chapter_history %}
+                {% for message in chapter_history %}
+                  <div class="message {{ message.role }}">
+                    <strong class="d-block mb-1 text-uppercase small">{{ message.role }}</strong>
+                    <div>{{ message.content }}</div>
+                  </div>
+                {% endfor %}
+              {% else %}
+                <div class="message assistant">
+                  <strong class="d-block mb-1 text-uppercase small">assistant</strong>
+                  <div>Ready to go deeper? Share any final direction before we generate chapter-by-chapter outlines for each act.</div>
+                </div>
+              {% endif %}
+            </div>
+            {% if chapter_error %}
+              <div class="alert alert-danger" role="alert">{{ chapter_error }}</div>
+            {% endif %}
+            {% if chapter_success %}
+              <div class="alert alert-success" role="alert">{{ chapter_success }}</div>
+            {% endif %}
+            <div id="chapterLoadingIndicator" class="loading-indicator" role="status" aria-live="polite">
+              <div class="spinner-border text-info" role="status" aria-hidden="true"></div>
+              <span>Assistant is thinking…</span>
+            </div>
+            <form
+              method="post"
+              id="chapterChatForm"
+              data-chat-form
+              data-loading-target="chapterLoadingIndicator"
+              class="d-flex flex-column gap-3"
+            >
+              <input type="hidden" name="chat_type" value="chapters" />
+              <div class="row g-3">
+                <div class="col-lg-8">
+                  <label for="chapterNotes" class="form-label">Additional guidance</label>
+                  <textarea
+                    class="form-control"
+                    id="chapterNotes"
+                    name="message"
+                    rows="3"
+                    placeholder="Share any last notes before generating chapter outlines."
+                    required
+                  ></textarea>
+                </div>
+                <div class="col-lg-4">
+                  <label for="chaptersCount" class="form-label">Chapters per act</label>
+                  <input
+                    type="number"
+                    class="form-control"
+                    id="chaptersCount"
+                    name="chapters_count"
+                    min="1"
+                    value="{{ chapter_count_value }}"
+                    required
+                  />
+                </div>
+              </div>
+              <div class="d-flex justify-content-end gap-2">
+                <button type="submit" class="btn btn-primary">Generate scene-by-scene outline</button>
               </div>
             </form>
           </div>
