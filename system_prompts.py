@@ -16,9 +16,9 @@ SYSTEM_PROMPTS = {
                 "description": (
                     "Provide the character’s full name and any commonly used nickname(s). "
                     "The name should reflect the character’s cultural background, era, "
-                    "and tone of the story. You should strickly stick to the format 'Name: XYZ, Nickname:ABC'"
+                    "and tone of the story. You should strickly stick to the format 'Name: XYZ Lastname: ABC, Nickname:DEF'"
                 ),
-                "word_count": 5,
+                "word_count": 6,
             },
             {
                 "key": "age",
@@ -33,7 +33,7 @@ SYSTEM_PROMPTS = {
                 "key": "gender_pronouns",
                 "label": "Gender / Pronouns",
                 "description": (
-                    "Specify gender identity and pronouns."
+                    "Specify gender pronouns. For example he his, or she/her"
                     "Your answer should not exceed 5 words"
                 ),
                 "word_count": 4,
