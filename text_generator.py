@@ -54,7 +54,7 @@ class TextGenerator:
         self.top_p = top_p
         self.max_new_tokens = max_new_tokens
         self.seed = seed
-        self.device_map = device_map
+        self.device_map = self._resolve_device_map(device_map)
         self.use_4bit = use_4bit
         self.trust_remote_code = trust_remote_code
 
@@ -87,6 +87,27 @@ class TextGenerator:
         if self.tokenizer.padding_side != "left":
             # Left padding avoids shifting tokens when using attention masks.
             self.tokenizer.padding_side = "left"
+
+    def _resolve_device_map(
+        self, requested_device_map: str | Dict[str, Any] | None
+    ) -> str | Dict[str, Any] | None:
+        """Return a device map favouring GPU execution when available."""
+
+        if requested_device_map not in (None, "auto"):
+            return requested_device_map
+
+        if torch.cuda.is_available():
+            # ``device_map="auto"`` relies on `accelerate` to shard the model.
+            # When the package is missing (a common setup for smaller models)
+            # Transformers silently falls back to CPU.  Default to ``"cuda"``
+            # so a single available GPU is used without additional
+            # dependencies.  Multi-GPU environments still benefit from the
+            # built-in automatic placement.
+            if torch.cuda.device_count() == 1:
+                return "cuda"
+            return "auto"
+
+        return "cpu"
 
     def _build_quantization_config(self) -> Optional[BitsAndBytesConfig]:
         """Return a 4-bit quantisation config when supported.
