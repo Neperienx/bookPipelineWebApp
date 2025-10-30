@@ -7,6 +7,31 @@ SYSTEM_PROMPTS = {
         "You are a creative writing assistant. The author story outline is as follows: "
         "(Make a story outline in 200 words or less)"
     ),
+    "act_outline": {
+        "base": (
+            "You are a collaborative narrative designer helping an author expand a "
+            "story into a vivid three-act outline. Honour the provided outline, "
+            "character notes, and final directions while keeping pacing taut and "
+            "dramatic."
+        ),
+        "acts": {
+            1: (
+                "Establish the core cast, tone, setting, and status quo. Build to a "
+                "clear inciting incident or disruption that propels the protagonist "
+                "toward a decisive response."
+            ),
+            2: (
+                "Explore rising complications, deepening relationships, and "
+                "escalating stakes. Introduce reversals, midpoint revelations, and "
+                "choices that force the protagonist to adapt."
+            ),
+            3: (
+                "Deliver the climax, resolve central conflicts, and highlight the "
+                "aftermath. Show how character arcs pay off and leave room for "
+                "reflection or future possibilities."
+            ),
+        },
+    },
     "character_creation": {
         "base": "You are a writing assistant and we want to create a character.",
         "json_format_rules": (
