@@ -74,6 +74,7 @@ class TextGenerator:
 
         self.model = AutoModelForCausalLM.from_pretrained(model_path, **model_kwargs)
         self.model.eval()
+        self._compute_device_label = self._detect_compute_device()
 
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_path,
@@ -166,6 +167,7 @@ class TextGenerator:
         if torch.cuda.is_available():
             torch.cuda.synchronize()
         _elapsed = time.perf_counter() - t0
+        self._compute_device_label = self._detect_compute_device()
         return enc, out
 
     def _prepare_generation_kwargs(
@@ -247,3 +249,23 @@ class TextGenerator:
             return ""
         response_text = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
         return response_text.strip()
+
+    def _detect_compute_device(self) -> str:
+        """Return a human readable label describing the active compute device."""
+
+        try:
+            parameter = next(self.model.parameters())
+        except StopIteration:  # pragma: no cover - defensive fallback
+            device = getattr(self.model, "device", torch.device("cpu"))
+        else:
+            device = parameter.device
+
+        device_str = str(device).lower()
+        if any(token in device_str for token in ("cuda", "hip", "mps")):
+            return "GPU"
+        return "CPU"
+
+    def get_compute_device(self) -> str:
+        """Expose the last known compute device label."""
+
+        return self._compute_device_label
