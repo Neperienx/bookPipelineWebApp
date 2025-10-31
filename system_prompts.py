@@ -45,7 +45,8 @@ SYSTEM_PROMPTS = {
             "Outline this act in exactly {chapter_count} chapters, making sure every chapter meaningfully advances the plot and character arcs."
         ),
         "format": (
-            "Format the response as a numbered list where each entry reads 'Chapter <number>: <evocative title> — <2-3 sentence summary>'."
+            "Return the chapters as plain text with one chapter per line. Begin each line exactly with 'Chapter <number>:' "
+            "followed by an evocative title, an em dash (—), and a 2-3 sentence summary. Do not include bullets or commentary outside the chapter lines."
         ),
     },
     "character_creation": {
