@@ -11,9 +11,11 @@ Run the application with ``flask --app chat_interface run`` after exporting
 """
 from __future__ import annotations
 
+import logging
 import os
 import json
 import re
+import time
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Sequence, Tuple
 
@@ -34,6 +36,8 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import inspect, text
 
 import torch
+
+LOGGER = logging.getLogger(__name__)
 
 from text_generator import TextGenerator
 from system_prompts import (
@@ -236,9 +240,11 @@ def create_app() -> Flask:
         act_error = None
         act_success = None
         chapter_error = None
+        chapter_warning = None
         chapter_success = None
         chapter_count_default = 10
         chapter_count_value = chapter_count_default
+        chapter_debug_details: List[str] = []
 
         if request.method == "POST":
             chat_type = request.form.get("chat_type", "outline")
@@ -321,7 +327,12 @@ def create_app() -> Flask:
                         )
                         try:
                             generator = _get_generator()
-                            chapter_texts, chapter_structures = _generate_chapter_outlines(
+                            (
+                                chapter_texts,
+                                chapter_structures,
+                                chapter_debug_details,
+                                chapter_all_valid,
+                            ) = _generate_chapter_outlines(
                                 generator,
                                 project,
                                 user_message,
@@ -334,6 +345,9 @@ def create_app() -> Flask:
                             )
                             chapter_history.pop()
                         else:
+                            if chapter_debug_details:
+                                for entry in chapter_debug_details:
+                                    LOGGER.info("Chapter generation debug: %s", entry)
                             device_type = generator.get_compute_device()
                             device_label = _normalise_device_label(device_type)
                             device_sentence = _device_usage_sentence(device_type)
@@ -374,6 +388,11 @@ def create_app() -> Flask:
                                 else None
                             )
                             db.session.commit()
+                            if not chapter_all_valid:
+                                chapter_warning = (
+                                    "Chapter outline generation completed with validation warnings. "
+                                    "Review the debug log below for specifics."
+                                )
                             chapter_success = (
                                 "Chapter-by-chapter outline updated from assistant."
                                 f"{device_sentence}"
@@ -428,8 +447,10 @@ def create_app() -> Flask:
             act_success=act_success,
             chapter_history=chapter_history,
             chapter_error=chapter_error,
+            chapter_warning=chapter_warning,
             chapter_success=chapter_success,
             chapter_count_value=chapter_count_value,
+            chapter_debug_details=chapter_debug_details,
             device_hint=device_hint,
             act_chapter_lists=_collect_project_chapter_lists(project),
         )
@@ -866,7 +887,7 @@ def _generate_single_act_chapters(
     chapters_per_act: int,
     *,
     max_attempts: int = 3,
-) -> Tuple[str, List[Dict[str, Any]]]:
+) -> Tuple[str, List[Dict[str, Any]], List[str], bool]:
     """Run chapter generation with validation and optional retries."""
 
     attempt = 0
@@ -881,17 +902,37 @@ def _generate_single_act_chapters(
     )
     last_response = ""
     last_entries: List[Dict[str, Any]] = []
+    debug_messages: List[str] = []
+    attempt_start_overall = time.perf_counter()
 
     while attempt < max_attempts:
         attempt += 1
+        attempt_start = time.perf_counter()
         response = generator.generate_response(prompt) or ""
+        duration = time.perf_counter() - attempt_start
         response_clean = response.strip()
         is_valid, entries, error_message = _validate_chapter_outline(
             response_clean, chapters_per_act
         )
+        chapter_count = len(entries)
+        character_count = len(response_clean)
         if is_valid:
             formatted_text = _render_chapter_entries(entries)
-            return formatted_text, entries
+            success_message = (
+                f"Act {act_number} attempt {attempt} succeeded in {duration:.2f}s "
+                f"with {chapter_count} chapters (characters={character_count})."
+            )
+            LOGGER.info(success_message)
+            debug_messages.append(success_message)
+            return formatted_text, entries, debug_messages, True
+
+        error_detail = error_message or "unknown validation error"
+        failure_message = (
+            f"Act {act_number} attempt {attempt} failed validation in {duration:.2f}s: "
+            f"{error_detail} (chapters={chapter_count}, characters={character_count})."
+        )
+        LOGGER.warning(failure_message)
+        debug_messages.append(failure_message)
 
         last_response = response_clean
         last_entries = entries
@@ -905,16 +946,23 @@ def _generate_single_act_chapters(
             chapters_per_act,
             feedback=(
                 "The format validator rejected the last draft: "
-                f"{error_message}. Produce a fresh list that follows every instruction."
+                f"{error_detail}. Produce a fresh list that follows every instruction."
             ),
             previous_response=last_response,
         )
 
+    elapsed = time.perf_counter() - attempt_start_overall
     if last_entries:
         formatted_text = _render_chapter_entries(last_entries)
     else:
         formatted_text = last_response
-    return formatted_text, last_entries
+    fallback_message = (
+        f"Act {act_number} exhausted {max_attempts} attempts in {elapsed:.2f}s. "
+        "Returning the last draft without a successful validation pass."
+    )
+    LOGGER.error(fallback_message)
+    debug_messages.append(fallback_message)
+    return formatted_text, last_entries, debug_messages, False
 
 
 def _build_prompt(history: Iterable[Dict[str, str]]) -> str:
@@ -972,7 +1020,7 @@ def _generate_chapter_outlines(
     project: Project,
     final_notes: str,
     chapters_per_act: int,
-) -> Tuple[List[str], List[List[Dict[str, Any]]]]:
+) -> Tuple[List[str], List[List[Dict[str, Any]]], List[str], bool]:
     """Generate chapter-by-chapter outlines for each act."""
 
     if chapters_per_act <= 0:
@@ -991,9 +1039,16 @@ def _generate_chapter_outlines(
     results: List[str] = []
     structured_results: List[List[Dict[str, Any]]] = []
     previous_chapters: List[Tuple[int, str]] = []
+    debug_entries: List[str] = []
+    all_valid = True
 
     for act_number in (1, 2, 3):
-        formatted_text, entries = _generate_single_act_chapters(
+        (
+            formatted_text,
+            entries,
+            act_debug_entries,
+            act_valid,
+        ) = _generate_single_act_chapters(
             generator,
             act_number,
             outline_text,
@@ -1007,12 +1062,25 @@ def _generate_chapter_outlines(
         serialised_entries = _serialise_chapter_entries(entries)
         structured_results.append(serialised_entries)
         previous_chapters.append((act_number, formatted_text.strip()))
+        debug_entries.extend(act_debug_entries)
+        if not act_valid:
+            all_valid = False
 
     while len(results) < 3:
         results.append("")
         structured_results.append([])
 
-    return results, structured_results
+    if all_valid:
+        summary = "All acts passed validation without issues."
+        LOGGER.info("Chapter generation summary: %s", summary)
+    else:
+        summary = (
+            "One or more acts failed validation; the latest draft was returned for review."
+        )
+        LOGGER.warning("Chapter generation summary: %s", summary)
+    debug_entries.append(summary)
+
+    return results, structured_results, debug_entries, all_valid
 
 
 def _collect_character_context(characters: Iterable["Character"]) -> str:
