@@ -476,8 +476,24 @@
             {% if chapter_error %}
               <div class="alert alert-danger" role="alert">{{ chapter_error }}</div>
             {% endif %}
+            {% if chapter_warning %}
+              <div class="alert alert-warning" role="alert">{{ chapter_warning }}</div>
+            {% endif %}
             {% if chapter_success %}
               <div class="alert alert-success" role="alert">{{ chapter_success }}</div>
+            {% endif %}
+            {% if chapter_debug_details %}
+              <div class="alert alert-info" role="alert">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <strong class="text-uppercase small mb-0">Debug log</strong>
+                  <span class="badge bg-dark text-light">Chapter generation</span>
+                </div>
+                <ul class="mb-0 small" style="max-height: 200px; overflow-y: auto;">
+                  {% for entry in chapter_debug_details %}
+                    <li><code>{{ entry }}</code></li>
+                  {% endfor %}
+                </ul>
+              </div>
             {% endif %}
             <div id="chapterLoadingIndicator" class="loading-indicator" role="status" aria-live="polite">
               <div class="spinner-border text-info" role="status" aria-hidden="true"></div>
