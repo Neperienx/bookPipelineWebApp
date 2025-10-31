@@ -300,19 +300,32 @@
                 </p>
               </div>
               {% if project.act1_chapters or project.act2_chapters or project.act3_chapters %}
+                {% set act_data = [
+                  (1, 'Act I', project.act1_chapters),
+                  (2, 'Act II', project.act2_chapters),
+                  (3, 'Act III', project.act3_chapters)
+                ] %}
                 <div class="d-flex flex-column gap-3">
-                  <div>
-                    <h4 class="h6 mb-1 text-info">Act I</h4>
-                    <div class="act-outline-box">{{ project.act1_chapters or 'No chapter outline generated yet.' }}</div>
-                  </div>
-                  <div>
-                    <h4 class="h6 mb-1 text-info">Act II</h4>
-                    <div class="act-outline-box">{{ project.act2_chapters or 'No chapter outline generated yet.' }}</div>
-                  </div>
-                  <div>
-                    <h4 class="h6 mb-1 text-info">Act III</h4>
-                    <div class="act-outline-box">{{ project.act3_chapters or 'No chapter outline generated yet.' }}</div>
-                  </div>
+                  {% for act_number, act_label, fallback_text in act_data %}
+                    {% set chapters = act_chapter_lists.get(act_number) %}
+                    <div>
+                      <h4 class="h6 mb-1 text-info">{{ act_label }}</h4>
+                      {% if chapters %}
+                        <div class="act-outline-box">
+                          <ol class="chapter-list mb-0 ps-3">
+                            {% for chapter in chapters %}
+                              <li class="mb-2">
+                                <div class="fw-semibold">Chapter {{ chapter.number }}: {{ chapter.title }}</div>
+                                <div class="text-body-secondary">{{ chapter.summary }}</div>
+                              </li>
+                            {% endfor %}
+                          </ol>
+                        </div>
+                      {% else %}
+                        <div class="act-outline-box">{{ fallback_text or 'No chapter outline generated yet.' }}</div>
+                      {% endif %}
+                    </div>
+                  {% endfor %}
                 </div>
               {% else %}
                 <div class="d-flex flex-column gap-3">

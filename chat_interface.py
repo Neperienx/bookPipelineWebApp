@@ -55,6 +55,10 @@ _generator: TextGenerator | None = None
 db = SQLAlchemy()
 
 
+_CHAPTER_HEADING_PATTERN = re.compile(r"^\s*Chapter\s+(\d+)\s*:\s*(.*)$", re.IGNORECASE)
+_TITLE_SPLIT_PATTERN = re.compile(r"\s*[—–-]\s*")
+
+
 class Project(db.Model):
     """Story project persisted in the local SQLite database."""
 
@@ -69,6 +73,9 @@ class Project(db.Model):
     act2_chapters = db.Column(db.Text, nullable=True)
     act3_chapters = db.Column(db.Text, nullable=True)
     chapters_final_notes = db.Column(db.Text, nullable=True)
+    act1_chapter_list = db.Column(db.Text, nullable=True)
+    act2_chapter_list = db.Column(db.Text, nullable=True)
+    act3_chapter_list = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
     characters = db.relationship(
@@ -151,6 +158,9 @@ def _ensure_project_columns() -> None:
         "act2_chapters": "ALTER TABLE project ADD COLUMN act2_chapters TEXT",
         "act3_chapters": "ALTER TABLE project ADD COLUMN act3_chapters TEXT",
         "chapters_final_notes": "ALTER TABLE project ADD COLUMN chapters_final_notes TEXT",
+        "act1_chapter_list": "ALTER TABLE project ADD COLUMN act1_chapter_list TEXT",
+        "act2_chapter_list": "ALTER TABLE project ADD COLUMN act2_chapter_list TEXT",
+        "act3_chapter_list": "ALTER TABLE project ADD COLUMN act3_chapter_list TEXT",
     }
 
     for column_name, statement in column_specs.items():
@@ -311,7 +321,7 @@ def create_app() -> Flask:
                         )
                         try:
                             generator = _get_generator()
-                            chapter_results = _generate_chapter_outlines(
+                            chapter_texts, chapter_structures = _generate_chapter_outlines(
                                 generator,
                                 project,
                                 user_message,
@@ -327,7 +337,7 @@ def create_app() -> Flask:
                             device_type = generator.get_compute_device()
                             device_label = _normalise_device_label(device_type)
                             device_sentence = _device_usage_sentence(device_type)
-                            chapters = [result.strip() for result in chapter_results]
+                            chapters = [result.strip() for result in chapter_texts]
                             labels = ["Act I", "Act II", "Act III"]
                             for label, content in zip(labels, chapters):
                                 response_text = (
@@ -347,6 +357,21 @@ def create_app() -> Flask:
                             )
                             project.act3_chapters = (
                                 chapters[2] if len(chapters) > 2 else ""
+                            )
+                            project.act1_chapter_list = (
+                                json.dumps(chapter_structures[0], ensure_ascii=False)
+                                if chapter_structures and len(chapter_structures) > 0
+                                else None
+                            )
+                            project.act2_chapter_list = (
+                                json.dumps(chapter_structures[1], ensure_ascii=False)
+                                if chapter_structures and len(chapter_structures) > 1
+                                else None
+                            )
+                            project.act3_chapter_list = (
+                                json.dumps(chapter_structures[2], ensure_ascii=False)
+                                if chapter_structures and len(chapter_structures) > 2
+                                else None
                             )
                             db.session.commit()
                             chapter_success = (
@@ -406,6 +431,7 @@ def create_app() -> Flask:
             chapter_success=chapter_success,
             chapter_count_value=chapter_count_value,
             device_hint=device_hint,
+            act_chapter_lists=_collect_project_chapter_lists(project),
         )
 
     @app.route(
@@ -631,6 +657,266 @@ def _chapter_session_key(project_id: int) -> str:
     return f"chapter_chat_history_{project_id}"
 
 
+def _normalise_whitespace(value: str) -> str:
+    """Collapse excessive whitespace in generated text."""
+
+    return re.sub(r"\s+", " ", value or "").strip()
+
+
+def _extract_title_summary(raw_content: str) -> Tuple[str, str]:
+    """Split a chapter line into title and summary parts."""
+
+    if not raw_content:
+        return "", ""
+
+    parts = _TITLE_SPLIT_PATTERN.split(raw_content, maxsplit=1)
+    if len(parts) == 2:
+        title, summary = parts
+        return title.strip(), summary.strip()
+
+    cleaned = raw_content.strip()
+    return cleaned, ""
+
+
+def _parse_chapter_entries(text: str) -> List[Dict[str, Any]]:
+    """Return structured chapter entries parsed from ``text``."""
+
+    entries: List[Dict[str, Any]] = []
+    if not text:
+        return entries
+
+    current: Dict[str, Any] | None = None
+    for line in text.splitlines():
+        match = _CHAPTER_HEADING_PATTERN.match(line)
+        if match:
+            if current is not None:
+                current["raw"] = _normalise_whitespace(current.get("raw", ""))
+                title, summary = _extract_title_summary(current.get("raw", ""))
+                current["title"] = title
+                current["summary"] = summary
+                entries.append(current)
+
+            number = int(match.group(1))
+            remainder = match.group(2).strip()
+            current = {
+                "number": number,
+                "raw": remainder,
+            }
+            continue
+
+        if current is None:
+            continue
+
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        raw_value = current.get("raw", "")
+        if raw_value:
+            raw_value = f"{raw_value} {stripped}"
+        else:
+            raw_value = stripped
+        current["raw"] = raw_value
+
+    if current is not None:
+        current["raw"] = _normalise_whitespace(current.get("raw", ""))
+        title, summary = _extract_title_summary(current.get("raw", ""))
+        current["title"] = title
+        current["summary"] = summary
+        entries.append(current)
+
+    return entries
+
+
+def _serialise_chapter_entries(entries: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Reduce parsed entries to JSON serialisable dictionaries."""
+
+    serialised: List[Dict[str, Any]] = []
+    for entry in entries:
+        number = int(entry.get("number", 0) or 0)
+        title = _normalise_whitespace(str(entry.get("title", "")))
+        summary = _normalise_whitespace(str(entry.get("summary", "")))
+        serialised.append(
+            {
+                "number": number,
+                "title": title,
+                "summary": summary,
+            }
+        )
+    return serialised
+
+
+def _render_chapter_entries(entries: Sequence[Dict[str, Any]]) -> str:
+    """Format structured entries back into canonical chapter text."""
+
+    lines: List[str] = []
+    for entry in entries:
+        number = entry.get("number")
+        try:
+            number_int = int(number)
+        except (TypeError, ValueError):
+            continue
+
+        title = entry.get("title", "").strip()
+        summary = entry.get("summary", "").strip()
+        if summary:
+            line = f"Chapter {number_int}: {title} — {summary}".strip()
+        else:
+            line = f"Chapter {number_int}: {title}".strip()
+        lines.append(line)
+
+    return "\n".join(lines).strip()
+
+
+def _validate_chapter_outline(
+    response: str, expected_count: int
+) -> Tuple[bool, List[Dict[str, Any]], str]:
+    """Return whether ``response`` matches the required chapter format."""
+
+    entries = _parse_chapter_entries(response)
+    if len(entries) != expected_count:
+        return (
+            False,
+            entries,
+            f"expected {expected_count} chapters but found {len(entries)}",
+        )
+
+    seen_numbers: set[int] = set()
+    for index, entry in enumerate(entries, start=1):
+        number = int(entry.get("number", 0) or 0)
+        if number in seen_numbers:
+            return False, entries, f"chapter number {number} is duplicated"
+        seen_numbers.add(number)
+        if number != index:
+            return (
+                False,
+                entries,
+                f"chapter numbers must increase sequentially starting at 1 (found {number} at position {index})",
+            )
+        title = entry.get("title", "").strip()
+        summary = entry.get("summary", "").strip()
+        if not title or not summary:
+            return (
+                False,
+                entries,
+                "each chapter needs a title and a 2-3 sentence summary separated by a dash",
+            )
+
+    return True, entries, ""
+
+
+def _load_chapter_list(
+    serialised: str | None, fallback_text: str | None
+) -> List[Dict[str, Any]]:
+    """Deserialize stored chapter entries with parsing fallback."""
+
+    if serialised:
+        try:
+            data = json.loads(serialised)
+        except (TypeError, json.JSONDecodeError):
+            data = None
+        if isinstance(data, list):
+            cleaned: List[Dict[str, Any]] = []
+            for entry in data:
+                if not isinstance(entry, dict):
+                    continue
+                number = entry.get("number")
+                title = entry.get("title", "")
+                summary = entry.get("summary", "")
+                try:
+                    number_int = int(number)
+                except (TypeError, ValueError):
+                    continue
+                cleaned.append(
+                    {
+                        "number": number_int,
+                        "title": str(title).strip(),
+                        "summary": str(summary).strip(),
+                    }
+                )
+            if cleaned:
+                return cleaned
+
+    if fallback_text:
+        parsed = _parse_chapter_entries(fallback_text)
+        if parsed:
+            return _serialise_chapter_entries(parsed)
+
+    return []
+
+
+def _collect_project_chapter_lists(project: Project) -> Dict[int, List[Dict[str, Any]]]:
+    """Return per-act chapter lists for template rendering."""
+
+    return {
+        1: _load_chapter_list(project.act1_chapter_list, project.act1_chapters),
+        2: _load_chapter_list(project.act2_chapter_list, project.act2_chapters),
+        3: _load_chapter_list(project.act3_chapter_list, project.act3_chapters),
+    }
+
+
+def _generate_single_act_chapters(
+    generator: TextGenerator,
+    act_number: int,
+    outline_text: str,
+    act_outlines: Sequence[Tuple[int, str]],
+    character_context: str,
+    final_notes: str,
+    previous_chapters: Sequence[Tuple[int, str]],
+    chapters_per_act: int,
+    *,
+    max_attempts: int = 3,
+) -> Tuple[str, List[Dict[str, Any]]]:
+    """Run chapter generation with validation and optional retries."""
+
+    attempt = 0
+    prompt = _build_chapter_prompt(
+        act_number,
+        outline_text,
+        act_outlines,
+        character_context,
+        final_notes,
+        previous_chapters,
+        chapters_per_act,
+    )
+    last_response = ""
+    last_entries: List[Dict[str, Any]] = []
+
+    while attempt < max_attempts:
+        attempt += 1
+        response = generator.generate_response(prompt) or ""
+        response_clean = response.strip()
+        is_valid, entries, error_message = _validate_chapter_outline(
+            response_clean, chapters_per_act
+        )
+        if is_valid:
+            formatted_text = _render_chapter_entries(entries)
+            return formatted_text, entries
+
+        last_response = response_clean
+        last_entries = entries
+        prompt = _build_chapter_prompt(
+            act_number,
+            outline_text,
+            act_outlines,
+            character_context,
+            final_notes,
+            previous_chapters,
+            chapters_per_act,
+            feedback=(
+                "The format validator rejected the last draft: "
+                f"{error_message}. Produce a fresh list that follows every instruction."
+            ),
+            previous_response=last_response,
+        )
+
+    if last_entries:
+        formatted_text = _render_chapter_entries(last_entries)
+    else:
+        formatted_text = last_response
+    return formatted_text, last_entries
+
+
 def _build_prompt(history: Iterable[Dict[str, str]]) -> str:
     """Construct a conversation prompt from the stored history."""
 
@@ -686,7 +972,7 @@ def _generate_chapter_outlines(
     project: Project,
     final_notes: str,
     chapters_per_act: int,
-) -> Tuple[str, str, str]:
+) -> Tuple[List[str], List[List[Dict[str, Any]]]]:
     """Generate chapter-by-chapter outlines for each act."""
 
     if chapters_per_act <= 0:
@@ -703,10 +989,12 @@ def _generate_chapter_outlines(
     ]
 
     results: List[str] = []
+    structured_results: List[List[Dict[str, Any]]] = []
     previous_chapters: List[Tuple[int, str]] = []
 
     for act_number in (1, 2, 3):
-        prompt = _build_chapter_prompt(
+        formatted_text, entries = _generate_single_act_chapters(
+            generator,
             act_number,
             outline_text,
             act_outlines,
@@ -715,15 +1003,16 @@ def _generate_chapter_outlines(
             previous_chapters,
             chapters_per_act,
         )
-        response = generator.generate_response(prompt) or ""
-        response_clean = response.strip()
-        results.append(response_clean)
-        previous_chapters.append((act_number, response_clean))
+        results.append(formatted_text.strip())
+        serialised_entries = _serialise_chapter_entries(entries)
+        structured_results.append(serialised_entries)
+        previous_chapters.append((act_number, formatted_text.strip()))
 
     while len(results) < 3:
         results.append("")
+        structured_results.append([])
 
-    return results[0], results[1], results[2]
+    return results, structured_results
 
 
 def _collect_character_context(characters: Iterable["Character"]) -> str:
@@ -832,6 +1121,8 @@ def _build_chapter_prompt(
     final_notes: str,
     previous_chapters: Sequence[Tuple[int, str]],
     chapters_per_act: int,
+    feedback: str | None = None,
+    previous_response: str | None = None,
 ) -> str:
     """Construct a prompt for the requested chapter-by-chapter outline."""
 
@@ -950,8 +1241,37 @@ def _build_chapter_prompt(
             count_line,
             format_line,
             "Ensure chapter arcs build naturally from prior acts and prepare the next act where appropriate without jumping ahead.",
+            "",
+            "Formatting requirements:",
+            "- Each chapter must appear on its own line with no leading bullets or numbering other than the required label.",
+            "- Begin every line exactly with 'Chapter <number>:' (for example, 'Chapter 1:').",
+            "- After the colon, include an evocative chapter title, then an em dash (—) or hyphen, followed by a 2-3 sentence summary.",
+            "- Do not add commentary or sections before or after the chapter list.",
         ]
     )
+
+    if feedback:
+        user_sections.extend(
+            [
+                "",
+                "Format validator feedback:",
+                feedback.strip(),
+            ]
+        )
+        if previous_response:
+            user_sections.extend(
+                [
+                    "",
+                    "Previous invalid response (for reference only):",
+                    previous_response.strip(),
+                ]
+            )
+        user_sections.extend(
+            [
+                "",
+                "Regenerate the complete chapter list now, strictly following every rule above without mentioning this instruction.",
+            ]
+        )
 
     user_message = "\n".join(user_sections).strip()
 
