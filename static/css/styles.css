@@ -779,6 +779,57 @@ footer {
   min-height: 120px;
 }
 
+.concept-results {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.concept-entry {
+  background: var(--surface-soft);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 1.1rem 1.25rem;
+  transition: border-color 180ms var(--transition), transform 180ms var(--transition);
+}
+
+.concept-entry:hover,
+.concept-entry:focus-within {
+  border-color: var(--stroke-strong);
+  transform: translateY(-2px);
+}
+
+.concept-issue {
+  font-style: italic;
+}
+
+.concept-examples {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--text-muted);
+}
+
+.concept-examples li {
+  margin-bottom: 0.35rem;
+}
+
+.concept-examples li:last-child {
+  margin-bottom: 0;
+}
+
+.concept-empty {
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: var(--radius-md);
+  padding: 1.6rem 1.4rem;
+  background: rgba(17, 30, 54, 0.35);
+  text-align: center;
+}
+
+.concept-empty-inner {
+  max-width: 420px;
+  margin: 0 auto;
+}
+
 @media (max-width: 991.98px) {
   .navbar {
     border-bottom: none;

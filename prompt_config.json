@@ -35,6 +35,24 @@
       "top_p": 0.9
     }
   },
+  "concept_outline_review": {
+    "display_name": "Outline concept review",
+    "prompt_template": "You are an editorial analyst reviewing a story outline for vague concepts. Examine the outline for the project \"{project_title}\" and list any concepts, technologies, rituals, organisations, or thematic ideas that are mentioned but remain undefined or ambiguous. Only reference elements that actually appear in the outline text. Respond in JSON with this exact structure: {\"concepts\": [{\"name\": string, \"issue\": string describing why the concept is unclear}]}. Do not include commentary outside the JSON block.\n\nOutline:\n{outline}",
+    "parameters": {
+      "max_new_tokens": 420,
+      "temperature": 0.6,
+      "top_p": 0.9
+    }
+  },
+  "concept_definition_pass": {
+    "display_name": "Concept definition pass",
+    "prompt_template": "You are a narrative systems designer clarifying fuzzy concepts for the project \"{project_title}\". Using the outline and the flagged concepts below, produce precise definitions that a writer could drop into worldbuilding notes. For each concept supply a short definition (2-3 sentences) and up to three concrete examples showing how it might appear in scenes. Return only JSON following this schema: {\"concepts\": [{\"name\": string, \"definition\": string, \"examples\": [string, ...]}]}. Avoid additional commentary or markdown.\n\nOutline:\n{outline}\n\nConcepts needing clarification:\n{concept_list}",
+    "parameters": {
+      "max_new_tokens": 620,
+      "temperature": 0.65,
+      "top_p": 0.9
+    }
+  },
   "character_autofill": {
     "display_name": "Character roster autofill",
     "prompt_template": "You are the Logal LLM drafting detailed character records for the project database. Using the notes below, generate JSON matching this schema: {{\"characters\": [{{\"name\": string, \"role\": string, \"background\": string, \"goals\": string, \"conflict\": string, \"notes\": string}}]}}. Provide at least three characters (protagonist, opposition, key ally) and optionally one wildcard. Each string should be concise but specific to the supplied concept. Avoid commentary or markdown — return valid JSON only.\n\nProject title: {project_title}\nWriter notes: {user_prompt}",

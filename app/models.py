@@ -77,6 +77,13 @@ class Project(db.Model):
         cascade="all, delete-orphan",
         order_by="ProjectStage.stage",
     )
+    concepts = db.relationship(
+        "ConceptDefinition",
+        backref="project",
+        lazy=True,
+        cascade="all, delete-orphan",
+        order_by="ConceptDefinition.name",
+    )
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Project {self.title} ({self.status})>"
@@ -153,3 +160,27 @@ class ProjectStage(db.Model):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<ProjectStage {self.stage} for project {self.project_id}>"
+
+
+class ConceptDefinition(db.Model):
+    __tablename__ = "concept_definitions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("projects.id"), nullable=False, index=True)
+    outline_id = db.Column(db.Integer, db.ForeignKey("outline_drafts.id"), nullable=True, index=True)
+    name = db.Column(db.String(150), nullable=False)
+    clarity_issue = db.Column(db.Text, nullable=True)
+    definition = db.Column(db.Text, nullable=False)
+    examples = db.Column(db.Text, nullable=True)
+    used_fallback = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<ConceptDefinition {self.name} (project {self.project_id})>"
+
+    @property
+    def examples_list(self) -> list[str]:
+        if not self.examples:
+            return []
+        return [item.strip() for item in self.examples.splitlines() if item.strip()]
