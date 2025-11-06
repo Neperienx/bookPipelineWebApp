@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from flask import (
     abort,
     current_app,
@@ -11,10 +13,21 @@ from flask import (
 from flask_login import current_user, login_required
 
 from ..extensions import db
-from ..models import ActOutline, CharacterProfile, OutlineDraft, Project, ProjectStage
+from ..models import (
+    ActOutline,
+    CharacterProfile,
+    ConceptDefinition,
+    OutlineDraft,
+    Project,
+    ProjectStage,
+)
 from ..services.autofill import (
     CharacterProfileSuggestionError,
     draft_character_profile,
+)
+from ..services.concept_analysis import (
+    ConceptClarificationError,
+    clarify_outline_concepts,
 )
 from ..services.stage_generation import StageGenerationError, generate_stage_content
 from ..services.story_outline import OutlineGenerationError, generate_story_outline
@@ -276,6 +289,26 @@ def detail(project_id: int):
         .order_by(CharacterProfile.name.asc())
         .all()
     )
+    concepts = (
+        ConceptDefinition.query.filter_by(project_id=project.id)
+        .order_by(ConceptDefinition.name.asc())
+        .all()
+    )
+
+    concept_outline_id = concepts[0].outline_id if concepts else None
+    concept_used_fallback = concepts[0].used_fallback if concepts else False
+    concept_client_entries = [
+        {
+            "id": concept.id,
+            "name": concept.name,
+            "definition": concept.definition,
+            "examples": concept.examples_list,
+            "issue": concept.clarity_issue or "",
+            "outline_id": concept.outline_id,
+            "used_fallback": concept.used_fallback,
+        }
+        for concept in concepts
+    ]
 
     selected_outline = None
     selected_act = None
@@ -376,6 +409,7 @@ def detail(project_id: int):
         outlines=outlines,
         acts=acts,
         characters=characters,
+        concepts=concepts,
         selected_outline=selected_outline,
         selected_act=selected_act,
         selected_character=selected_character,
@@ -383,6 +417,80 @@ def detail(project_id: int):
         stage_generation_steps=STAGE_GENERATION_STEPS,
         stage_client_config=stage_client_config,
         stage_client_entries=stage_client_entries,
+        concept_outline_id=concept_outline_id,
+        concept_client_entries=concept_client_entries,
+        concept_used_fallback=concept_used_fallback,
+    )
+
+
+@bp.route("/<int:project_id>/concepts", methods=["POST"])
+@login_required
+def generate_concepts(project_id: int):
+    project = Project.query.get_or_404(project_id)
+    if project.owner != current_user:
+        abort(403)
+
+    payload = request.get_json(silent=True) or {}
+    outline_id_raw = payload.get("outline_id")
+    try:
+        outline_id = int(outline_id_raw)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Select a valid outline to analyse."}), 400
+
+    outline = OutlineDraft.query.filter_by(id=outline_id, project_id=project.id).first()
+    if not outline:
+        return jsonify({"error": "We couldn't find the selected outline."}), 404
+
+    outline_content = (outline.content or "").strip()
+    if not outline_content:
+        return jsonify({"error": "The selected outline is empty."}), 400
+
+    try:
+        result = clarify_outline_concepts(outline_content, project_title=project.title)
+    except ConceptClarificationError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception:  # pragma: no cover - defensive logging
+        current_app.logger.exception("Unexpected error during concept clarification")
+        return jsonify({"error": "We couldn't clarify concepts right now. Please try again."}), 500
+
+    ConceptDefinition.query.filter_by(project_id=project.id).delete(synchronize_session=False)
+
+    concept_models: list[ConceptDefinition] = []
+    for concept in result.concepts:
+        entry = ConceptDefinition(
+            project=project,
+            outline_id=outline.id,
+            name=concept.name,
+            clarity_issue=concept.issue or None,
+            definition=concept.definition,
+            examples="\n".join(concept.examples),
+            used_fallback=result.used_fallback,
+        )
+        db.session.add(entry)
+        concept_models.append(entry)
+
+    db.session.commit()
+
+    response_concepts = [
+        {
+            "id": concept.id,
+            "name": concept.name,
+            "definition": concept.definition,
+            "examples": concept.examples_list,
+            "issue": concept.clarity_issue or "",
+            "outline_id": concept.outline_id,
+            "used_fallback": concept.used_fallback,
+        }
+        for concept in concept_models
+    ]
+
+    return jsonify(
+        {
+            "concepts": response_concepts,
+            "outline_id": outline.id,
+            "outline_title": outline.title,
+            "used_fallback": result.used_fallback,
+        }
     )
 
 

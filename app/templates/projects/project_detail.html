@@ -130,6 +130,89 @@
             <div class="stage-output" id="stageOutput">Run a generation to see results here.</div>
           </div>
         </div>
+    </div>
+  </div>
+
+    {% set active_concept_outline = concept_outline_id or (selected_outline.id if selected_outline else None) %}
+    {% set concept_source_outline = (outlines | selectattr('id', 'equalto', concept_outline_id) | list | first) %}
+    <div
+      class="card frosted-card border-0 shadow-sm mb-4"
+      data-concept-workspace
+      data-concept-endpoint="{{ url_for('projects.generate_concepts', project_id=project.id) }}"
+      data-concept-outline="{{ (concept_outline_id or '') }}"
+      data-concept-concepts='{{ concept_client_entries | tojson }}'
+      data-concept-used-fallback="{{ 'true' if concept_used_fallback else 'false' }}"
+    >
+      <div class="card-body">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+          <div>
+            <h2 class="h6 text-white text-uppercase mb-1">Concept clarifications</h2>
+            <p class="text-white-50 small mb-0">
+              Surface ambiguous ideas from the outline and capture crisp definitions with concrete examples.
+            </p>
+          </div>
+          <div class="d-flex flex-wrap gap-2">
+            <button class="btn btn-outline-light btn-sm rounded-pill" type="button" data-concept-refresh>
+              Clarify concepts
+            </button>
+          </div>
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label text-white fw-semibold" for="conceptOutlineSelect">Outline source</label>
+          <select class="form-select" id="conceptOutlineSelect" data-concept-outline>
+            <option value="" {% if not active_concept_outline %}selected{% endif %}>Select an outline…</option>
+            {% for outline in outlines %}
+            <option value="{{ outline.id }}" {% if active_concept_outline == outline.id %}selected{% endif %}>
+              {{ outline.title }}
+            </option>
+            {% endfor %}
+          </select>
+          <div class="text-white-50 small mt-2" data-concept-status>
+            {% if concepts %}
+            {% set concept_count = concepts | length %}
+            Clarified {{ concept_count }} concept{{ '' if concept_count == 1 else 's' }}{% if concept_source_outline %}
+              from &ldquo;{{ concept_source_outline.title }}&rdquo;{% endif %}. Generate again to refresh.
+            {% else %}
+            Pick an outline to review and clarify its concepts.
+            {% endif %}
+          </div>
+          <div class="text-warning small mt-2 {% if not concept_used_fallback %}d-none{% endif %}" data-concept-fallback>
+            Latest concepts used the fallback generator. Review and adjust the details before saving.
+          </div>
+        </div>
+
+        <div class="concept-results">
+          <div class="concept-empty {% if concepts %}d-none{% endif %}" data-concept-empty>
+            <div class="concept-empty-inner">
+              <h3 class="h6 text-white mb-1">No concept clarifications yet</h3>
+              <p class="text-white-50 small mb-0">Choose an outline and run the assistant to define fuzzy ideas.</p>
+            </div>
+          </div>
+          <div class="concept-list" data-concept-list>
+            {% for concept in concepts %}
+            <article class="concept-entry">
+              <div class="d-flex justify-content-between align-items-start mb-2">
+                <h3 class="h6 text-white mb-0">{{ concept.name }}</h3>
+                {% if concept.clarity_issue %}
+                <span class="badge rounded-pill bg-dark-subtle text-white-50 small">Needs clarity</span>
+                {% endif %}
+              </div>
+              {% if concept.clarity_issue %}
+              <p class="text-white-50 small mb-2 concept-issue">{{ concept.clarity_issue }}</p>
+              {% endif %}
+              <p class="text-white-50 mb-2">{{ concept.definition }}</p>
+              {% if concept.examples_list %}
+              <ul class="concept-examples">
+                {% for example in concept.examples_list %}
+                <li>{{ example }}</li>
+                {% endfor %}
+              </ul>
+              {% endif %}
+            </article>
+            {% endfor %}
+          </div>
+        </div>
       </div>
     </div>
 
@@ -588,6 +671,303 @@
       if (firstStage) {
         updateStageDetail(firstStage);
       }
+    }
+  })();
+
+  (function () {
+    const panel = document.querySelector('[data-concept-workspace]');
+    if (!panel) {
+      return;
+    }
+
+    const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
+
+    const endpoint = panel.getAttribute('data-concept-endpoint') || '';
+    const outlineSelect = panel.querySelector('[data-concept-outline]');
+    const refreshButton = panel.querySelector('[data-concept-refresh]');
+    const listContainer = panel.querySelector('[data-concept-list]');
+    const emptyState = panel.querySelector('[data-concept-empty]');
+    const statusNode = panel.querySelector('[data-concept-status]');
+    const fallbackNotice = panel.querySelector('[data-concept-fallback]');
+    const refreshButtonLabel = refreshButton ? refreshButton.textContent : '';
+
+    const normalizeConcept = (item) => {
+      if (!item || typeof item !== 'object') {
+        return {
+          name: '',
+          definition: '',
+          examples: [],
+          issue: '',
+          outlineId: '',
+        };
+      }
+
+      const examplesRaw = Array.isArray(item.examples) ? item.examples : [];
+      const examples = examplesRaw
+        .map((entry) => (typeof entry === 'string' ? entry.trim() : String(entry || '').trim()))
+        .filter((entry) => entry);
+
+      return {
+        name: typeof item.name === 'string' ? item.name.trim() : '',
+        definition: typeof item.definition === 'string' ? item.definition.trim() : '',
+        examples,
+        issue: typeof item.issue === 'string' ? item.issue.trim() : '',
+        outlineId: item.outline_id != null ? String(item.outline_id) : '',
+      };
+    };
+
+    let state = {
+      outlineId: String(panel.getAttribute('data-concept-outline') || ''),
+      concepts: [],
+      usedFallback: panel.getAttribute('data-concept-used-fallback') === 'true',
+    };
+
+    try {
+      const raw = panel.getAttribute('data-concept-concepts') || '[]';
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        state.concepts = parsed.map((entry) => normalizeConcept(entry));
+      }
+    } catch (error) {
+      console.warn('Unable to parse concept definitions', error);
+      state.concepts = [];
+    }
+
+    const toneClasses = {
+      success: 'text-success',
+      warning: 'text-warning',
+      danger: 'text-danger',
+      muted: 'text-white-50',
+    };
+
+    const updateStatus = (message, tone = 'muted') => {
+      if (!statusNode) {
+        return;
+      }
+      Object.values(toneClasses).forEach((cls) => statusNode.classList.remove(cls));
+      const toneClass = toneClasses[tone] || toneClasses.muted;
+      statusNode.classList.add(toneClass);
+      statusNode.textContent = message;
+    };
+
+    const getSelectedOutline = () => {
+      if (!outlineSelect) {
+        return '';
+      }
+      return outlineSelect.value || '';
+    };
+
+    const updateButtonState = () => {
+      if (!refreshButton) {
+        return;
+      }
+      const hasOutline = Boolean(getSelectedOutline());
+      refreshButton.disabled = !endpoint || !hasOutline;
+    };
+
+    const renderConcepts = () => {
+      if (!listContainer) {
+        return;
+      }
+      const selected = getSelectedOutline();
+      const matches = state.concepts.length > 0 && (!selected || state.outlineId === selected);
+
+      listContainer.innerHTML = '';
+      if (matches) {
+        state.concepts.forEach((concept) => {
+          const article = document.createElement('article');
+          article.className = 'concept-entry';
+
+          const header = document.createElement('div');
+          header.className = 'd-flex justify-content-between align-items-start mb-2';
+
+          const title = document.createElement('h3');
+          title.className = 'h6 text-white mb-0';
+          title.textContent = concept.name || 'Unnamed concept';
+          header.appendChild(title);
+
+          if (concept.issue) {
+            const badge = document.createElement('span');
+            badge.className = 'badge rounded-pill bg-dark-subtle text-white-50 small';
+            badge.textContent = 'Needs clarity';
+            header.appendChild(badge);
+          }
+
+          article.appendChild(header);
+
+          if (concept.issue) {
+            const issue = document.createElement('p');
+            issue.className = 'text-white-50 small mb-2 concept-issue';
+            issue.textContent = concept.issue;
+            article.appendChild(issue);
+          }
+
+          if (concept.definition) {
+            const definition = document.createElement('p');
+            definition.className = 'text-white-50 mb-2';
+            definition.textContent = concept.definition;
+            article.appendChild(definition);
+          }
+
+          if (concept.examples && concept.examples.length) {
+            const list = document.createElement('ul');
+            list.className = 'concept-examples';
+            concept.examples.forEach((example) => {
+              const item = document.createElement('li');
+              item.textContent = example;
+              list.appendChild(item);
+            });
+            article.appendChild(list);
+          }
+
+          listContainer.appendChild(article);
+        });
+      }
+
+      if (emptyState) {
+        emptyState.classList.toggle('d-none', matches);
+      }
+      if (fallbackNotice) {
+        fallbackNotice.classList.toggle('d-none', !(state.usedFallback && matches));
+      }
+    };
+
+    const toggleLoading = (isLoading) => {
+      if (!refreshButton) {
+        return;
+      }
+      if (isLoading) {
+        refreshButton.setAttribute('disabled', 'disabled');
+        refreshButton.textContent = 'Clarifying…';
+      } else {
+        updateButtonState();
+        refreshButton.textContent = refreshButtonLabel || 'Clarify concepts';
+      }
+    };
+
+    if (outlineSelect && state.outlineId) {
+      const hasOption = Array.from(outlineSelect.options || []).some((option) => option.value === state.outlineId);
+      if (hasOption) {
+        outlineSelect.value = state.outlineId;
+      }
+    }
+
+    updateButtonState();
+    renderConcepts();
+
+    if (!outlineSelect || outlineSelect.options.length <= 1) {
+      updateStatus('Add an outline to unlock concept clarifications.', 'muted');
+    }
+
+    if (outlineSelect) {
+      outlineSelect.addEventListener('change', () => {
+        updateButtonState();
+        const selected = getSelectedOutline();
+        if (!selected) {
+          updateStatus('Pick an outline to review and clarify its concepts.', 'muted');
+        } else if (!state.concepts.length || state.outlineId !== selected) {
+          updateStatus('No concepts generated for this outline yet.', 'muted');
+        } else {
+          const conceptCount = state.concepts.length;
+          const tone = state.usedFallback ? 'warning' : 'success';
+          updateStatus(
+            `${conceptCount} concept${conceptCount === 1 ? '' : 's'} clarified. Generate again to refresh.`,
+            tone,
+          );
+        }
+        renderConcepts();
+      });
+    }
+
+    if (refreshButton) {
+      refreshButton.addEventListener('click', async () => {
+        const outlineId = getSelectedOutline();
+        if (!outlineId) {
+          updateStatus('Select an outline before clarifying concepts.', 'warning');
+          if (outlineSelect) {
+            outlineSelect.focus();
+          }
+          return;
+        }
+        if (!endpoint) {
+          updateStatus('Concept generation is not available right now.', 'danger');
+          return;
+        }
+
+        toggleLoading(true);
+        updateStatus('Clarifying concepts…', 'muted');
+
+        try {
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': csrfToken || '',
+              'X-CSRF-Token': csrfToken || '',
+            },
+            body: JSON.stringify({ outline_id: outlineId }),
+          });
+
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.error || 'Unable to clarify concepts right now.');
+          }
+
+          const conceptsArray = Array.isArray(payload.concepts) ? payload.concepts : [];
+          state = {
+            outlineId: payload.outline_id != null ? String(payload.outline_id) : outlineId,
+            concepts: conceptsArray.map((entry) => normalizeConcept(entry)),
+            usedFallback: Boolean(payload.used_fallback),
+          };
+
+          if (outlineSelect && outlineSelect.value !== state.outlineId) {
+            const hasOption = Array.from(outlineSelect.options || []).some(
+              (option) => option.value === state.outlineId,
+            );
+            if (hasOption) {
+              outlineSelect.value = state.outlineId;
+            }
+          }
+
+          const count = state.concepts.length;
+          if (count) {
+            const tone = state.usedFallback ? 'warning' : 'success';
+            const suffix = state.usedFallback
+              ? 'Review the fallback suggestions for accuracy.'
+              : 'Definitions saved to the project.';
+            updateStatus(
+              `${count} concept${count === 1 ? '' : 's'} clarified. ${suffix}`,
+              tone,
+            );
+          } else {
+            updateStatus('No concepts were identified. Try refining the outline and run again.', 'warning');
+          }
+
+          renderConcepts();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'We could not clarify concepts right now.';
+          updateStatus(message, 'danger');
+        } finally {
+          toggleLoading(false);
+        }
+      });
+    }
+
+    const initialSelected = getSelectedOutline();
+    if (initialSelected) {
+      if (state.concepts.length && state.outlineId === initialSelected) {
+        const count = state.concepts.length;
+        const tone = state.usedFallback ? 'warning' : 'success';
+        updateStatus(
+          `${count} concept${count === 1 ? '' : 's'} clarified. Generate again to refresh.`,
+          tone,
+        );
+      } else if (!state.concepts.length) {
+        updateStatus('No concepts generated for this outline yet.', 'muted');
+      }
+    } else if (outlineSelect && outlineSelect.options.length > 1) {
+      updateStatus('No concepts generated for this outline yet.', 'muted');
     }
   })();
 
