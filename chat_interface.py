@@ -100,7 +100,9 @@ class Character(db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=False)
     name = db.Column(db.String(160), nullable=True)
     role_in_story = db.Column(db.String(160), nullable=True)
-    character_outline = db.Column(db.Text, nullable=True)
+    physical_description = db.Column(db.Text, nullable=True)
+    character_description = db.Column(db.Text, nullable=True)
+    background = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,
@@ -129,8 +131,12 @@ def _ensure_character_columns() -> None:
     alterations: List[str] = []
     if "role_in_story" not in existing_columns:
         alterations.append("ALTER TABLE character ADD COLUMN role_in_story VARCHAR(160)")
-    if "character_outline" not in existing_columns:
-        alterations.append("ALTER TABLE character ADD COLUMN character_outline TEXT")
+    if "physical_description" not in existing_columns:
+        alterations.append("ALTER TABLE character ADD COLUMN physical_description TEXT")
+    if "character_description" not in existing_columns:
+        alterations.append("ALTER TABLE character ADD COLUMN character_description TEXT")
+    if "background" not in existing_columns:
+        alterations.append("ALTER TABLE character ADD COLUMN background TEXT")
 
     if not alterations:
         return
@@ -631,7 +637,7 @@ def create_app() -> Flask:
                     "name": character.name,
                     "role_in_story": character.role_in_story,
                 },
-                "character_outline": profile_data.get("character_outline", ""),
+                "profile": profile_data,
                 "sections": sections,
                 "assistant_reply": assistant_reply,
                 "device_type": generator.get_compute_device(),
@@ -1101,8 +1107,12 @@ def _collect_character_context(characters: Iterable["Character"]) -> str:
             sections.append(f"Name: {character.name}")
         if character.role_in_story:
             sections.append(f"Role in story: {character.role_in_story}")
-        if character.character_outline:
-            sections.append(f"Character outline: {character.character_outline}")
+        if character.physical_description:
+            sections.append(f"Physical description: {character.physical_description}")
+        if character.character_description:
+            sections.append(f"Character description: {character.character_description}")
+        if character.background:
+            sections.append(f"Background: {character.background}")
         if sections:
             entries.append("\n".join(sections))
 
@@ -1408,7 +1418,7 @@ def _build_character_json_prompt(
     user_inputs: Dict[str, str],
     input_fields: Iterable[Dict[str, Any]],
 ) -> str:
-    """Construct a prompt that enforces JSON output for the character outline."""
+    """Construct a prompt that enforces JSON output for the character profile."""
 
     fields = list(character_fields)
     expected_keys = ", ".join(
@@ -1442,7 +1452,10 @@ def _build_character_json_prompt(
                 f"{expected_keys}."
             ),
             "3. Do not include Markdown fences, code blocks, or commentary outside the JSON.",
-            "4. Limit \"character_outline\" to 100 words or fewer, writing in a vivid third-person voice.",
+            (
+                "4. Keep each field within its suggested word count, using vivid but concise prose that avoids "
+                "story scenes or plot advancement."
+            ),
             "\nJSON schema template:",
             json_template,
             "\nGuidance for each field:",
@@ -1455,7 +1468,9 @@ def _build_character_json_prompt(
             "Focus on developing the character profile independently. "
             "Do not assume any existing story outline—use only the supplied details "
             "and your own fitting inventions."
-        )
+        ),
+        "Deliver exactly three sections: physical description, character description, and background.",
+        "Do not draft story beats, scenes, or plot progression.",
     ]
     provided_details: List[str] = []
     for field in input_fields:

@@ -51,7 +51,11 @@ SYSTEM_PROMPTS = {
         ),
     },
     "character_creation": {
-        "base": "You are a writing assistant and we want to create a character.",
+        "base": (
+            "You are a writing assistant focused solely on developing character dossiers. "
+            "When asked to create a character, limit your response to the requested profile fields. "
+            "Do not begin plotting scenes or story beats—deliver only the character details."
+        ),
         "json_format_rules": (
             "Respond exclusively with a single valid JSON object that follows the provided schema. "
             "Use double quotes for all keys and string values, avoid trailing commas, and do not wrap the JSON "
@@ -59,13 +63,31 @@ SYSTEM_PROMPTS = {
         ),
         "fields": [
             {
-                "key": "character_outline",
-                "label": "Character outline",
+                "key": "physical_description",
+                "label": "Physical description",
                 "description": (
-                    "Summarise the character in no more than 100 words. Combine all known details with evocative "
-                    "story hooks that highlight motivation, conflict, and personality."
+                    "Detail the character's immediate physical impression—age cues, build, posture, distinguishing features, "
+                    "and signature clothing or accessories—in concrete, sensory language."
                 ),
-                "word_count": 100,
+                "word_count": 80,
+            },
+            {
+                "key": "character_description",
+                "label": "Character description",
+                "description": (
+                    "Capture temperament, core motivations, notable skills, and interpersonal style without outlining plot "
+                    "events or future scenes. Keep the focus on who they are in daily life."
+                ),
+                "word_count": 110,
+            },
+            {
+                "key": "background",
+                "label": "Background",
+                "description": (
+                    "Provide a concise history that explains formative experiences, relationships, and turning points shaping "
+                    "the character. Mention context needed to understand them, but do not advance the current story."
+                ),
+                "word_count": 120,
             }
         ],
         "input_fields": [

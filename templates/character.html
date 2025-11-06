@@ -96,7 +96,7 @@
     <div class="col-xl-5">
       <div class="card h-100">
         <div class="card-body">
-          <h2 class="h5 mb-3">Character outline</h2>
+          <h2 class="h5 mb-3">Character profile</h2>
           <div class="character-traits">
             {% for field in character_fields %}
               <section
@@ -116,7 +116,7 @@
                   id="traitContent-{{ field.key }}"
                   class="trait-content {{ 'trait-empty' if not value }}"
                 >
-                  {{ value or 'No outline yet. Complete the form to generate one.' }}
+                  {{ value or 'No profile yet. Complete the form to generate one.' }}
                 </div>
               </section>
             {% endfor %}
@@ -175,7 +175,7 @@
               {% endfor %}
             </div>
             <div class="d-flex justify-content-end gap-2 mt-auto">
-              <button type="submit" class="btn btn-primary">Generate outline</button>
+              <button type="submit" class="btn btn-primary">Generate profile</button>
             </div>
           </form>
         </div>
@@ -227,10 +227,13 @@
         messageArea.appendChild(alert);
       };
 
-      const updateOutlineSection = (sections, fallbackOutline) => {
-        const updates = Array.isArray(sections) && sections.length ? sections : [
-          { key: "character_outline", content: fallbackOutline }
-        ];
+      const updateOutlineSection = (sections, profileMap) => {
+        let updates = [];
+        if (Array.isArray(sections) && sections.length) {
+          updates = sections;
+        } else if (profileMap && typeof profileMap === "object") {
+          updates = Object.entries(profileMap).map(([key, content]) => ({ key, content }));
+        }
         updates.forEach((section) => {
           if (!section || typeof section !== "object") {
             return;
@@ -252,7 +255,7 @@
             return;
           }
           contentContainer.classList.toggle("trait-empty", !content);
-          contentContainer.textContent = content || "No outline yet. Complete the form to generate one.";
+          contentContainer.textContent = content || "No profile yet. Complete the form to generate one.";
         });
       };
 
@@ -288,10 +291,10 @@
         renderAlert("info", "Sending your brief to the assistant.");
         loadingIndicator.classList.add("visible");
         if (deviceHint) {
-          loadingMessage.textContent = `Generating character outline… (expected ${deviceHint})`;
+          loadingMessage.textContent = `Generating character profile… (expected ${deviceHint})`;
           setDeviceBadge(deviceHint);
         } else {
-          loadingMessage.textContent = "Generating character outline…";
+          loadingMessage.textContent = "Generating character profile…";
           setDeviceBadge("");
         }
 
@@ -317,7 +320,7 @@
             throw new Error(errorMessage);
           }
 
-          updateOutlineSection(Array.isArray(data.sections) ? data.sections : [], data.character_outline || "");
+          updateOutlineSection(Array.isArray(data.sections) ? data.sections : [], data.profile || {});
 
           if (data.character && typeof data.character === "object") {
             const nameHeading = document.querySelector(".character-header h1");
@@ -333,27 +336,27 @@
           }
 
           if (data.device_type) {
-            loadingMessage.textContent = `Character outline generated using the ${data.device_type.toUpperCase()} backend.`;
+            loadingMessage.textContent = `Character profile generated using the ${data.device_type.toUpperCase()} backend.`;
             setDeviceBadge(data.device_type);
           } else {
-            loadingMessage.textContent = "Character outline generated.";
+            loadingMessage.textContent = "Character profile generated.";
             setDeviceBadge(deviceHint);
           }
 
-          renderAlert("success", data.message || "Character outline updated from assistant.");
+          renderAlert("success", data.message || "Character profile updated from assistant.");
         } catch (err) {
           const message = err instanceof Error ? err.message : "An unexpected error occurred.";
           loadingMessage.textContent = "The assistant could not complete the request.";
           setDeviceBadge("");
           renderAlert(
             "danger",
-            `The assistant could not generate the character outline. ${message}`
+            `The assistant could not generate the character profile. ${message}`
           );
         }
 
         if (submitButton) {
           submitButton.disabled = false;
-          submitButton.textContent = "Generate outline";
+          submitButton.textContent = "Generate profile";
         }
         loadingIndicator.classList.remove("visible");
       });
