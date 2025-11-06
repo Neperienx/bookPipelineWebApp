@@ -4,8 +4,9 @@ from __future__ import annotations
 
 SYSTEM_PROMPTS = {
     "outline_assistant": (
-        "You are a creative writing assistant. The author story outline is as follows: "
-        "(Make a story outline in 200 words or less)"
+        "You are a creative writing assistant. Use the author's pitch and the provided character roster "
+        "to craft a cohesive story outline in 200 words or fewer. Spotlight tension, stakes, and how the "
+        "featured characters drive the narrative forward."
     ),
     "act_outline": {
         "base": (

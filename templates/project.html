@@ -346,7 +346,7 @@
             <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
               <div>
                 <h2 class="h5 mb-1">Outline assistant</h2>
-                <p class="text-secondary mb-0">Tell me about the story you want to write.</p>
+                <p class="text-secondary mb-0">Share a quick pitch so I can weave your characters into a story outline.</p>
               </div>
               <form method="post">
                 <input type="hidden" name="chat_type" value="outline" />
@@ -366,7 +366,7 @@
                 {% endfor %}
               {% else %}
                 <div class="text-secondary text-center w-100 my-auto">
-                  Share your story idea to generate a structured outline.
+                  Share a short pitch to generate a character-driven outline.
                 </div>
               {% endif %}
             </div>
@@ -383,7 +383,7 @@
                 class="form-control"
                 name="message"
                 rows="3"
-                placeholder="Tell me about the story you want to write."
+                placeholder="Give me a basic pitch for the story you want to tell."
                 required
               ></textarea>
               <div class="d-flex justify-content-end gap-2">

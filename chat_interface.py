@@ -404,7 +404,7 @@ def create_app() -> Flask:
                     try:
                         generator = _get_generator()
                         assistant_reply_raw = generator.generate_response(
-                            _build_prompt(history)
+                            _build_outline_prompt(project, history)
                         )
                     except Exception as exc:  # pragma: no cover - defensive
                         error = (
@@ -590,8 +590,6 @@ def create_app() -> Flask:
                 500,
             )
 
-        outline_text_raw = project.outline or "no outline has been provided yet"
-        outline_text = " ".join(outline_text_raw.split())
         config = SYSTEM_PROMPTS.get("character_creation", {})
         base_prompt = config.get(
             "base",
@@ -604,7 +602,6 @@ def create_app() -> Flask:
                 generator,
                 base_prompt,
                 json_rules,
-                outline_text,
                 character_fields,
                 prompt_inputs,
                 input_fields,
@@ -965,19 +962,30 @@ def _generate_single_act_chapters(
     return formatted_text, last_entries, debug_messages, False
 
 
-def _build_prompt(history: Iterable[Dict[str, str]]) -> str:
-    """Construct a conversation prompt from the stored history."""
+def _build_outline_prompt(project: Project, history: Iterable[Dict[str, str]]) -> str:
+    """Construct a prompt for the outline assistant that includes characters."""
 
     prompt_lines: List[str] = []
     system_prompt = SYSTEM_PROMPTS.get("outline_assistant")
     if system_prompt:
         prompt_lines.append(f"System: {system_prompt}")
+
+    character_context = _collect_character_context(project.characters)
+    if character_context and not character_context.strip().startswith(
+        "No character descriptions available."
+    ):
+        prompt_lines.append(
+            "System: Reference the following character roster when crafting the outline.\n"
+            f"{character_context}"
+        )
+
     for message in history:
         if message["role"] == "user":
             prefix = "User"
         else:
             prefix = "Assistant"
         prompt_lines.append(f"{prefix}: {message['content']}")
+
     prompt_lines.append("Assistant:")
     return "\n".join(prompt_lines)
 
@@ -1356,7 +1364,6 @@ def _run_character_profile_generation(
     generator: TextGenerator,
     base_prompt: str,
     json_rules: str,
-    outline_text: str,
     character_fields: Iterable[Dict[str, Any]],
     user_inputs: Dict[str, str],
     input_fields: Iterable[Dict[str, Any]],
@@ -1367,7 +1374,6 @@ def _run_character_profile_generation(
     prompt = _build_character_json_prompt(
         base_prompt,
         json_rules,
-        outline_text,
         fields,
         user_inputs,
         list(input_fields),
@@ -1398,7 +1404,6 @@ def _run_character_profile_generation(
 def _build_character_json_prompt(
     base_prompt: str,
     json_rules: str,
-    outline_text: str,
     character_fields: Iterable[Dict[str, Any]],
     user_inputs: Dict[str, str],
     input_fields: Iterable[Dict[str, Any]],
@@ -1445,10 +1450,13 @@ def _build_character_json_prompt(
         ]
     )
 
-    user_lines: List[str] = []
-    if outline_text.strip():
-        user_lines.append(f"Project outline: {outline_text.strip()}")
-
+    user_lines: List[str] = [
+        (
+            "Focus on developing the character profile independently. "
+            "Do not assume any existing story outline—use only the supplied details "
+            "and your own fitting inventions."
+        )
+    ]
     provided_details: List[str] = []
     for field in input_fields:
         key = field.get("key")
