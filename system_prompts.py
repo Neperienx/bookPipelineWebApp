@@ -15,6 +15,14 @@ SYSTEM_PROMPTS = {
             "character notes, and final directions while keeping pacing taut and "
             "dramatic."
         ),
+        "format": (
+            "Respond in plain text using this exact structure for each act:\n"
+            "Act: Act <Roman numeral> — <Act focus or title>\n"
+            "1. First major beat\n"
+            "2. Second major beat\n"
+            "(Continue numbered beats through 4-6 total before moving to the next act.)\n"
+            "Ensure there is a blank line between act sections and no additional commentary."
+        ),
         "acts": {
             1: (
                 "Establish the core cast, tone, setting, and status quo. Build to a "
