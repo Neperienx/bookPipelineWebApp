@@ -17,7 +17,7 @@ import json
 import re
 import time
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from datetime import datetime
 
@@ -46,6 +46,11 @@ from system_prompts import (
     get_character_input_fields,
 )
 
+try:  # The OpenAI package is optional and only required when the API backend is used.
+    import openai  # type: ignore
+except ImportError:  # pragma: no cover - handled gracefully when API mode requested
+    openai = None  # type: ignore
+
 # Flask session requires a secret key.  Use an environment variable so the
 # application can be run without editing source code.
 DEFAULT_SECRET = "dev-secret-key-change-me"
@@ -54,9 +59,152 @@ DEFAULT_SECRET = "dev-secret-key-change-me"
 # process.  It loads lazily on the first request that needs it.
 _generator: TextGenerator | None = None
 
+# Cache for the optional OpenAI API backend.  The configuration is loaded from
+# ``openai_config.json`` when the user explicitly opts-in via the UI.
+_openai_generator: "OpenAITextGenerator" | None = None
+_openai_signature: Tuple[str, str] | None = None
+_OPENAI_CONFIG_PATH = Path(__file__).resolve().parent / "openai_config.json"
+
 # Database handle is created globally so unit tests can import the ``db`` object
 # without instantiating the Flask application first.
 db = SQLAlchemy()
+
+
+class OpenAITextGenerator:
+    """Lightweight adapter mirroring :class:`TextGenerator` for OpenAI's API."""
+
+    def __init__(
+        self,
+        model_name: str,
+        api_key: str,
+        *,
+        default_max_tokens: int = 512,
+    ) -> None:
+        self.model_name = model_name
+        self.api_key = api_key
+        self.default_max_tokens = default_max_tokens
+
+    def generate_response(
+        self,
+        prompt: str,
+        *,
+        max_new_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        **_: Any,
+    ) -> str:
+        if openai is None:  # pragma: no cover - optional dependency
+            raise RuntimeError(
+                "The openai package is not installed. Install it to enable API generation."
+            )
+
+        max_tokens = max_new_tokens if max_new_tokens is not None else self.default_max_tokens
+        try:
+            token_count = int(max_tokens)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "max_new_tokens must be a positive integer when using the API backend."
+            ) from exc
+        if token_count <= 0:
+            raise ValueError(
+                "max_new_tokens must be a positive integer when using the API backend."
+            )
+
+        openai.api_key = self.api_key
+        try:
+            completion = openai.Completion.create(  # type: ignore[attr-defined]
+                model=self.model_name,
+                prompt=prompt,
+                max_tokens=token_count,
+                temperature=temperature if temperature is not None else 0.7,
+                top_p=top_p if top_p is not None else 1.0,
+                n=1,
+            )
+        except Exception as exc:  # pragma: no cover - network errors
+            raise RuntimeError("OpenAI API request failed.") from exc
+
+        choices = getattr(completion, "choices", [])
+        if not choices:
+            return ""
+        text = getattr(choices[0], "text", "")
+        if text is None:
+            return ""
+        return str(text).strip()
+
+    def get_compute_device(self) -> str:
+        return "OpenAI API"
+
+    def signature(self) -> Tuple[str, str]:
+        return (self.model_name, self.api_key)
+
+
+def _load_openai_config() -> Optional[Dict[str, str]]:
+    """Read API credentials from ``openai_config.json`` if available."""
+
+    try:
+        raw_text = _OPENAI_CONFIG_PATH.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    except OSError as exc:  # pragma: no cover - IO failure
+        LOGGER.warning("Could not read OpenAI configuration: %s", exc)
+        return None
+
+    try:
+        data = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        LOGGER.warning("Invalid JSON in OpenAI configuration: %s", exc)
+        return None
+
+    model = str(data.get("model", "")).strip()
+    api_key = str(data.get("api_key", "")).strip()
+    if not model or not api_key:
+        LOGGER.warning(
+            "OpenAI configuration is missing the 'model' or 'api_key' field."
+        )
+        return None
+
+    return {"model": model, "api_key": api_key}
+
+
+def _get_openai_generator() -> OpenAITextGenerator:
+    """Return a cached OpenAI API adapter configured from disk."""
+
+    global _openai_generator, _openai_signature
+    config = _load_openai_config()
+    if not config:
+        raise RuntimeError(
+            "OpenAI API configuration not found. Update openai_config.json with your model and API key."
+        )
+
+    signature = (config["model"], config["api_key"])
+    if _openai_generator is None or _openai_signature != signature:
+        _openai_generator = OpenAITextGenerator(*signature)
+        _openai_signature = signature
+
+    return _openai_generator
+
+
+def _resolve_text_generator(use_api: bool) -> TextGenerator | OpenAITextGenerator:
+    """Return the requested text generation backend."""
+
+    if use_api:
+        return _get_openai_generator()
+    return _get_generator()
+
+
+def _is_api_requested(data: Mapping[str, Any]) -> bool:
+    """Return True when the submitted form asks to use the API backend."""
+
+    raw_value = data.get("use_api")
+    if raw_value is None:
+        return False
+    if isinstance(raw_value, str):
+        return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+    if isinstance(raw_value, (int, float)):
+        return bool(raw_value)
+    if isinstance(raw_value, (list, tuple)):
+        return any(_is_api_requested({"use_api": item}) for item in raw_value)
+    return bool(raw_value)
 
 
 _CHAPTER_HEADER_PATTERN = re.compile(
@@ -307,12 +455,14 @@ def create_app() -> Flask:
                     session.pop(session_key, None)
                 return redirect(url_for("project_detail", project_id=project_id))
 
+            use_api_requested = _is_api_requested(request.form)
             user_message = request.form.get("message", "").strip()
             if chat_type == "acts":
                 if user_message:
                     act_history.append({"role": "user", "content": user_message})
+                    generator = None
                     try:
-                        generator = _get_generator()
+                        generator = _resolve_text_generator(use_api_requested)
                         (
                             act1_result,
                             act2_result,
@@ -323,9 +473,12 @@ def create_app() -> Flask:
                             project,
                             user_message,
                         )
+                    except RuntimeError as exc:
+                        act_error = str(exc)
+                        act_history.pop()
                     except Exception as exc:  # pragma: no cover - defensive
                         act_error = (
-                            "The local model could not generate the act outline: "
+                            "The text generation backend could not generate the act outline: "
                             f"{exc}"
                         )
                         act_history.pop()
@@ -392,8 +545,9 @@ def create_app() -> Flask:
                         chapter_history.append(
                             {"role": "user", "content": user_message}
                         )
+                        generator = None
                         try:
-                            generator = _get_generator()
+                            generator = _resolve_text_generator(use_api_requested)
                             (
                                 chapter_texts,
                                 chapter_structures,
@@ -405,9 +559,12 @@ def create_app() -> Flask:
                                 user_message,
                                 chapters_per_act,
                             )
+                        except RuntimeError as exc:
+                            chapter_error = str(exc)
+                            chapter_history.pop()
                         except Exception as exc:  # pragma: no cover - defensive
                             chapter_error = (
-                                "The local model could not generate the chapter outline: "
+                                "The text generation backend could not generate the chapter outline: "
                                 f"{exc}"
                             )
                             chapter_history.pop()
@@ -486,8 +643,9 @@ def create_app() -> Flask:
                                 ),
                             }
                         )
+                    generator = None
                     try:
-                        generator = _get_generator()
+                        generator = _resolve_text_generator(use_api_requested)
                         analysis_results = _identify_unclear_concepts(
                             generator,
                             outline_text,
@@ -501,12 +659,15 @@ def create_app() -> Flask:
                                 analysis_results,
                                 additional_guidance,
                             )
+                    except RuntimeError as exc:
+                        concept_error = str(exc)
+                        concept_history.pop()
                     except ValueError as exc:
                         concept_error = str(exc)
                         concept_history.pop()
                     except Exception as exc:  # pragma: no cover - defensive
                         concept_error = (
-                            "The local model could not analyse the concepts: "
+                            "The text generation backend could not analyse the concepts: "
                             f"{exc}"
                         )
                         concept_history.pop()
@@ -555,14 +716,19 @@ def create_app() -> Flask:
             else:
                 if user_message:
                     history.append({"role": "user", "content": user_message})
+                    generator = None
                     try:
-                        generator = _get_generator()
+                        generator = _resolve_text_generator(use_api_requested)
                         assistant_reply_raw = generator.generate_response(
                             _build_outline_prompt(project, history)
                         )
+                    except RuntimeError as exc:
+                        error = str(exc)
+                        history.pop()
                     except Exception as exc:  # pragma: no cover - defensive
                         error = (
-                            "The local model could not generate a reply: " f"{exc}"
+                            "The text generation backend could not generate a reply: "
+                            f"{exc}"
                         )
                         history.pop()
                     else:
@@ -704,6 +870,7 @@ def create_app() -> Flask:
 
         payload = request.get_json(silent=True) or {}
         inputs_payload = payload.get("inputs")
+        use_api_requested = _is_api_requested({"use_api": payload.get("use_api")})
         if not isinstance(inputs_payload, dict):
             return jsonify({"error": "Invalid request payload."}), 400
 
@@ -735,12 +902,14 @@ def create_app() -> Flask:
         character_fields = get_character_fields()
 
         try:
-            generator = _get_generator()
+            generator = _resolve_text_generator(use_api_requested)
+        except RuntimeError as exc:
+            return jsonify({"error": str(exc)}), 400
         except Exception as exc:  # pragma: no cover - defensive
             return (
                 jsonify(
                     {
-                        "error": "The local model could not be initialised.",
+                        "error": "The text generation backend could not be initialised.",
                         "detail": str(exc),
                     }
                 ),
@@ -769,7 +938,7 @@ def create_app() -> Flask:
             return (
                 jsonify(
                     {
-                        "error": "The local model could not generate a reply.",
+                        "error": "The text generation backend could not generate a reply.",
                         "detail": str(exc),
                     }
                 ),
