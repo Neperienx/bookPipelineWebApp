@@ -1,0 +1,4 @@
+{
+  "model": "gpt-3.5-turbo-instruct",
+  "api_key": "YOUR_OPENAI_API_KEY"
+}
