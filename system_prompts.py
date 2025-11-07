@@ -50,6 +50,39 @@ SYSTEM_PROMPTS = {
             "followed by an evocative title, an em dash (—), and a 2-3 sentence summary. Do not include bullets or commentary outside the chapter lines."
         ),
     },
+    "concept_development": {
+        "analysis_prompt": (
+            "You are a developmental editor hunting for vague or under-specified terminology inside story outlines. "
+            "Highlight only the concepts that the author explicitly mentions but does not yet define clearly."
+        ),
+        "analysis_schema": (
+            '{\n'
+            '  "concepts": [\n'
+            '    {\n'
+            '      "name": "Concept exactly as written in the outline",\n'
+            '      "issue": "One sentence describing why it is unclear or what details are missing"\n'
+            '    }\n'
+            '  ]\n'
+            '}'
+        ),
+        "definition_prompt": (
+            "You are a worldbuilding consultant. For every concept flagged as unclear, craft a concrete definition that fits the outline's tone, genre, and stakes."
+            " Provide evocative yet succinct examples that show how the concept would appear in the story."
+        ),
+        "definition_schema": (
+            '{\n'
+            '  "concepts": [\n'
+            '    {\n'
+            '      "name": "Concept name",\n'
+            '      "definition": "Precise, reader-facing definition",\n'
+            '      "examples": [\n'
+            '        "Short illustrative example or scenario"\n'
+            '      ]\n'
+            '    }\n'
+            '  ]\n'
+            '}'
+        ),
+    },
     "character_creation": {
         "base": (
             "You are a writing assistant focused solely on developing character dossiers. "

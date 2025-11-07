@@ -157,6 +157,23 @@
             <button
               class="overview-tile"
               type="button"
+              data-target="conceptsPanel"
+              data-chat-target="conceptChatPanel"
+              aria-controls="conceptsPanel"
+              aria-selected="false"
+            >
+              <h2 class="h6 mb-1">Concepts</h2>
+              <p>
+                {% if project.concepts %}
+                  Review clarified concepts pulled from your outline.
+                {% else %}
+                  Identify and define fuzzy ideas hiding in the outline.
+                {% endif %}
+              </p>
+            </button>
+            <button
+              class="overview-tile"
+              type="button"
               data-target="actsPanel"
               data-chat-target="actChatPanel"
               aria-controls="actsPanel"
@@ -215,6 +232,44 @@
                 {{ project.outline }}
               {% else %}
                 <div class="text-secondary">No outline saved yet. Use the chat to tell the assistant about the story you want to write.</div>
+              {% endif %}
+            </div>
+          </div>
+          <div class="tile-detail" id="conceptsPanel" role="tabpanel">
+            <div class="outline-content d-flex flex-column gap-3">
+              <div>
+                <h3 class="h6 mb-1">Concept definitions</h3>
+                <p class="text-secondary mb-0 small">Clarified terminology and worldbuilding notes derived from your outline.</p>
+              </div>
+              {% if project.concepts %}
+                <div class="d-flex flex-column gap-4">
+                  {% for concept in project.concepts %}
+                    <div class="act-outline-box">
+                      <h4 class="h6 mb-2 text-info">{{ concept.name }}</h4>
+                      {% if concept.issue %}
+                        <p class="text-secondary small mb-2">Why it needed clarification: {{ concept.issue }}</p>
+                      {% endif %}
+                      <p class="mb-2">{{ concept.definition }}</p>
+                      {% if concept.examples %}
+                        <div>
+                          <div class="fw-semibold text-uppercase small text-secondary mb-1">Examples</div>
+                          <ul class="mb-0 small ps-3">
+                            {% for example in concept.examples.split('\n') %}
+                              {% if example.strip() %}
+                                <li>{{ example }}</li>
+                              {% endif %}
+                            {% endfor %}
+                          </ul>
+                        </div>
+                      {% endif %}
+                    </div>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div class="text-secondary text-center py-4">
+                  <p class="mb-1">No concepts have been refined yet.</p>
+                  <p class="mb-0">Use the concept assistant to highlight and define fuzzy ideas.</p>
+                </div>
               {% endif %}
             </div>
           </div>
@@ -388,6 +443,64 @@
               ></textarea>
               <div class="d-flex justify-content-end gap-2">
                 <button type="submit" class="btn btn-primary">Send</button>
+              </div>
+            </form>
+          </div>
+          <div id="conceptChatPanel" class="chat-panel" role="tabpanel" aria-labelledby="conceptsPanel">
+            <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
+              <div>
+                <h2 class="h5 mb-1">Concept assistant</h2>
+                <p class="text-secondary mb-0">Spot ambiguous ideas in the outline and lock in clear definitions with examples.</p>
+              </div>
+              <form method="post">
+                <input type="hidden" name="chat_type" value="concepts" />
+                <button type="submit" name="reset" value="1" class="btn btn-outline-light btn-sm">Clear log</button>
+              </form>
+            </div>
+            <div class="chat-messages flex-grow-1 mb-3">
+              {% if concept_history %}
+                {% for message in concept_history %}
+                  <div class="message {{ message.role }}">
+                    <strong class="d-block mb-1 text-uppercase small">{{ message.role }}</strong>
+                    <div>{{ message.content }}</div>
+                    {% if message.device_type %}
+                      <div class="message-device">Generated using the {{ message.device_type }} backend.</div>
+                    {% endif %}
+                  </div>
+                {% endfor %}
+              {% else %}
+                <div class="message assistant">
+                  <strong class="d-block mb-1 text-uppercase small">assistant</strong>
+                  <div>Ready to refine your worldbuilding? I can analyse the outline, surface fuzzy concepts, and propose precise definitions with examples.</div>
+                </div>
+              {% endif %}
+            </div>
+            {% if concept_error %}
+              <div class="alert alert-danger" role="alert">{{ concept_error }}</div>
+            {% endif %}
+            {% if concept_success %}
+              <div class="alert alert-success" role="alert">{{ concept_success }}</div>
+            {% endif %}
+            <div id="conceptLoadingIndicator" class="loading-indicator" role="status" aria-live="polite">
+              <div class="spinner-border text-info" role="status" aria-hidden="true"></div>
+              <span>Assistant is thinking…</span>
+            </div>
+            <form
+              method="post"
+              id="conceptChatForm"
+              data-chat-form
+              data-loading-target="conceptLoadingIndicator"
+              class="d-flex flex-column gap-3"
+            >
+              <input type="hidden" name="chat_type" value="concepts" />
+              <textarea
+                class="form-control"
+                name="message"
+                rows="3"
+                placeholder="Optional: add nuance about tone, genre touchstones, or specific worldbuilding needs."
+              ></textarea>
+              <div class="d-flex justify-content-end gap-2">
+                <button type="submit" class="btn btn-primary">Generate concept clarifications</button>
               </div>
             </form>
           </div>
