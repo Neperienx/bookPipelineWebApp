@@ -54,8 +54,9 @@ SYSTEM_PROMPTS = {
             "Outline this act in exactly {chapter_count} chapters, making sure every chapter meaningfully advances the plot and character arcs."
         ),
         "format": (
-            "Return the chapters as plain text with one chapter per line. Begin each line exactly with 'Chapter <number>:' "
-            "followed by an evocative title, an em dash (—), and a 2-3 sentence summary. Do not include bullets or commentary outside the chapter lines."
+            "Respond in plain text. For each chapter, start a new section with the header 'Chapter: Chapter <number> — <Title>'. "
+            "Follow the header with a 2-3 sentence paragraph summary on the next line(s) and leave a blank line between chapters. "
+            "Do not include bullets or commentary outside these chapter sections."
         ),
     },
     "concept_development": {

@@ -78,6 +78,26 @@
       border-color: rgba(148, 163, 184, 0.2);
       color: rgba(226, 232, 240, 0.7);
     }
+    .chapter-list {
+      display: grid;
+      gap: 1rem;
+    }
+    .chapter-card {
+      border-radius: 0.9rem;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: rgba(15, 23, 42, 0.75);
+      padding: 1rem 1.25rem;
+      white-space: pre-wrap;
+    }
+    .chapter-card-title {
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+    .chapter-card-summary {
+      margin: 0;
+      color: rgba(226, 232, 240, 0.82);
+      white-space: pre-wrap;
+    }
     .chat-messages {
       height: 50vh;
       overflow-y: auto;
@@ -365,20 +385,20 @@
                     {% set chapters = act_chapter_lists.get(act_number) %}
                     <div>
                       <h4 class="h6 mb-1 text-info">{{ act_label }}</h4>
-                      {% if chapters %}
-                        <div class="act-outline-box">
-                          <ol class="chapter-list mb-0 ps-3">
+                        {% if chapters %}
+                          <div class="chapter-list">
                             {% for chapter in chapters %}
-                              <li class="mb-2">
-                                <div class="fw-semibold">Chapter {{ chapter.number }}: {{ chapter.title }}</div>
-                                <div class="text-body-secondary">{{ chapter.summary }}</div>
-                              </li>
+                              <div class="chapter-card">
+                                <div class="chapter-card-title">Chapter {{ chapter.number }}: {{ chapter.title or 'Untitled Chapter' }}</div>
+                                {% if chapter.summary %}
+                                  <p class="chapter-card-summary">{{ chapter.summary }}</p>
+                                {% endif %}
+                              </div>
                             {% endfor %}
-                          </ol>
-                        </div>
-                      {% else %}
-                        <div class="act-outline-box">{{ fallback_text or 'No chapter outline generated yet.' }}</div>
-                      {% endif %}
+                          </div>
+                        {% else %}
+                          <div class="act-outline-box">{{ fallback_text or 'No chapter outline generated yet.' }}</div>
+                        {% endif %}
                     </div>
                   {% endfor %}
                 </div>
