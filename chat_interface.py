@@ -1669,6 +1669,9 @@ def _parse_concept_analysis(raw_response: str) -> List[Dict[str, str]]:
     cleaned = _strip_json_code_fences(raw_response)
     json_block = _extract_json_object(cleaned)
     if not json_block:
+        fallback_items = _parse_plain_concept_analysis(cleaned)
+        if fallback_items:
+            return fallback_items
         raise ValueError(
             "The assistant response did not contain the expected JSON object. Please try again."
         )
@@ -1711,6 +1714,9 @@ def _parse_concept_definitions(raw_response: str) -> List[Dict[str, Any]]:
     cleaned = _strip_json_code_fences(raw_response)
     json_block = _extract_json_object(cleaned)
     if not json_block:
+        fallback_items = _parse_plain_concept_definitions(cleaned)
+        if fallback_items:
+            return fallback_items
         raise ValueError(
             "The assistant response did not contain the expected JSON object. Please try again."
         )
@@ -2019,6 +2025,150 @@ def _parse_character_json(
         parsed[key] = value_text.strip()
 
     return parsed
+
+
+def _parse_plain_concept_analysis(text: str) -> List[Dict[str, str]]:
+    """Best-effort fallback parser for non-JSON concept analysis replies."""
+
+    results: List[Dict[str, str]] = []
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return results
+
+    for raw_line in lines:
+        line = re.sub(r"^[\-\*\u2022]+\s*", "", raw_line)
+        line = re.sub(r"^\d+(?:[.)]|\s+)\s*", "", line)
+        if not line:
+            continue
+
+        name = ""
+        issue = ""
+
+        separator_match = re.match(
+            r"^(?P<name>.+?)\s*(?:[:\-\u2013\u2014]\s+)(?P<issue>.+)$",
+            line,
+        )
+        if separator_match:
+            name = separator_match.group("name").strip(' "')
+            issue = separator_match.group("issue").strip()
+        else:
+            keyword_match = re.search(
+                r"\b(is|are|needs|need|lacks|lack|requires|require|remains|seems)\b",
+                line,
+                flags=re.IGNORECASE,
+            )
+            if keyword_match:
+                name = line[: keyword_match.start()].strip(" -\u2013\u2014:.,")
+                issue = line[keyword_match.start() :].strip()
+
+        if not name:
+            continue
+        results.append({"name": name, "issue": issue})
+
+    return results
+
+
+def _parse_plain_concept_definitions(text: str) -> List[Dict[str, Any]]:
+    """Best-effort fallback parser for non-JSON concept definition replies."""
+
+    if not text.strip():
+        return []
+
+    normalised_lines: List[str] = []
+    for raw_line in text.splitlines():
+        stripped = raw_line.strip()
+        if not stripped:
+            normalised_lines.append("")
+            continue
+        stripped = re.sub(r"^[\-\*\u2022]+\s*", "", stripped)
+        stripped = re.sub(r"^\d+(?:[.)]|\s+)\s*", "", stripped)
+        normalised_lines.append(stripped)
+
+    heading_pattern = re.compile(r"^[A-Z0-9][^:]{0,80}[:\-\u2013\u2014]\s+.+$")
+
+    blocks: List[List[str]] = []
+    current_block: List[str] = []
+    for line in normalised_lines:
+        if not line:
+            if current_block:
+                blocks.append(current_block)
+                current_block = []
+            continue
+        if current_block and heading_pattern.match(line):
+            blocks.append(current_block)
+            current_block = [line]
+        else:
+            current_block.append(line)
+
+    if current_block:
+        blocks.append(current_block)
+
+    results: List[Dict[str, Any]] = []
+
+    for block in blocks:
+        if not block:
+            continue
+
+        first_line = block[0]
+        name = ""
+        definition_parts: List[str] = []
+        examples: List[str] = []
+
+        separator_match = re.match(
+            r"^(?P<name>.+?)\s*(?:[:\-\u2013\u2014]\s+)(?P<definition>.+)$",
+            first_line,
+        )
+        if separator_match:
+            name = separator_match.group("name").strip(' "')
+            initial_definition = separator_match.group("definition").strip()
+            if initial_definition:
+                definition_parts.append(initial_definition)
+            remaining_lines = block[1:]
+        else:
+            name = first_line.rstrip(":")
+            remaining_lines = block[1:]
+
+        collecting_examples = False
+        for line in remaining_lines:
+            header_match = re.match(r"examples?\s*[:\-]\s*(.*)", line, flags=re.IGNORECASE)
+            if header_match:
+                collecting_examples = True
+                inline = header_match.group(1).strip()
+                if inline:
+                    examples.extend(_split_inline_examples(inline))
+                continue
+
+            if collecting_examples:
+                examples.extend(_split_inline_examples(line))
+                continue
+
+            definition_parts.append(line)
+
+        definition = " ".join(definition_parts).strip()
+        clean_examples = [example for example in (ex.strip() for ex in examples) if example]
+
+        if not name:
+            continue
+        entry: Dict[str, Any] = {"name": name}
+        if definition:
+            entry["definition"] = definition
+        if clean_examples:
+            entry["examples"] = clean_examples
+        if len(entry) > 1:
+            results.append(entry)
+
+    return results
+
+
+def _split_inline_examples(text: str) -> List[str]:
+    """Split inline example strings into individual entries."""
+
+    if not text:
+        return []
+    parts = re.split(r"[;\u2022\|]\s*", text)
+    if len(parts) == 1:
+        parts = re.split(r",\s*(?=[A-Z0-9])", text)
+    return [part.strip() for part in parts if part.strip()]
 
 
 def _strip_json_code_fences(text: str) -> str:
