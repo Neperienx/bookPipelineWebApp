@@ -88,6 +88,12 @@ class Project(db.Model):
         order_by="Character.created_at.desc()",
         cascade="all, delete-orphan",
     )
+    concepts = db.relationship(
+        "Concept",
+        back_populates="project",
+        order_by="Concept.created_at.desc()",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self) -> str:  # pragma: no cover - debug helper
         return f"<Project {self.id} {self.name!r}>"
@@ -115,6 +121,29 @@ class Character(db.Model):
 
     def __repr__(self) -> str:  # pragma: no cover - debug helper
         return f"<Character {self.id} project={self.project_id}>"
+
+
+class Concept(db.Model):
+    """Core concept definition extracted from a project outline."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=False)
+    name = db.Column(db.String(160), nullable=False)
+    issue = db.Column(db.Text, nullable=True)
+    definition = db.Column(db.Text, nullable=False)
+    examples = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    project = db.relationship("Project", back_populates="concepts")
+
+    def __repr__(self) -> str:  # pragma: no cover - debug helper
+        return f"<Concept {self.id} project={self.project_id} {self.name!r}>"
 
 
 def _ensure_character_columns() -> None:
@@ -241,6 +270,8 @@ def create_app() -> Flask:
         act_history = session.setdefault(act_session_key, [])
         chapter_session_key = _chapter_session_key(project_id)
         chapter_history = session.setdefault(chapter_session_key, [])
+        concept_session_key = _concept_session_key(project_id)
+        concept_history = session.setdefault(concept_session_key, [])
         error = None
         success = None
         act_error = None
@@ -251,6 +282,8 @@ def create_app() -> Flask:
         chapter_count_default = 10
         chapter_count_value = chapter_count_default
         chapter_debug_details: List[str] = []
+        concept_error = None
+        concept_success = None
 
         if request.method == "POST":
             chat_type = request.form.get("chat_type", "outline")
@@ -260,6 +293,8 @@ def create_app() -> Flask:
                     session.pop(act_session_key, None)
                 elif chat_type == "chapters":
                     session.pop(chapter_session_key, None)
+                elif chat_type == "concepts":
+                    session.pop(concept_session_key, None)
                 else:
                     session.pop(session_key, None)
                 return redirect(url_for("project_detail", project_id=project_id))
@@ -404,6 +439,93 @@ def create_app() -> Flask:
                                 f"{device_sentence}"
                             )
                         session.modified = True
+            elif chat_type == "concepts":
+                additional_guidance = user_message
+                outline_text = (project.outline or "").strip()
+                if not outline_text:
+                    concept_error = (
+                        "Please generate or save a project outline before refining concepts."
+                    )
+                else:
+                    if additional_guidance:
+                        concept_history.append(
+                            {"role": "user", "content": additional_guidance}
+                        )
+                    else:
+                        concept_history.append(
+                            {
+                                "role": "user",
+                                "content": (
+                                    "Analyse the outline and clarify any core concepts that seem vague."
+                                ),
+                            }
+                        )
+                    try:
+                        generator = _get_generator()
+                        analysis_results = _identify_unclear_concepts(
+                            generator,
+                            outline_text,
+                            additional_guidance,
+                        )
+                        definitions: List[Dict[str, Any]] = []
+                        if analysis_results:
+                            definitions = _define_core_concepts(
+                                generator,
+                                outline_text,
+                                analysis_results,
+                                additional_guidance,
+                            )
+                    except ValueError as exc:
+                        concept_error = str(exc)
+                        concept_history.pop()
+                    except Exception as exc:  # pragma: no cover - defensive
+                        concept_error = (
+                            "The local model could not analyse the concepts: "
+                            f"{exc}"
+                        )
+                        concept_history.pop()
+                    else:
+                        device_type = generator.get_compute_device()
+                        device_label = _normalise_device_label(device_type)
+                        device_sentence = _device_usage_sentence(device_type)
+                        analysis_message = _format_concept_analysis_summary(
+                            analysis_results
+                        )
+                        concept_history.append(
+                            {
+                                "role": "assistant",
+                                "content": analysis_message,
+                                "device_type": device_label,
+                            }
+                        )
+                        if analysis_results and definitions:
+                            definition_message = (
+                                _format_concept_definition_summary(definitions)
+                            )
+                            concept_history.append(
+                                {
+                                    "role": "assistant",
+                                    "content": definition_message,
+                                    "device_type": device_label,
+                                }
+                            )
+                            _apply_concept_definitions(
+                                project,
+                                analysis_results,
+                                definitions,
+                            )
+                            db.session.commit()
+                            concept_success = (
+                                "Concept definitions updated from assistant."
+                                f"{device_sentence}"
+                            )
+                        else:
+                            concept_success = (
+                                "No unclear concepts were identified in the outline."
+                                f"{device_sentence}"
+                            )
+                        session.modified = True
+                session.modified = True
             else:
                 if user_message:
                     history.append({"role": "user", "content": user_message})
@@ -457,6 +579,9 @@ def create_app() -> Flask:
             chapter_success=chapter_success,
             chapter_count_value=chapter_count_value,
             chapter_debug_details=chapter_debug_details,
+            concept_history=concept_history,
+            concept_error=concept_error,
+            concept_success=concept_success,
             device_hint=device_hint,
             act_chapter_lists=_collect_project_chapter_lists(project),
         )
@@ -679,6 +804,12 @@ def _chapter_session_key(project_id: int) -> str:
     """Return the session key used for chapter outline conversations."""
 
     return f"chapter_chat_history_{project_id}"
+
+
+def _concept_session_key(project_id: int) -> str:
+    """Return the session key used for concept development conversations."""
+
+    return f"concept_chat_history_{project_id}"
 
 
 def _normalise_whitespace(value: str) -> str:
@@ -1097,6 +1228,38 @@ def _generate_chapter_outlines(
     return results, structured_results, debug_entries, all_valid
 
 
+def _identify_unclear_concepts(
+    generator: TextGenerator,
+    outline_text: str,
+    additional_guidance: str,
+) -> List[Dict[str, str]]:
+    """Return concepts mentioned in the outline that need clarification."""
+
+    prompt = _build_concept_analysis_prompt(outline_text, additional_guidance)
+    response = generator.generate_response(prompt) or ""
+    return _parse_concept_analysis(response)
+
+
+def _define_core_concepts(
+    generator: TextGenerator,
+    outline_text: str,
+    concepts: List[Dict[str, str]],
+    additional_guidance: str,
+) -> List[Dict[str, Any]]:
+    """Return refined definitions for the provided ``concepts``."""
+
+    if not concepts:
+        return []
+
+    prompt = _build_concept_definition_prompt(
+        outline_text,
+        concepts,
+        additional_guidance,
+    )
+    response = generator.generate_response(prompt) or ""
+    return _parse_concept_definitions(response)
+
+
 def _collect_character_context(characters: Iterable["Character"]) -> str:
     """Build a readable summary of all available character descriptions."""
 
@@ -1369,6 +1532,317 @@ def _build_chapter_prompt(
             "Assistant:",
         ]
     )
+
+
+def _build_concept_analysis_prompt(
+    outline_text: str,
+    additional_guidance: str,
+) -> str:
+    """Construct a prompt that identifies vague concepts in an outline."""
+
+    config = SYSTEM_PROMPTS.get("concept_development", {})
+    base_prompt = config.get(
+        "analysis_prompt",
+        (
+            "You are a developmental editor who specialises in spotting vague or underspecified "
+            "story concepts. Carefully review the outline and list any notions that the author "
+            "mentions but does not clearly define."
+        ),
+    )
+    schema_instructions = config.get(
+        "analysis_schema",
+        (
+            '{\n'
+            '  "concepts": [\n'
+            '    {\n'
+            '      "name": "Term or concept as written in the outline",\n'
+            '      "issue": "Why the current description is unclear or what needs clarification"\n'
+            '    }\n'
+            '  ]\n'
+            '}'
+        ),
+    )
+
+    user_sections: List[str] = [
+        (
+            "Evaluate the outline below. Identify only the concepts, organisations, technologies, "
+            "or other terms that are explicitly mentioned but feel ambiguous, contradictory, or "
+            "underspecified."
+        ),
+        "Outline:",
+        outline_text.strip() or "(no outline provided)",
+    ]
+    if additional_guidance.strip():
+        user_sections.extend(
+            [
+                "Author guidance to consider while evaluating the outline:",
+                additional_guidance.strip(),
+            ]
+        )
+    user_sections.extend(
+        [
+            (
+                "Return a JSON object exactly matching the schema below. Include only concepts from the "
+                "outline. If nothing seems unclear, return an empty array."
+            ),
+            schema_instructions.strip(),
+        ]
+    )
+
+    prompt_lines = ["System: " + base_prompt.strip(), "User:"]
+    prompt_lines.extend(user_sections)
+    prompt_lines.append("Assistant:")
+    return "\n".join(prompt_lines)
+
+
+def _build_concept_definition_prompt(
+    outline_text: str,
+    concepts: List[Dict[str, str]],
+    additional_guidance: str,
+) -> str:
+    """Return a prompt that requests clear definitions for each concept."""
+
+    config = SYSTEM_PROMPTS.get("concept_development", {})
+    base_prompt = config.get(
+        "definition_prompt",
+        (
+            "You are a worldbuilding specialist tasked with clarifying story concepts. For each concept, "
+            "write a concise but concrete definition that resolves ambiguities and fits the outline. Also "
+            "provide two or three illustrative examples when feasible."
+        ),
+    )
+    schema_instructions = config.get(
+        "definition_schema",
+        (
+            '{\n'
+            '  "concepts": [\n'
+            '    {\n'
+            '      "name": "Concept name",\n'
+            '      "definition": "Clear definition",\n'
+            '      "examples": [\n'
+            '        "Short illustrative example"\n'
+            '      ]\n'
+            '    }\n'
+            '  ]\n'
+            '}'
+        ),
+    )
+
+    concept_summary = json.dumps(
+        {"concepts": concepts},
+        ensure_ascii=False,
+        indent=2,
+    )
+    user_sections: List[str] = [
+        "Use the outline and the concept issues below to craft precise definitions.",
+        "Outline:",
+        outline_text.strip() or "(no outline provided)",
+        "Concepts requiring clarification:",
+        concept_summary,
+    ]
+    if additional_guidance.strip():
+        user_sections.extend(
+            [
+                "Additional author guidance to incorporate:",
+                additional_guidance.strip(),
+            ]
+        )
+    user_sections.extend(
+        [
+            (
+                "Respond with JSON matching the schema below. Keep definitions concrete, avoid reusing the "
+                "author's vague language, and list up to three vivid examples for each concept."
+            ),
+            schema_instructions.strip(),
+        ]
+    )
+
+    prompt_lines = ["System: " + base_prompt.strip(), "User:"]
+    prompt_lines.extend(user_sections)
+    prompt_lines.append("Assistant:")
+    return "\n".join(prompt_lines)
+
+
+def _parse_concept_analysis(raw_response: str) -> List[Dict[str, str]]:
+    """Parse the analysis response into a list of concept issues."""
+
+    cleaned = _strip_json_code_fences(raw_response)
+    json_block = _extract_json_object(cleaned)
+    if not json_block:
+        raise ValueError(
+            "The assistant response did not contain the expected JSON object. Please try again."
+        )
+
+    try:
+        payload = json.loads(json_block)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            "The assistant returned invalid JSON while analysing concepts."
+        ) from exc
+
+    if not isinstance(payload, dict):
+        raise ValueError(
+            "The assistant response was not a JSON object. Please try again."
+        )
+
+    items = payload.get("concepts", [])
+    if items is None:
+        return []
+    if not isinstance(items, list):
+        raise ValueError(
+            "The assistant returned an unexpected format for the concept list."
+        )
+
+    results: List[Dict[str, str]] = []
+    for entry in items:
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name", "")).strip()
+        issue = str(entry.get("issue", "")).strip()
+        if not name:
+            continue
+        results.append({"name": name, "issue": issue})
+    return results
+
+
+def _parse_concept_definitions(raw_response: str) -> List[Dict[str, Any]]:
+    """Parse the definition response from the assistant."""
+
+    cleaned = _strip_json_code_fences(raw_response)
+    json_block = _extract_json_object(cleaned)
+    if not json_block:
+        raise ValueError(
+            "The assistant response did not contain the expected JSON object. Please try again."
+        )
+
+    try:
+        payload = json.loads(json_block)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            "The assistant returned invalid JSON while defining concepts."
+        ) from exc
+
+    if not isinstance(payload, dict):
+        raise ValueError(
+            "The assistant response was not a JSON object. Please try again."
+        )
+
+    items = payload.get("concepts", [])
+    if items is None:
+        return []
+    if not isinstance(items, list):
+        raise ValueError(
+            "The assistant returned an unexpected format for the concept definitions."
+        )
+
+    results: List[Dict[str, Any]] = []
+    for entry in items:
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name", "")).strip()
+        definition = str(entry.get("definition", "")).strip()
+        examples_raw = entry.get("examples", [])
+        examples: List[str] = []
+        if isinstance(examples_raw, list):
+            for example in examples_raw:
+                if example is None:
+                    continue
+                examples.append(str(example).strip())
+        elif isinstance(examples_raw, (str, int, float)):
+            text = str(examples_raw).strip()
+            if text:
+                examples.append(text)
+        if not name:
+            continue
+        results.append(
+            {
+                "name": name,
+                "definition": definition,
+                "examples": [ex for ex in examples if ex],
+            }
+        )
+    return results
+
+
+def _format_concept_analysis_summary(concepts: List[Dict[str, str]]) -> str:
+    """Return a human-readable summary of concept analysis."""
+
+    if not concepts:
+        return "No ambiguous concepts were detected in the outline."
+
+    lines = ["Potentially unclear concepts:"]
+    for entry in concepts:
+        name = entry.get("name", "").strip() or "Unnamed concept"
+        issue = entry.get("issue", "").strip()
+        if issue:
+            lines.append(f"- {name}: {issue}")
+        else:
+            lines.append(f"- {name}")
+    return "\n".join(lines)
+
+
+def _format_concept_definition_summary(concepts: List[Dict[str, Any]]) -> str:
+    """Return a summary message containing concept definitions."""
+
+    if not concepts:
+        return "No concept definitions were generated."
+
+    lines = ["Concept definitions:"]
+    for entry in concepts:
+        name = entry.get("name", "").strip() or "Unnamed concept"
+        definition = entry.get("definition", "").strip()
+        lines.append(f"\n{name}")
+        if definition:
+            lines.append(f"Definition: {definition}")
+        examples = entry.get("examples", [])
+        if examples:
+            lines.append("Examples:")
+            for example in examples:
+                if not example:
+                    continue
+                lines.append(f"- {example}")
+    return "\n".join(lines).strip()
+
+
+def _apply_concept_definitions(
+    project: Project,
+    issues: List[Dict[str, str]],
+    concepts: List[Dict[str, Any]],
+) -> None:
+    """Persist the refined concept definitions to the database."""
+
+    issue_lookup = {
+        entry["name"].strip().lower(): entry.get("issue", "").strip()
+        for entry in issues
+        if entry.get("name")
+    }
+    for existing in list(project.concepts):
+        db.session.delete(existing)
+
+    for entry in concepts:
+        name = entry.get("name", "").strip()
+        if not name:
+            continue
+        definition = entry.get("definition", "").strip()
+        if not definition:
+            continue
+        examples_list = entry.get("examples", [])
+        if isinstance(examples_list, list):
+            examples_text = "\n".join(ex for ex in examples_list if ex)
+        elif isinstance(examples_list, str):
+            examples_text = examples_list.strip()
+        else:
+            examples_text = ""
+        issue_text = issue_lookup.get(name.lower(), "")
+        concept = Concept(
+            project=project,
+            name=name,
+            issue=issue_text or None,
+            definition=definition,
+            examples=examples_text or None,
+        )
+        db.session.add(concept)
+
 
 def _run_character_profile_generation(
     generator: TextGenerator,
