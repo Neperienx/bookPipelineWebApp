@@ -61,6 +61,7 @@ db = SQLAlchemy()
 
 _CHAPTER_HEADING_PATTERN = re.compile(r"^\s*Chapter\s+(\d+)\s*:\s*(.*)$", re.IGNORECASE)
 _TITLE_SPLIT_PATTERN = re.compile(r"\s*[—–-]\s*")
+_ACT_SECTION_PATTERN = re.compile(r"(Act:\s.*?)(?=(?:\nAct:\s)|\Z)", re.DOTALL)
 
 
 class Project(db.Model):
@@ -305,7 +306,12 @@ def create_app() -> Flask:
                     act_history.append({"role": "user", "content": user_message})
                     try:
                         generator = _get_generator()
-                        act_results = _generate_three_act_outline(
+                        (
+                            act1_result,
+                            act2_result,
+                            act3_result,
+                            acts_detected,
+                        ) = _generate_three_act_outline(
                             generator,
                             project,
                             user_message,
@@ -320,7 +326,11 @@ def create_app() -> Flask:
                         device_type = generator.get_compute_device()
                         device_label = _normalise_device_label(device_type)
                         device_sentence = _device_usage_sentence(device_type)
-                        acts = [result.strip() for result in act_results]
+                        acts = [
+                            act1_result.strip(),
+                            act2_result.strip(),
+                            act3_result.strip(),
+                        ]
                         labels = ["Act I", "Act II", "Act III"]
                         for label, content in zip(labels, acts):
                             response_text = (
@@ -338,10 +348,19 @@ def create_app() -> Flask:
                         project.act2_outline = acts[1] if len(acts) > 1 else ""
                         project.act3_outline = acts[2] if len(acts) > 2 else ""
                         db.session.commit()
-                        act_success = (
-                            "Act-by-act outline updated from assistant."
-                            f"{device_sentence}"
-                        )
+                        if acts_detected >= 3:
+                            act_success = (
+                                "Act-by-act outline updated from assistant."
+                                f"{device_sentence}"
+                            )
+                        else:
+                            act_success = (
+                                "Act outline updated from assistant, but only "
+                                f"{acts_detected} act section"
+                                f"{'s' if acts_detected != 1 else ''} were detected. "
+                                "The full response was saved under Act I."
+                                f"{device_sentence}"
+                            )
                     session.modified = True
                 else:
                     act_error = "Please enter a message before sending."
@@ -1131,33 +1150,35 @@ def _generate_three_act_outline(
     generator: TextGenerator,
     project: Project,
     final_notes: str,
-) -> Tuple[str, str, str]:
+) -> Tuple[str, str, str, int]:
     """Generate a three-act outline informed by project context."""
 
     outline_text = (project.outline or "No outline has been provided yet.").strip()
     character_context = _collect_character_context(project.characters)
     notes_text = final_notes.strip() or "No final notes provided."
 
-    results: List[str] = []
-    previous_acts: List[Tuple[int, str]] = []
+    prompt = _build_full_act_prompt(
+        outline_text,
+        character_context,
+        notes_text,
+    )
+    response = generator.generate_response(prompt) or ""
+    response_clean = response.strip()
 
-    for act_number in (1, 2, 3):
-        prompt = _build_act_prompt(
-            act_number,
-            outline_text,
-            character_context,
-            notes_text,
-            previous_acts,
-        )
-        response = generator.generate_response(prompt) or ""
-        response_clean = response.strip()
-        results.append(response_clean)
-        previous_acts.append((act_number, response_clean))
+    act_sections = _split_act_sections(response_clean)
+    acts_detected = len(act_sections)
+
+    if acts_detected >= 3:
+        results = act_sections[:3]
+    elif response_clean:
+        results = [response_clean, "", ""]
+    else:
+        results = ["", "", ""]
 
     while len(results) < 3:
         results.append("")
 
-    return results[0], results[1], results[2]
+    return results[0], results[1], results[2], acts_detected
 
 
 def _generate_chapter_outlines(
@@ -1285,17 +1306,28 @@ def _collect_character_context(characters: Iterable["Character"]) -> str:
     return "\n\n".join(entries)
 
 
-def _build_act_prompt(
-    act_number: int,
+def _split_act_sections(response_text: str) -> List[str]:
+    """Return individual act sections from a formatted assistant response."""
+
+    if not response_text:
+        return []
+
+    matches = [
+        match.group(1).strip()
+        for match in _ACT_SECTION_PATTERN.finditer(response_text)
+        if match.group(1).strip()
+    ]
+    return matches
+
+
+def _build_full_act_prompt(
     outline_text: str,
     character_context: str,
     final_notes: str,
-    previous_acts: Sequence[Tuple[int, str]],
 ) -> str:
-    """Construct a tailored prompt for the requested act."""
+    """Construct a prompt requesting the complete three-act outline."""
 
     act_labels = {1: "Act I", 2: "Act II", 3: "Act III"}
-    label = act_labels.get(act_number, f"Act {act_number}")
 
     config = SYSTEM_PROMPTS.get("act_outline", {})
     base_prompt = config.get(
@@ -1306,14 +1338,17 @@ def _build_act_prompt(
             "in the provided story materials."
         ),
     )
-    act_guidance_map = config.get("acts", {})
-    act_guidance = act_guidance_map.get(
-        act_number,
-        "Ensure the act fulfils its role in classic three-act structure.",
+    format_prompt = config.get(
+        "format",
+        (
+            "Respond in plain text. Begin each act with 'Act:' followed by the act "
+            "label and provide 4-6 numbered beats before moving on to the next act."
+        ),
     )
+    act_guidance_map = config.get("acts", {})
 
     user_sections: List[str] = [
-        f"Create {label} of a three-act outline while respecting the context below.",
+        "Craft a complete three-act outline using the context below.",
         "",
         "Project outline:",
         outline_text or "No outline has been provided yet.",
@@ -1323,30 +1358,26 @@ def _build_act_prompt(
         "",
         "Author final notes:",
         final_notes or "No final notes provided.",
+        "",
+        "Act-specific guidance:",
     ]
 
-    if previous_acts:
-        user_sections.append("")
-        user_sections.append("Previous acts for continuity:")
-        for previous_act_number, summary in previous_acts:
-            previous_label = act_labels.get(
-                previous_act_number,
-                f"Act {previous_act_number}",
-            )
-            cleaned_summary = summary.strip() or "(no summary available)"
-            user_sections.append(f"{previous_label} summary:\n{cleaned_summary}")
+    for act_number in (1, 2, 3):
+        label = act_labels.get(act_number, f"Act {act_number}")
+        guidance = act_guidance_map.get(
+            act_number,
+            "Ensure the act fulfils its role in classic three-act structure.",
+        )
+        user_sections.append(f"{label}: {guidance.strip()}")
 
     user_sections.extend(
         [
             "",
-            f"Guidance for {label}:",
-            act_guidance.strip(),
-            "",
-            (
-                "Deliver the response as 4-6 numbered beats. Each beat should be "
-                "one or two sentences that emphasise goals, conflicts, and "
-                "reversals relevant to this act."
-            ),
+            "Formatting requirements:",
+            format_prompt.strip(),
+            "- Begin each act section on a new line with the exact prefix 'Act:'.",
+            "- Under each header, list 4-6 numbered beats (e.g., '1. ...').",
+            "- Keep the response as plain text with blank lines between acts and no JSON or bullet lists.",
         ]
     )
 
