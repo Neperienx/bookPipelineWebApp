@@ -1,0 +1,13 @@
+# OpenAI secrets
+openai_config.json
+.env
+.env.*
+!.env.example
+
+# Python cache/bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+instance/book_pipeline.db
+
