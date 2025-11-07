@@ -59,7 +59,14 @@ _generator: TextGenerator | None = None
 db = SQLAlchemy()
 
 
-_CHAPTER_HEADING_PATTERN = re.compile(r"^\s*Chapter\s+(\d+)\s*:\s*(.*)$", re.IGNORECASE)
+_CHAPTER_HEADER_PATTERN = re.compile(
+    r"^\s*Chapter\s*:\s*Chapter\s+(\d+)\s*[—–-]\s*(.*)$",
+    re.IGNORECASE,
+)
+_LEGACY_CHAPTER_HEADING_PATTERN = re.compile(
+    r"^\s*Chapter\s+(\d+)\s*:\s*(.*)$",
+    re.IGNORECASE,
+)
 _TITLE_SPLIT_PATTERN = re.compile(r"\s*[—–-]\s*")
 _ACT_SECTION_PATTERN = re.compile(r"(Act:\s.*?)(?=(?:\nAct:\s)|\Z)", re.DOTALL)
 
@@ -852,23 +859,82 @@ def _extract_title_summary(raw_content: str) -> Tuple[str, str]:
     return cleaned, ""
 
 
-def _parse_chapter_entries(text: str) -> List[Dict[str, Any]]:
-    """Return structured chapter entries parsed from ``text``."""
+def _parse_structured_chapter_entries(text: str) -> List[Dict[str, Any]]:
+    """Parse chapter entries that follow the new 'Chapter:' section format."""
 
     entries: List[Dict[str, Any]] = []
-    if not text:
-        return entries
-
     current: Dict[str, Any] | None = None
+    found_header = False
+
     for line in text.splitlines():
-        match = _CHAPTER_HEADING_PATTERN.match(line)
+        match = _CHAPTER_HEADER_PATTERN.match(line)
+        if match:
+            found_header = True
+            if current is not None:
+                summary = _normalise_whitespace(
+                    " ".join(current.get("summary_lines", []))
+                )
+                entries.append(
+                    {
+                        "number": current["number"],
+                        "title": current["title"],
+                        "summary": summary,
+                    }
+                )
+
+            number = int(match.group(1))
+            title = _normalise_whitespace(match.group(2))
+            current = {
+                "number": number,
+                "title": title,
+                "summary_lines": [],
+            }
+            continue
+
+        if current is None:
+            continue
+
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        current.setdefault("summary_lines", []).append(stripped)
+
+    if current is not None:
+        summary = _normalise_whitespace(" ".join(current.get("summary_lines", [])))
+        entries.append(
+            {
+                "number": current["number"],
+                "title": current["title"],
+                "summary": summary,
+            }
+        )
+
+    if not found_header:
+        return []
+
+    return entries
+
+
+def _parse_legacy_chapter_entries(text: str) -> List[Dict[str, Any]]:
+    """Parse chapter entries that follow the legacy single-line format."""
+
+    entries: List[Dict[str, Any]] = []
+    current: Dict[str, Any] | None = None
+
+    for line in text.splitlines():
+        match = _LEGACY_CHAPTER_HEADING_PATTERN.match(line)
         if match:
             if current is not None:
-                current["raw"] = _normalise_whitespace(current.get("raw", ""))
-                title, summary = _extract_title_summary(current.get("raw", ""))
-                current["title"] = title
-                current["summary"] = summary
-                entries.append(current)
+                raw_value = _normalise_whitespace(current.get("raw", ""))
+                title, summary = _extract_title_summary(raw_value)
+                entries.append(
+                    {
+                        "number": current["number"],
+                        "title": title,
+                        "summary": summary,
+                    }
+                )
 
             number = int(match.group(1))
             remainder = match.group(2).strip()
@@ -893,13 +959,30 @@ def _parse_chapter_entries(text: str) -> List[Dict[str, Any]]:
         current["raw"] = raw_value
 
     if current is not None:
-        current["raw"] = _normalise_whitespace(current.get("raw", ""))
-        title, summary = _extract_title_summary(current.get("raw", ""))
-        current["title"] = title
-        current["summary"] = summary
-        entries.append(current)
+        raw_value = _normalise_whitespace(current.get("raw", ""))
+        title, summary = _extract_title_summary(raw_value)
+        entries.append(
+            {
+                "number": current["number"],
+                "title": title,
+                "summary": summary,
+            }
+        )
 
     return entries
+
+
+def _parse_chapter_entries(text: str) -> List[Dict[str, Any]]:
+    """Return structured chapter entries parsed from ``text``."""
+
+    if not text:
+        return []
+
+    structured = _parse_structured_chapter_entries(text)
+    if structured:
+        return structured
+
+    return _parse_legacy_chapter_entries(text)
 
 
 def _serialise_chapter_entries(entries: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -923,7 +1006,7 @@ def _serialise_chapter_entries(entries: Sequence[Dict[str, Any]]) -> List[Dict[s
 def _render_chapter_entries(entries: Sequence[Dict[str, Any]]) -> str:
     """Format structured entries back into canonical chapter text."""
 
-    lines: List[str] = []
+    sections: List[str] = []
     for entry in entries:
         number = entry.get("number")
         try:
@@ -933,13 +1016,16 @@ def _render_chapter_entries(entries: Sequence[Dict[str, Any]]) -> str:
 
         title = entry.get("title", "").strip()
         summary = entry.get("summary", "").strip()
-        if summary:
-            line = f"Chapter {number_int}: {title} — {summary}".strip()
-        else:
-            line = f"Chapter {number_int}: {title}".strip()
-        lines.append(line)
+        header_title = title if title else "Untitled Chapter"
+        header = f"Chapter: Chapter {number_int} — {header_title}".strip()
 
-    return "\n".join(lines).strip()
+        section_lines = [header]
+        if summary:
+            section_lines.append(summary)
+
+        sections.append("\n".join(section_lines).strip())
+
+    return "\n\n".join(sections).strip()
 
 
 def _validate_chapter_outline(
@@ -1523,10 +1609,9 @@ def _build_chapter_prompt(
             "Ensure chapter arcs build naturally from prior acts and prepare the next act where appropriate without jumping ahead.",
             "",
             "Formatting requirements:",
-            "- Each chapter must appear on its own line with no leading bullets or numbering other than the required label.",
-            "- Begin every line exactly with 'Chapter <number>:' (for example, 'Chapter 1:').",
-            "- After the colon, include an evocative chapter title, then an em dash (—) or hyphen, followed by a 2-3 sentence summary.",
-            "- Do not add commentary or sections before or after the chapter list.",
+            "- Begin each chapter section on a new line with the exact prefix 'Chapter:' followed by 'Chapter <number> — <Title>'.",
+            "- Place the 2-3 sentence summary immediately underneath the header as a single paragraph (no bullet points).",
+            "- Leave a blank line between chapter sections and do not add commentary before or after the list.",
         ]
     )
 
