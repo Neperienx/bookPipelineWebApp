@@ -138,6 +138,17 @@ class OpenAITextGenerator:
         self.api_key = api_key
         self.default_max_tokens = default_max_tokens
 
+    def _format_api_key_for_logging(self) -> str:
+        """Return an obfuscated version of the API key suitable for logs."""
+
+        if not self.api_key:
+            return "<empty>"
+
+        if len(self.api_key) <= 8:
+            return "*" * len(self.api_key)
+
+        return f"{self.api_key[:4]}***{self.api_key[-4:]}"
+
     def generate_response(
         self,
         prompt: str,
@@ -166,6 +177,7 @@ class OpenAITextGenerator:
 
         completion = None
         completion_error: Exception | None = None
+        masked_key = self._format_api_key_for_logging()
 
         # ``openai`` version < 1.0 exposed a module level ``Completion`` helper.
         if hasattr(openai, "Completion"):
@@ -175,6 +187,16 @@ class OpenAITextGenerator:
                 pass
 
             try:
+                LOGGER.info(
+                    "Calling OpenAI Completion endpoint",
+                    extra={
+                        "openai_model": self.model_name,
+                        "openai_api_key": masked_key,
+                        "openai_max_tokens": token_count,
+                        "openai_temperature": temperature,
+                        "openai_top_p": top_p,
+                    },
+                )
                 completion = openai.Completion.create(  # type: ignore[attr-defined]
                     model=self.model_name,
                     prompt=prompt,
@@ -184,6 +206,16 @@ class OpenAITextGenerator:
                     n=1,
                 )
             except Exception as exc:  # pragma: no cover - network/errors
+                LOGGER.exception(
+                    "OpenAI Completion request failed",
+                    extra={
+                        "openai_model": self.model_name,
+                        "openai_api_key": masked_key,
+                        "openai_max_tokens": token_count,
+                        "openai_temperature": temperature,
+                        "openai_top_p": top_p,
+                    },
+                )
                 _raise_for_openai_api_error(exc)
                 completion_error = exc
 
@@ -192,6 +224,16 @@ class OpenAITextGenerator:
         if completion is None and hasattr(openai, "OpenAI"):
             try:
                 client = openai.OpenAI(api_key=self.api_key)  # type: ignore[attr-defined]
+                LOGGER.info(
+                    "Calling OpenAI client completions endpoint",
+                    extra={
+                        "openai_model": self.model_name,
+                        "openai_api_key": masked_key,
+                        "openai_max_tokens": token_count,
+                        "openai_temperature": temperature,
+                        "openai_top_p": top_p,
+                    },
+                )
                 completion = client.completions.create(  # type: ignore[attr-defined]
                     model=self.model_name,
                     prompt=prompt,
@@ -201,6 +243,16 @@ class OpenAITextGenerator:
                     n=1,
                 )
             except Exception as exc:  # pragma: no cover - network/errors
+                LOGGER.exception(
+                    "OpenAI client completions request failed",
+                    extra={
+                        "openai_model": self.model_name,
+                        "openai_api_key": masked_key,
+                        "openai_max_tokens": token_count,
+                        "openai_temperature": temperature,
+                        "openai_top_p": top_p,
+                    },
+                )
                 _raise_for_openai_api_error(exc)
                 completion_error = exc
 
@@ -239,6 +291,16 @@ class OpenAITextGenerator:
         if text is None:
             return ""
 
+        LOGGER.info(
+            "OpenAI completion succeeded",
+            extra={
+                "openai_model": self.model_name,
+                "openai_api_key": masked_key,
+                "openai_max_tokens": token_count,
+                "openai_temperature": temperature,
+                "openai_top_p": top_p,
+            },
+        )
         return str(text).strip()
 
     def get_compute_device(self) -> str:
