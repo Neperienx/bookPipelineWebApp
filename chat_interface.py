@@ -17,7 +17,7 @@ import json
 import re
 import time
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from datetime import datetime
 
@@ -201,10 +201,10 @@ class OpenAITextGenerator:
         masked_key = self._format_api_key_for_logging()
         use_chat_endpoint = self._is_chat_model()
 
-        def _build_payload() -> Dict[str, Any]:
+        def _build_payload(token_param: str) -> Dict[str, Any]:
             base: Dict[str, Any] = {
                 "model": self.model_name,
-                "max_tokens": token_count,
+                token_param: token_count,
                 "temperature": temperature if temperature is not None else 0.7,
                 "top_p": top_p if top_p is not None else 1.0,
             }
@@ -213,6 +213,31 @@ class OpenAITextGenerator:
             else:
                 base["prompt"] = prompt
             return base
+
+        def _should_retry_with_alternate_token_param(exc: Exception, token_param: str) -> bool:
+            message = str(exc)
+            if not message:
+                return False
+            message = message.lower()
+            token_param = token_param.lower()
+            return "unsupported parameter" in message and token_param in message
+
+        def _call_with_token_params(
+            request_func: Callable[[Dict[str, Any]], Any],
+            token_params: Sequence[str],
+        ) -> Any:
+            last_error: Exception | None = None
+            for token_param in token_params:
+                try:
+                    return request_func(_build_payload(token_param))
+                except Exception as exc:  # pragma: no cover - network/errors
+                    if _should_retry_with_alternate_token_param(exc, token_param):
+                        last_error = exc
+                        continue
+                    raise
+            if last_error is not None:
+                raise last_error
+            return None
 
         # ``openai`` version < 1.0 exposed module level helpers for both
         # completions and chat completions.
@@ -233,9 +258,12 @@ class OpenAITextGenerator:
                         "openai_top_p": top_p,
                     },
                 )
-                completion = openai.ChatCompletion.create(  # type: ignore[attr-defined]
-                    **_build_payload(),
-                    n=1,
+                completion = _call_with_token_params(
+                    lambda payload: openai.ChatCompletion.create(  # type: ignore[attr-defined]
+                        **payload,
+                        n=1,
+                    ),
+                    ("max_completion_tokens", "max_tokens"),
                 )
             except Exception as exc:  # pragma: no cover - network/errors
                 LOGGER.exception(
@@ -269,9 +297,12 @@ class OpenAITextGenerator:
                         "openai_top_p": top_p,
                     },
                 )
-                completion = openai.Completion.create(  # type: ignore[attr-defined]
-                    **_build_payload(),
-                    n=1,
+                completion = _call_with_token_params(
+                    lambda payload: openai.Completion.create(  # type: ignore[attr-defined]
+                        **payload,
+                        n=1,
+                    ),
+                    ("max_tokens",),
                 )
             except Exception as exc:  # pragma: no cover - network/errors
                 LOGGER.exception(
@@ -304,14 +335,20 @@ class OpenAITextGenerator:
                     },
                 )
                 if use_chat_endpoint:
-                    completion = client.chat.completions.create(  # type: ignore[attr-defined]
-                        **_build_payload(),
-                        n=1,
+                    completion = _call_with_token_params(
+                        lambda payload: client.chat.completions.create(  # type: ignore[attr-defined]
+                            **payload,
+                            n=1,
+                        ),
+                        ("max_completion_tokens", "max_tokens"),
                     )
                 else:
-                    completion = client.completions.create(  # type: ignore[attr-defined]
-                        **_build_payload(),
-                        n=1,
+                    completion = _call_with_token_params(
+                        lambda payload: client.completions.create(  # type: ignore[attr-defined]
+                            **payload,
+                            n=1,
+                        ),
+                        ("max_tokens",),
                     )
             except Exception as exc:  # pragma: no cover - network/errors
                 LOGGER.exception(
