@@ -110,25 +110,78 @@ class OpenAITextGenerator:
                 "max_new_tokens must be a positive integer when using the API backend."
             )
 
-        openai.api_key = self.api_key
-        try:
-            completion = openai.Completion.create(  # type: ignore[attr-defined]
-                model=self.model_name,
-                prompt=prompt,
-                max_tokens=token_count,
-                temperature=temperature if temperature is not None else 0.7,
-                top_p=top_p if top_p is not None else 1.0,
-                n=1,
-            )
-        except Exception as exc:  # pragma: no cover - network errors
-            raise RuntimeError("OpenAI API request failed.") from exc
+        completion = None
+        completion_error: Exception | None = None
 
-        choices = getattr(completion, "choices", [])
+        # ``openai`` version < 1.0 exposed a module level ``Completion`` helper.
+        if hasattr(openai, "Completion"):
+            try:
+                openai.api_key = self.api_key  # type: ignore[assignment]
+            except Exception:  # pragma: no cover - attribute missing on newer SDKs
+                pass
+
+            try:
+                completion = openai.Completion.create(  # type: ignore[attr-defined]
+                    model=self.model_name,
+                    prompt=prompt,
+                    max_tokens=token_count,
+                    temperature=temperature if temperature is not None else 0.7,
+                    top_p=top_p if top_p is not None else 1.0,
+                    n=1,
+                )
+            except Exception as exc:  # pragma: no cover - network/errors
+                completion_error = exc
+
+        # Modern versions of the SDK expose the ``OpenAI`` client class instead of
+        # module level helpers.  Fall back to that client when needed.
+        if completion is None and hasattr(openai, "OpenAI"):
+            try:
+                client = openai.OpenAI(api_key=self.api_key)  # type: ignore[attr-defined]
+                completion = client.completions.create(  # type: ignore[attr-defined]
+                    model=self.model_name,
+                    prompt=prompt,
+                    max_tokens=token_count,
+                    temperature=temperature if temperature is not None else 0.7,
+                    top_p=top_p if top_p is not None else 1.0,
+                    n=1,
+                )
+            except Exception as exc:  # pragma: no cover - network/errors
+                completion_error = exc
+
+        if completion is None:
+            if completion_error is not None:
+                raise RuntimeError("OpenAI API request failed.") from completion_error
+            raise RuntimeError(
+                "OpenAI completion client is unavailable. Update the openai package."
+            )
+
+        choices = getattr(completion, "choices", None)
         if not choices:
-            return ""
-        text = getattr(choices[0], "text", "")
+            # ``responses.create`` (new SDK) exposes ``output_text`` instead of ``choices``.
+            text_output = getattr(completion, "output_text", None)
+            return str(text_output or "").strip()
+
+        first_choice = choices[0]
+        text: Optional[str] = None
+
+        if isinstance(first_choice, dict):
+            text = first_choice.get("text")
+            if text is None:
+                message = first_choice.get("message")
+                if isinstance(message, dict):
+                    text = message.get("content")
+        else:
+            text = getattr(first_choice, "text", None)
+            if text is None:
+                message = getattr(first_choice, "message", None)
+                if isinstance(message, dict):
+                    text = message.get("content")
+                else:
+                    text = getattr(message, "content", None)
+
         if text is None:
             return ""
+
         return str(text).strip()
 
     def get_compute_device(self) -> str:
