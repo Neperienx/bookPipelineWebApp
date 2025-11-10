@@ -149,6 +149,27 @@ class OpenAITextGenerator:
 
         return f"{self.api_key[:4]}***{self.api_key[-4:]}"
 
+    def _is_chat_model(self) -> bool:
+        """Return True when the configured model expects chat payloads."""
+
+        name = self.model_name.strip().lower()
+        if not name:
+            return False
+
+        # Most legacy completion models use the ``text-`` prefix or the names of
+        # the original GPT-3 families (ada, babbage, curie, davinci).  Everything
+        # else is assumed to be a chat model, which keeps the heuristic future
+        # proof for current OpenAI releases (gpt-3.5, gpt-4, gpt-5, o-series…).
+        legacy_prefixes = (
+            "text-",
+            "code-",
+            "babbage",
+            "curie",
+            "ada",
+            "davinci",
+        )
+        return not name.startswith(legacy_prefixes)
+
     def generate_response(
         self,
         prompt: str,
@@ -178,9 +199,60 @@ class OpenAITextGenerator:
         completion = None
         completion_error: Exception | None = None
         masked_key = self._format_api_key_for_logging()
+        use_chat_endpoint = self._is_chat_model()
+
+        def _build_payload() -> Dict[str, Any]:
+            base: Dict[str, Any] = {
+                "model": self.model_name,
+                "max_tokens": token_count,
+                "temperature": temperature if temperature is not None else 0.7,
+                "top_p": top_p if top_p is not None else 1.0,
+            }
+            if use_chat_endpoint:
+                base["messages"] = [{"role": "user", "content": prompt}]
+            else:
+                base["prompt"] = prompt
+            return base
+
+        # ``openai`` version < 1.0 exposed module level helpers for both
+        # completions and chat completions.
+        if use_chat_endpoint and hasattr(openai, "ChatCompletion"):
+            try:
+                openai.api_key = self.api_key  # type: ignore[assignment]
+            except Exception:  # pragma: no cover - attribute missing on newer SDKs
+                pass
+
+            try:
+                LOGGER.info(
+                    "Calling OpenAI ChatCompletion endpoint",
+                    extra={
+                        "openai_model": self.model_name,
+                        "openai_api_key": masked_key,
+                        "openai_max_tokens": token_count,
+                        "openai_temperature": temperature,
+                        "openai_top_p": top_p,
+                    },
+                )
+                completion = openai.ChatCompletion.create(  # type: ignore[attr-defined]
+                    **_build_payload(),
+                    n=1,
+                )
+            except Exception as exc:  # pragma: no cover - network/errors
+                LOGGER.exception(
+                    "OpenAI ChatCompletion request failed",
+                    extra={
+                        "openai_model": self.model_name,
+                        "openai_api_key": masked_key,
+                        "openai_max_tokens": token_count,
+                        "openai_temperature": temperature,
+                        "openai_top_p": top_p,
+                    },
+                )
+                _raise_for_openai_api_error(exc)
+                completion_error = exc
 
         # ``openai`` version < 1.0 exposed a module level ``Completion`` helper.
-        if hasattr(openai, "Completion"):
+        if completion is None and not use_chat_endpoint and hasattr(openai, "Completion"):
             try:
                 openai.api_key = self.api_key  # type: ignore[assignment]
             except Exception:  # pragma: no cover - attribute missing on newer SDKs
@@ -198,11 +270,7 @@ class OpenAITextGenerator:
                     },
                 )
                 completion = openai.Completion.create(  # type: ignore[attr-defined]
-                    model=self.model_name,
-                    prompt=prompt,
-                    max_tokens=token_count,
-                    temperature=temperature if temperature is not None else 0.7,
-                    top_p=top_p if top_p is not None else 1.0,
+                    **_build_payload(),
                     n=1,
                 )
             except Exception as exc:  # pragma: no cover - network/errors
@@ -225,7 +293,8 @@ class OpenAITextGenerator:
             try:
                 client = openai.OpenAI(api_key=self.api_key)  # type: ignore[attr-defined]
                 LOGGER.info(
-                    "Calling OpenAI client completions endpoint",
+                    "Calling OpenAI client %s endpoint",
+                    "chat.completions" if use_chat_endpoint else "completions",
                     extra={
                         "openai_model": self.model_name,
                         "openai_api_key": masked_key,
@@ -234,17 +303,20 @@ class OpenAITextGenerator:
                         "openai_top_p": top_p,
                     },
                 )
-                completion = client.completions.create(  # type: ignore[attr-defined]
-                    model=self.model_name,
-                    prompt=prompt,
-                    max_tokens=token_count,
-                    temperature=temperature if temperature is not None else 0.7,
-                    top_p=top_p if top_p is not None else 1.0,
-                    n=1,
-                )
+                if use_chat_endpoint:
+                    completion = client.chat.completions.create(  # type: ignore[attr-defined]
+                        **_build_payload(),
+                        n=1,
+                    )
+                else:
+                    completion = client.completions.create(  # type: ignore[attr-defined]
+                        **_build_payload(),
+                        n=1,
+                    )
             except Exception as exc:  # pragma: no cover - network/errors
                 LOGGER.exception(
-                    "OpenAI client completions request failed",
+                    "OpenAI client %s request failed",
+                    "chat.completions" if use_chat_endpoint else "completions",
                     extra={
                         "openai_model": self.model_name,
                         "openai_api_key": masked_key,
@@ -292,7 +364,8 @@ class OpenAITextGenerator:
             return ""
 
         LOGGER.info(
-            "OpenAI completion succeeded",
+            "OpenAI %s succeeded",
+            "chat.completion" if use_chat_endpoint else "completion",
             extra={
                 "openai_model": self.model_name,
                 "openai_api_key": masked_key,
