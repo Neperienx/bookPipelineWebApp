@@ -51,6 +51,60 @@ try:  # The OpenAI package is optional and only required when the API backend is
 except ImportError:  # pragma: no cover - handled gracefully when API mode requested
     openai = None  # type: ignore
 
+
+class OpenAIAPIRateLimitError(RuntimeError):
+    """Raised when the OpenAI API reports a rate limit condition."""
+
+    def __init__(self, message: Optional[str] = None) -> None:
+        super().__init__(
+            message
+            or "The OpenAI API rate limit has been exceeded. Please try again shortly."
+        )
+
+
+if openai is not None:  # pragma: no cover - executed only when dependency installed
+    _openai_rate_limit_types: List[type[BaseException]] = []
+    try:  # Legacy SDK (<1.0)
+        from openai.error import RateLimitError as _LegacyRateLimitError  # type: ignore
+    except Exception:  # pragma: no cover - attribute may be missing
+        _LegacyRateLimitError = None  # type: ignore
+    else:
+        _openai_rate_limit_types.append(_LegacyRateLimitError)
+
+    try:  # Modern SDK (>=1.0)
+        from openai import RateLimitError as _ModernRateLimitError  # type: ignore
+    except Exception:  # pragma: no cover - attribute may be missing
+        _ModernRateLimitError = None  # type: ignore
+    else:
+        if _ModernRateLimitError not in _openai_rate_limit_types:
+            _openai_rate_limit_types.append(_ModernRateLimitError)
+
+    _OPENAI_RATE_LIMIT_TYPES: Tuple[type[BaseException], ...] = tuple(
+        _openai_rate_limit_types
+    )
+else:  # pragma: no cover - executed when dependency unavailable
+    _OPENAI_RATE_LIMIT_TYPES = tuple()
+
+
+
+def _raise_for_openai_api_error(exc: Exception) -> None:
+    """Raise a specialised error when the OpenAI API reports known issues."""
+
+    if _OPENAI_RATE_LIMIT_TYPES and isinstance(exc, _OPENAI_RATE_LIMIT_TYPES):
+        raise OpenAIAPIRateLimitError() from exc
+
+    status_code = getattr(exc, "status_code", None)
+    if status_code == 429:
+        raise OpenAIAPIRateLimitError() from exc
+
+    error_code = getattr(exc, "code", None)
+    if isinstance(error_code, str) and "rate" in error_code.lower():
+        raise OpenAIAPIRateLimitError() from exc
+
+    message = str(exc).lower()
+    if "rate limit" in message:
+        raise OpenAIAPIRateLimitError() from exc
+
 # Flask session requires a secret key.  Use an environment variable so the
 # application can be run without editing source code.
 DEFAULT_SECRET = "dev-secret-key-change-me"
@@ -130,6 +184,7 @@ class OpenAITextGenerator:
                     n=1,
                 )
             except Exception as exc:  # pragma: no cover - network/errors
+                _raise_for_openai_api_error(exc)
                 completion_error = exc
 
         # Modern versions of the SDK expose the ``OpenAI`` client class instead of
@@ -146,10 +201,12 @@ class OpenAITextGenerator:
                     n=1,
                 )
             except Exception as exc:  # pragma: no cover - network/errors
+                _raise_for_openai_api_error(exc)
                 completion_error = exc
 
         if completion is None:
             if completion_error is not None:
+                _raise_for_openai_api_error(completion_error)
                 raise RuntimeError("OpenAI API request failed.") from completion_error
             raise RuntimeError(
                 "OpenAI completion client is unavailable. Update the openai package."
@@ -469,7 +526,7 @@ def create_app() -> Flask:
 
     @app.route("/projects/<int:project_id>", methods=["GET", "POST"])
     def project_detail(project_id: int) -> str:
-        project = Project.query.get(project_id)
+        project = db.session.get(Project, project_id)
         if project is None:
             abort(404)
 
@@ -526,6 +583,9 @@ def create_app() -> Flask:
                             project,
                             user_message,
                         )
+                    except OpenAIAPIRateLimitError as exc:
+                        act_error = str(exc)
+                        act_history.pop()
                     except RuntimeError as exc:
                         act_error = str(exc)
                         act_history.pop()
@@ -612,6 +672,9 @@ def create_app() -> Flask:
                                 user_message,
                                 chapters_per_act,
                             )
+                        except OpenAIAPIRateLimitError as exc:
+                            chapter_error = str(exc)
+                            chapter_history.pop()
                         except RuntimeError as exc:
                             chapter_error = str(exc)
                             chapter_history.pop()
@@ -712,6 +775,9 @@ def create_app() -> Flask:
                                 analysis_results,
                                 additional_guidance,
                             )
+                    except OpenAIAPIRateLimitError as exc:
+                        concept_error = str(exc)
+                        concept_history.pop()
                     except RuntimeError as exc:
                         concept_error = str(exc)
                         concept_history.pop()
@@ -775,6 +841,9 @@ def create_app() -> Flask:
                         assistant_reply_raw = generator.generate_response(
                             _build_outline_prompt(project, history)
                         )
+                    except OpenAIAPIRateLimitError as exc:
+                        error = str(exc)
+                        history.pop()
                     except RuntimeError as exc:
                         error = str(exc)
                         history.pop()
@@ -836,7 +905,7 @@ def create_app() -> Flask:
         methods=["POST"],
     )
     def character_create(project_id: int) -> str:
-        project = Project.query.get(project_id)
+        project = db.session.get(Project, project_id)
         if project is None:
             abort(404)
 
@@ -857,7 +926,7 @@ def create_app() -> Flask:
         methods=["GET", "POST"],
     )
     def character_detail(project_id: int, character_id: int) -> str:
-        project = Project.query.get(project_id)
+        project = db.session.get(Project, project_id)
         if project is None:
             abort(404)
 
@@ -911,7 +980,7 @@ def create_app() -> Flask:
         methods=["POST"],
     )
     def character_generate(project_id: int, character_id: int):
-        project = Project.query.get(project_id)
+        project = db.session.get(Project, project_id)
         if project is None:
             return jsonify({"error": "Project not found."}), 404
 
@@ -987,6 +1056,13 @@ def create_app() -> Flask:
                 prompt_inputs,
                 input_fields,
             )
+        except OpenAIAPIRateLimitError as exc:
+            LOGGER.info(
+                "Character profile generation rate limited for project %s character %s",
+                project_id,
+                character_id,
+            )
+            return jsonify({"error": str(exc)}), 429
         except ValueError as exc:
             LOGGER.warning(
                 "Character profile generation validation failed for project %s character %s: %s",
