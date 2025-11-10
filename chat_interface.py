@@ -957,8 +957,10 @@ def create_app() -> Flask:
         try:
             generator = _resolve_text_generator(use_api_requested)
         except RuntimeError as exc:
+            LOGGER.error("Failed to initialise text generator: %s", exc)
             return jsonify({"error": str(exc)}), 400
         except Exception as exc:  # pragma: no cover - defensive
+            LOGGER.exception("Unexpected error initialising text generator")
             return (
                 jsonify(
                     {
@@ -986,8 +988,19 @@ def create_app() -> Flask:
                 input_fields,
             )
         except ValueError as exc:
+            LOGGER.warning(
+                "Character profile generation validation failed for project %s character %s: %s",
+                project_id,
+                character_id,
+                exc,
+            )
             return jsonify({"error": str(exc)}), 422
         except Exception as exc:  # pragma: no cover - defensive
+            LOGGER.exception(
+                "Character profile generation failed for project %s character %s",
+                project_id,
+                character_id,
+            )
             return (
                 jsonify(
                     {
