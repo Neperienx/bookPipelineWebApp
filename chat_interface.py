@@ -205,9 +205,11 @@ class OpenAITextGenerator:
             base: Dict[str, Any] = {
                 "model": self.model_name,
                 token_param: token_count,
-                "temperature": temperature if temperature is not None else 0.7,
-                "top_p": top_p if top_p is not None else 1.0,
             }
+            if temperature is not None:
+                base["temperature"] = temperature
+            if top_p is not None:
+                base["top_p"] = top_p
             if use_chat_endpoint:
                 base["messages"] = [{"role": "user", "content": prompt}]
             else:
