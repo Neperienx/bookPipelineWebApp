@@ -10,10 +10,10 @@
       margin-bottom: 2rem;
       flex-wrap: wrap;
     }
-    .tile-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 1rem;
+    .section-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
     }
     .overview-tile {
       position: relative;
@@ -45,10 +45,19 @@
     }
     .tile-detail {
       display: none;
-      margin-top: 1.75rem;
+      height: 100%;
+      margin-top: 0;
     }
     .tile-detail.active {
       display: block;
+    }
+    .section-panel {
+      height: 100%;
+    }
+    .chat-column {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
     }
     .chat-panel {
       display: none;
@@ -57,6 +66,16 @@
     }
     .chat-panel.active {
       display: flex;
+    }
+    @media (max-width: 991.98px) {
+      .section-nav {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+      }
+      .section-nav .overview-tile {
+        flex: 1 1 calc(50% - 0.75rem);
+      }
     }
     .outline-content {
       border-radius: 1rem;
@@ -158,11 +177,32 @@
     </div>
     <a href="{{ url_for('dashboard') }}" class="btn btn-outline-light btn-sm">Back to dashboard</a>
   </div>
-  <div class="row g-4">
-    <div class="col-xl-5">
+  <div class="row g-4 align-items-start">
+    <div class="col-xl-3">
       <div class="card h-100">
-        <div class="card-body">
-          <div class="tile-grid" role="tablist" aria-label="Project sections">
+        <div class="card-body d-flex flex-column gap-4">
+          <div>
+            <h2 class="h6 text-uppercase text-secondary mb-1">Story workflow</h2>
+            <p class="text-secondary small mb-0">Follow each step to take your project from idea to chapters.</p>
+          </div>
+          <nav class="section-nav" role="tablist" aria-label="Project sections">
+            <button
+              class="overview-tile"
+              type="button"
+              data-target="charactersPanel"
+              data-chat-target="characterChatPanel"
+              aria-controls="charactersPanel"
+              aria-selected="false"
+            >
+              <h2 class="h6 mb-1">Character creation</h2>
+              <p>
+                {% if project.characters %}
+                  Manage {{ project.characters|length }} character{{ project.characters|length != 1 and 's' or '' }} and generate new profiles.
+                {% else %}
+                  Craft the protagonists and supporting cast for your story.
+                {% endif %}
+              </p>
+            </button>
             <button
               class="overview-tile active"
               type="button"
@@ -225,199 +265,206 @@
                 {% endif %}
               </p>
             </button>
-            <button
-              class="overview-tile"
-              type="button"
-              data-target="charactersPanel"
-              data-chat-target="outlineChatPanel"
-              aria-controls="charactersPanel"
-              aria-selected="false"
-            >
-              <h2 class="h6 mb-1">Characters</h2>
-              <p>
-                {% if project.characters %}
-                  Manage {{ project.characters|length }} character{{ project.characters|length != 1 and 's' or '' }} and generate new profiles.
-                {% else %}
-                  Create richly detailed characters for your story.
-                {% endif %}
-              </p>
-            </button>
-          </div>
-          <div class="tile-detail active" id="outlinePanel" role="tabpanel">
-            {% if success %}
-              <div class="alert alert-success" role="alert">{{ success }}</div>
-            {% endif %}
-            <div class="outline-content">
-              {% if project.outline %}
-                {{ project.outline }}
-              {% else %}
-                <div class="text-secondary">No outline saved yet. Use the chat to tell the assistant about the story you want to write.</div>
-              {% endif %}
-            </div>
-          </div>
-          <div class="tile-detail" id="conceptsPanel" role="tabpanel">
-            <div class="outline-content d-flex flex-column gap-3">
-              <div>
-                <h3 class="h6 mb-1">Concept definitions</h3>
-                <p class="text-secondary mb-0 small">Clarified terminology and worldbuilding notes derived from your outline.</p>
-              </div>
-              {% if project.concepts %}
-                <div class="d-flex flex-column gap-4">
-                  {% for concept in project.concepts %}
-                    <div class="act-outline-box">
-                      <h4 class="h6 mb-2 text-info">{{ concept.name }}</h4>
-                      {% if concept.issue %}
-                        <p class="text-secondary small mb-2">Why it needed clarification: {{ concept.issue }}</p>
-                      {% endif %}
-                      <p class="mb-2">{{ concept.definition }}</p>
-                      {% if concept.examples %}
-                        <div>
-                          <div class="fw-semibold text-uppercase small text-secondary mb-1">Examples</div>
-                          <ul class="mb-0 small ps-3">
-                            {% for example in concept.examples.split('\n') %}
-                              {% if example.strip() %}
-                                <li>{{ example }}</li>
-                              {% endif %}
-                            {% endfor %}
-                          </ul>
-                        </div>
-                      {% endif %}
-                    </div>
-                  {% endfor %}
-                </div>
-              {% else %}
-                <div class="text-secondary text-center py-4">
-                  <p class="mb-1">No concepts have been refined yet.</p>
-                  <p class="mb-0">Use the concept assistant to highlight and define fuzzy ideas.</p>
-                </div>
-              {% endif %}
-            </div>
-          </div>
-          <div class="tile-detail" id="charactersPanel" role="tabpanel">
-            <div class="outline-content d-flex flex-column gap-3">
-              <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <div>
-                  <h3 class="h6 mb-1">Characters</h3>
-                  <p class="text-secondary mb-0 small">Select a character to open their workspace or add a new one.</p>
-                </div>
-                <form method="post" action="{{ url_for('character_create', project_id=project.id) }}">
-                  <button type="submit" class="btn btn-sm btn-outline-light">Add new character</button>
-                </form>
-              </div>
-              {% if project.characters %}
-                <div class="list-group list-group-flush">
-                  {% for character in project.characters %}
-                    <a
-                      href="{{ url_for('character_detail', project_id=project.id, character_id=character.id) }}"
-                      class="list-group-item list-group-item-action d-flex justify-content-between align-items-start"
-                    >
-                      <div>
-                        <div class="fw-semibold">{{ character.name or 'Untitled character' }}</div>
-                        <div class="text-secondary small">{{ character.role_in_story or 'Role not set yet' }}</div>
-                      </div>
-                      <span class="text-secondary small ms-3">
-                        {% if character.updated_at %}
-                          Updated {{ character.updated_at.strftime('%b %d, %Y') }}
-                        {% else %}
-                          Created {{ character.created_at.strftime('%b %d, %Y') }}
-                        {% endif %}
-                      </span>
-                    </a>
-                  {% endfor %}
-                </div>
-              {% else %}
-                <div class="text-secondary text-center py-4">
-                  <p class="mb-1">No characters yet.</p>
-                  <p class="mb-0">Use the button above to generate your first character profile.</p>
-                </div>
-              {% endif %}
-            </div>
-          </div>
-          <div class="tile-detail" id="actsPanel" role="tabpanel">
-            <div class="outline-content d-flex flex-column gap-3">
-              <div>
-                <h3 class="h6 mb-1">Act by act outline</h3>
-                <p class="text-secondary mb-0 small">Each act summary is stored for easy reference.</p>
-              </div>
-              {% if project.act1_outline or project.act2_outline or project.act3_outline %}
-                <div class="d-flex flex-column gap-3">
-                  <div>
-                    <h4 class="h6 mb-1 text-info">Act I</h4>
-                    <div class="act-outline-box">{{ project.act1_outline or 'No outline generated yet.' }}</div>
-                  </div>
-                  <div>
-                    <h4 class="h6 mb-1 text-info">Act II</h4>
-                    <div class="act-outline-box">{{ project.act2_outline or 'No outline generated yet.' }}</div>
-                  </div>
-                  <div>
-                    <h4 class="h6 mb-1 text-info">Act III</h4>
-                    <div class="act-outline-box">{{ project.act3_outline or 'No outline generated yet.' }}</div>
-                  </div>
-                </div>
-              {% else %}
-                <div class="d-flex flex-column gap-3">
-                  <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act I outline will appear here." readonly></textarea>
-                  <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act II outline will appear here." readonly></textarea>
-                  <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act III outline will appear here." readonly></textarea>
-                </div>
-              {% endif %}
-            </div>
-          </div>
-          <div class="tile-detail" id="chaptersPanel" role="tabpanel">
-            <div class="outline-content d-flex flex-column gap-3">
-              <div>
-                <h3 class="h6 mb-1">Chapter by chapter outline</h3>
-                <p class="text-secondary mb-0 small">
-                  Track the scene-level flow for every act.
-                  {% if device_hint %}
-                    <span class="d-block">Text generation currently runs on the {{ device_hint }} backend.</span>
-                  {% endif %}
-                </p>
-              </div>
-              {% if project.act1_chapters or project.act2_chapters or project.act3_chapters %}
-                {% set act_data = [
-                  (1, 'Act I', project.act1_chapters),
-                  (2, 'Act II', project.act2_chapters),
-                  (3, 'Act III', project.act3_chapters)
-                ] %}
-                <div class="d-flex flex-column gap-3">
-                  {% for act_number, act_label, fallback_text in act_data %}
-                    {% set chapters = act_chapter_lists.get(act_number) %}
-                    <div>
-                      <h4 class="h6 mb-1 text-info">{{ act_label }}</h4>
-                        {% if chapters %}
-                          <div class="chapter-list">
-                            {% for chapter in chapters %}
-                              <div class="chapter-card">
-                                <div class="chapter-card-title">Chapter {{ chapter.number }}: {{ chapter.title or 'Untitled Chapter' }}</div>
-                                {% if chapter.summary %}
-                                  <p class="chapter-card-summary">{{ chapter.summary }}</p>
-                                {% endif %}
-                              </div>
-                            {% endfor %}
-                          </div>
-                        {% else %}
-                          <div class="act-outline-box">{{ fallback_text or 'No chapter outline generated yet.' }}</div>
-                        {% endif %}
-                    </div>
-                  {% endfor %}
-                </div>
-              {% else %}
-                <div class="d-flex flex-column gap-3">
-                  <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act I chapters will appear here." readonly></textarea>
-                  <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act II chapters will appear here." readonly></textarea>
-                  <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act III chapters will appear here." readonly></textarea>
-                </div>
-              {% endif %}
-            </div>
-          </div>
+          </nav>
         </div>
       </div>
     </div>
-    <div class="col-xl-7">
+    <div class="col-xl-9">
       <div class="card h-100">
-        <div class="card-body d-flex flex-column gap-4">
-          <div id="outlineChatPanel" class="chat-panel active" role="tabpanel" aria-labelledby="outlinePanel">
+        <div class="card-body">
+          <div class="row g-4 align-items-stretch">
+            <div class="col-12 col-lg-6">
+              <div class="section-panel">
+                <div class="tile-detail" id="charactersPanel" role="tabpanel">
+                  <div class="outline-content d-flex flex-column gap-3">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                      <div>
+                        <h3 class="h6 mb-1">Characters</h3>
+                        <p class="text-secondary mb-0 small">Select a character to open their workspace or add a new one.</p>
+                      </div>
+                      <form method="post" action="{{ url_for('character_create', project_id=project.id) }}">
+                        <button type="submit" class="btn btn-sm btn-outline-light">Add new character</button>
+                      </form>
+                    </div>
+                    {% if project.characters %}
+                      <div class="list-group list-group-flush">
+                        {% for character in project.characters %}
+                          <a
+                            href="{{ url_for('character_detail', project_id=project.id, character_id=character.id) }}"
+                            class="list-group-item list-group-item-action d-flex justify-content-between align-items-start"
+                          >
+                            <div>
+                              <div class="fw-semibold">{{ character.name or 'Untitled character' }}</div>
+                              <div class="text-secondary small">{{ character.role_in_story or 'Role not set yet' }}</div>
+                            </div>
+                            <span class="text-secondary small ms-3">
+                              {% if character.updated_at %}
+                                Updated {{ character.updated_at.strftime('%b %d, %Y') }}
+                              {% else %}
+                                Created {{ character.created_at.strftime('%b %d, %Y') }}
+                              {% endif %}
+                            </span>
+                          </a>
+                        {% endfor %}
+                      </div>
+                    {% else %}
+                      <div class="text-secondary text-center py-4">
+                        <p class="mb-1">No characters yet.</p>
+                        <p class="mb-0">Use the button above to generate your first character profile.</p>
+                      </div>
+                    {% endif %}
+                  </div>
+                </div>
+                <div class="tile-detail active" id="outlinePanel" role="tabpanel">
+                  {% if success %}
+                    <div class="alert alert-success" role="alert">{{ success }}</div>
+                  {% endif %}
+                  <div class="outline-content">
+                    {% if project.outline %}
+                      {{ project.outline }}
+                    {% else %}
+                      <div class="text-secondary">No outline saved yet. Use the chat to tell the assistant about the story you want to write.</div>
+                    {% endif %}
+                  </div>
+                </div>
+                <div class="tile-detail" id="conceptsPanel" role="tabpanel">
+                  <div class="outline-content d-flex flex-column gap-3">
+                    <div>
+                      <h3 class="h6 mb-1">Concept definitions</h3>
+                      <p class="text-secondary mb-0 small">Clarified terminology and worldbuilding notes derived from your outline.</p>
+                    </div>
+                    {% if project.concepts %}
+                      <div class="d-flex flex-column gap-4">
+                        {% for concept in project.concepts %}
+                          <div class="act-outline-box">
+                            <h4 class="h6 mb-2 text-info">{{ concept.name }}</h4>
+                            {% if concept.issue %}
+                              <p class="text-secondary small mb-2">Why it needed clarification: {{ concept.issue }}</p>
+                            {% endif %}
+                            <p class="mb-2">{{ concept.definition }}</p>
+                            {% if concept.examples %}
+                              <div>
+                                <div class="fw-semibold text-uppercase small text-secondary mb-1">Examples</div>
+                                <ul class="mb-0 small ps-3">
+                                  {% for example in concept.examples.split('\n') %}
+                                    {% if example.strip() %}
+                                      <li>{{ example }}</li>
+                                    {% endif %}
+                                  {% endfor %}
+                                </ul>
+                              </div>
+                            {% endif %}
+                          </div>
+                        {% endfor %}
+                      </div>
+                    {% else %}
+                      <div class="text-secondary text-center py-4">
+                        <p class="mb-1">No concepts have been refined yet.</p>
+                        <p class="mb-0">Use the concept assistant to highlight and define fuzzy ideas.</p>
+                      </div>
+                    {% endif %}
+                  </div>
+                </div>
+                <div class="tile-detail" id="actsPanel" role="tabpanel">
+                  <div class="outline-content d-flex flex-column gap-3">
+                    <div>
+                      <h3 class="h6 mb-1">Act by act outline</h3>
+                      <p class="text-secondary mb-0 small">Each act summary is stored for easy reference.</p>
+                    </div>
+                    {% if project.act1_outline or project.act2_outline or project.act3_outline %}
+                      <div class="d-flex flex-column gap-3">
+                        <div>
+                          <h4 class="h6 mb-1 text-info">Act I</h4>
+                          <div class="act-outline-box">{{ project.act1_outline or 'No outline generated yet.' }}</div>
+                        </div>
+                        <div>
+                          <h4 class="h6 mb-1 text-info">Act II</h4>
+                          <div class="act-outline-box">{{ project.act2_outline or 'No outline generated yet.' }}</div>
+                        </div>
+                        <div>
+                          <h4 class="h6 mb-1 text-info">Act III</h4>
+                          <div class="act-outline-box">{{ project.act3_outline or 'No outline generated yet.' }}</div>
+                        </div>
+                      </div>
+                    {% else %}
+                      <div class="d-flex flex-column gap-3">
+                        <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act I outline will appear here." readonly></textarea>
+                        <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act II outline will appear here." readonly></textarea>
+                        <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act III outline will appear here." readonly></textarea>
+                      </div>
+                    {% endif %}
+                  </div>
+                </div>
+                <div class="tile-detail" id="chaptersPanel" role="tabpanel">
+                  <div class="outline-content d-flex flex-column gap-3">
+                    <div>
+                      <h3 class="h6 mb-1">Chapter by chapter outline</h3>
+                      <p class="text-secondary mb-0 small">
+                        Track the scene-level flow for every act.
+                        {% if device_hint %}
+                          <span class="d-block">Text generation currently runs on the {{ device_hint }} backend.</span>
+                        {% endif %}
+                      </p>
+                    </div>
+                    {% if project.act1_chapters or project.act2_chapters or project.act3_chapters %}
+                      {% set act_data = [
+                        (1, 'Act I', project.act1_chapters),
+                        (2, 'Act II', project.act2_chapters),
+                        (3, 'Act III', project.act3_chapters)
+                      ] %}
+                      <div class="d-flex flex-column gap-3">
+                        {% for act_number, act_label, fallback_text in act_data %}
+                          {% set chapters = act_chapter_lists.get(act_number) %}
+                          <div>
+                            <h4 class="h6 mb-1 text-info">{{ act_label }}</h4>
+                              {% if chapters %}
+                                <div class="chapter-list">
+                                  {% for chapter in chapters %}
+                                    <div class="chapter-card">
+                                      <div class="chapter-card-title">Chapter {{ chapter.number }}: {{ chapter.title or 'Untitled Chapter' }}</div>
+                                      {% if chapter.summary %}
+                                        <p class="chapter-card-summary">{{ chapter.summary }}</p>
+                                      {% endif %}
+                                    </div>
+                                  {% endfor %}
+                                </div>
+                              {% else %}
+                                <div class="act-outline-box">{{ fallback_text or 'No chapter outline generated yet.' }}</div>
+                              {% endif %}
+                          </div>
+                        {% endfor %}
+                      </div>
+                    {% else %}
+                      <div class="d-flex flex-column gap-3">
+                        <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act I chapters will appear here." readonly></textarea>
+                        <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act II chapters will appear here." readonly></textarea>
+                        <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act III chapters will appear here." readonly></textarea>
+                      </div>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-12 col-lg-6">
+              <div class="chat-column">
+                <div id="characterChatPanel" class="chat-panel" role="tabpanel" aria-labelledby="charactersPanel">
+                  <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
+                    <div>
+                      <h2 class="h5 mb-1">Character workspace</h2>
+                      <p class="text-secondary mb-0">Generate or refine character sheets before outlining.</p>
+                    </div>
+                    <form method="post" action="{{ url_for('character_create', project_id=project.id) }}">
+                      <button type="submit" class="btn btn-outline-light btn-sm">Add character</button>
+                    </form>
+                  </div>
+                  <div class="chat-messages flex-grow-1 mb-3">
+                    <div class="message assistant">
+                      <strong class="d-block mb-1 text-uppercase small">assistant</strong>
+                      <div>Open a character profile from the left panel to develop their voice, motivations, and arcs. Use the button above to start a brand-new profile.</div>
+                    </div>
+                  </div>
+                </div>
+                <div id="outlineChatPanel" class="chat-panel active" role="tabpanel" aria-labelledby="outlinePanel">
             <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
               <div>
                 <h2 class="h5 mb-1">Outline assistant</h2>
