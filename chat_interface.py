@@ -18,7 +18,7 @@ import re
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
-
+from api_handler import OpenAIUnifiedGenerator
 from datetime import datetime
 
 from flask import (
@@ -46,12 +46,6 @@ from system_prompts import (
     get_character_input_fields,
 )
 
-try:  # The OpenAI package is optional and only required when the API backend is used.
-    import openai  # type: ignore
-except ImportError:  # pragma: no cover - handled gracefully when API mode requested
-    openai = None  # type: ignore
-
-
 class OpenAIAPIRateLimitError(RuntimeError):
     """Raised when the OpenAI API reports a rate limit condition."""
 
@@ -62,48 +56,25 @@ class OpenAIAPIRateLimitError(RuntimeError):
         )
 
 
-if openai is not None:  # pragma: no cover - executed only when dependency installed
-    _openai_rate_limit_types: List[type[BaseException]] = []
-    try:  # Legacy SDK (<1.0)
-        from openai.error import RateLimitError as _LegacyRateLimitError  # type: ignore
-    except Exception:  # pragma: no cover - attribute may be missing
-        _LegacyRateLimitError = None  # type: ignore
-    else:
-        _openai_rate_limit_types.append(_LegacyRateLimitError)
 
-    try:  # Modern SDK (>=1.0)
-        from openai import RateLimitError as _ModernRateLimitError  # type: ignore
-    except Exception:  # pragma: no cover - attribute may be missing
-        _ModernRateLimitError = None  # type: ignore
-    else:
-        if _ModernRateLimitError not in _openai_rate_limit_types:
-            _openai_rate_limit_types.append(_ModernRateLimitError)
-
-    _OPENAI_RATE_LIMIT_TYPES: Tuple[type[BaseException], ...] = tuple(
-        _openai_rate_limit_types
-    )
-else:  # pragma: no cover - executed when dependency unavailable
-    _OPENAI_RATE_LIMIT_TYPES = tuple()
 
 
 
 def _raise_for_openai_api_error(exc: Exception) -> None:
-    """Raise a specialised error when the OpenAI API reports known issues."""
-
-    if _OPENAI_RATE_LIMIT_TYPES and isinstance(exc, _OPENAI_RATE_LIMIT_TYPES):
-        raise OpenAIAPIRateLimitError() from exc
-
+    """Raise a specialised error when an API call reports rate limiting."""
     status_code = getattr(exc, "status_code", None)
     if status_code == 429:
         raise OpenAIAPIRateLimitError() from exc
 
-    error_code = getattr(exc, "code", None)
-    if isinstance(error_code, str) and "rate" in error_code.lower():
+    # Some SDK exceptions carry .code or .error with metadata
+    code = getattr(exc, "code", None)
+    if isinstance(code, str) and "rate" in code.lower():
         raise OpenAIAPIRateLimitError() from exc
 
     message = str(exc).lower()
-    if "rate limit" in message:
+    if "rate limit" in message or "too many requests" in message:
         raise OpenAIAPIRateLimitError() from exc
+
 
 # Flask session requires a secret key.  Use an environment variable so the
 # application can be run without editing source code.
@@ -115,7 +86,7 @@ _generator: TextGenerator | None = None
 
 # Cache for the optional OpenAI API backend.  The configuration is loaded from
 # ``openai_config.json`` when the user explicitly opts-in via the UI.
-_openai_generator: "OpenAITextGenerator" | None = None
+_openai_generator: OpenAIUnifiedGenerator | None = None
 _openai_signature: Tuple[str, str] | None = None
 _OPENAI_CONFIG_PATH = Path(__file__).resolve().parent / "openai_config.json"
 
@@ -123,303 +94,6 @@ _OPENAI_CONFIG_PATH = Path(__file__).resolve().parent / "openai_config.json"
 # without instantiating the Flask application first.
 db = SQLAlchemy()
 
-
-class OpenAITextGenerator:
-    """Lightweight adapter mirroring :class:`TextGenerator` for OpenAI's API."""
-
-    def __init__(
-        self,
-        model_name: str,
-        api_key: str,
-        *,
-        default_max_tokens: int = 512,
-    ) -> None:
-        self.model_name = model_name
-        self.api_key = api_key
-        self.default_max_tokens = default_max_tokens
-
-    def _format_api_key_for_logging(self) -> str:
-        """Return an obfuscated version of the API key suitable for logs."""
-
-        if not self.api_key:
-            return "<empty>"
-
-        if len(self.api_key) <= 8:
-            return "*" * len(self.api_key)
-
-        return f"{self.api_key[:4]}***{self.api_key[-4:]}"
-
-    def _is_chat_model(self) -> bool:
-        """Return True when the configured model expects chat payloads."""
-
-        name = self.model_name.strip().lower()
-        if not name:
-            return False
-
-        # Most legacy completion models use the ``text-`` prefix or the names of
-        # the original GPT-3 families (ada, babbage, curie, davinci).  Everything
-        # else is assumed to be a chat model, which keeps the heuristic future
-        # proof for current OpenAI releases (gpt-3.5, gpt-4, gpt-5, o-series…).
-        legacy_prefixes = (
-            "text-",
-            "code-",
-            "babbage",
-            "curie",
-            "ada",
-            "davinci",
-        )
-        return not name.startswith(legacy_prefixes)
-
-    def generate_response(
-        self,
-        prompt: str,
-        *,
-        max_new_tokens: Optional[int] = None,
-        temperature: Optional[float] = None,
-        top_p: Optional[float] = None,
-        **_: Any,
-    ) -> str:
-        if openai is None:  # pragma: no cover - optional dependency
-            raise RuntimeError(
-                "The openai package is not installed. Install it to enable API generation."
-            )
-
-        max_tokens = max_new_tokens if max_new_tokens is not None else self.default_max_tokens
-        try:
-            token_count = int(max_tokens)
-        except (TypeError, ValueError) as exc:
-            raise ValueError(
-                "max_new_tokens must be a positive integer when using the API backend."
-            ) from exc
-        if token_count <= 0:
-            raise ValueError(
-                "max_new_tokens must be a positive integer when using the API backend."
-            )
-
-        completion = None
-        completion_error: Exception | None = None
-        masked_key = self._format_api_key_for_logging()
-        use_chat_endpoint = self._is_chat_model()
-
-        def _build_payload(token_param: str) -> Dict[str, Any]:
-            base: Dict[str, Any] = {
-                "model": self.model_name,
-                token_param: token_count,
-            }
-            if temperature is not None:
-                base["temperature"] = temperature
-            if top_p is not None:
-                base["top_p"] = top_p
-            if use_chat_endpoint:
-                base["messages"] = [{"role": "user", "content": prompt}]
-            else:
-                base["prompt"] = prompt
-            return base
-
-        def _should_retry_with_alternate_token_param(exc: Exception, token_param: str) -> bool:
-            message = str(exc)
-            if not message:
-                return False
-            message = message.lower()
-            token_param = token_param.lower()
-            return "unsupported parameter" in message and token_param in message
-
-        def _call_with_token_params(
-            request_func: Callable[[Dict[str, Any]], Any],
-            token_params: Sequence[str],
-        ) -> Any:
-            last_error: Exception | None = None
-            for token_param in token_params:
-                try:
-                    return request_func(_build_payload(token_param))
-                except Exception as exc:  # pragma: no cover - network/errors
-                    if _should_retry_with_alternate_token_param(exc, token_param):
-                        last_error = exc
-                        continue
-                    raise
-            if last_error is not None:
-                raise last_error
-            return None
-
-        # ``openai`` version < 1.0 exposed module level helpers for both
-        # completions and chat completions.
-        if use_chat_endpoint and hasattr(openai, "ChatCompletion"):
-            try:
-                openai.api_key = self.api_key  # type: ignore[assignment]
-            except Exception:  # pragma: no cover - attribute missing on newer SDKs
-                pass
-
-            try:
-                LOGGER.info(
-                    "Calling OpenAI ChatCompletion endpoint",
-                    extra={
-                        "openai_model": self.model_name,
-                        "openai_api_key": masked_key,
-                        "openai_max_tokens": token_count,
-                        "openai_temperature": temperature,
-                        "openai_top_p": top_p,
-                    },
-                )
-                completion = _call_with_token_params(
-                    lambda payload: openai.ChatCompletion.create(  # type: ignore[attr-defined]
-                        **payload,
-                        n=1,
-                    ),
-                    ("max_completion_tokens", "max_tokens"),
-                )
-            except Exception as exc:  # pragma: no cover - network/errors
-                LOGGER.exception(
-                    "OpenAI ChatCompletion request failed",
-                    extra={
-                        "openai_model": self.model_name,
-                        "openai_api_key": masked_key,
-                        "openai_max_tokens": token_count,
-                        "openai_temperature": temperature,
-                        "openai_top_p": top_p,
-                    },
-                )
-                _raise_for_openai_api_error(exc)
-                completion_error = exc
-
-        # ``openai`` version < 1.0 exposed a module level ``Completion`` helper.
-        if completion is None and not use_chat_endpoint and hasattr(openai, "Completion"):
-            try:
-                openai.api_key = self.api_key  # type: ignore[assignment]
-            except Exception:  # pragma: no cover - attribute missing on newer SDKs
-                pass
-
-            try:
-                LOGGER.info(
-                    "Calling OpenAI Completion endpoint",
-                    extra={
-                        "openai_model": self.model_name,
-                        "openai_api_key": masked_key,
-                        "openai_max_tokens": token_count,
-                        "openai_temperature": temperature,
-                        "openai_top_p": top_p,
-                    },
-                )
-                completion = _call_with_token_params(
-                    lambda payload: openai.Completion.create(  # type: ignore[attr-defined]
-                        **payload,
-                        n=1,
-                    ),
-                    ("max_tokens",),
-                )
-            except Exception as exc:  # pragma: no cover - network/errors
-                LOGGER.exception(
-                    "OpenAI Completion request failed",
-                    extra={
-                        "openai_model": self.model_name,
-                        "openai_api_key": masked_key,
-                        "openai_max_tokens": token_count,
-                        "openai_temperature": temperature,
-                        "openai_top_p": top_p,
-                    },
-                )
-                _raise_for_openai_api_error(exc)
-                completion_error = exc
-
-        # Modern versions of the SDK expose the ``OpenAI`` client class instead of
-        # module level helpers.  Fall back to that client when needed.
-        if completion is None and hasattr(openai, "OpenAI"):
-            try:
-                client = openai.OpenAI(api_key=self.api_key)  # type: ignore[attr-defined]
-                LOGGER.info(
-                    "Calling OpenAI client %s endpoint",
-                    "chat.completions" if use_chat_endpoint else "completions",
-                    extra={
-                        "openai_model": self.model_name,
-                        "openai_api_key": masked_key,
-                        "openai_max_tokens": token_count,
-                        "openai_temperature": temperature,
-                        "openai_top_p": top_p,
-                    },
-                )
-                if use_chat_endpoint:
-                    completion = _call_with_token_params(
-                        lambda payload: client.chat.completions.create(  # type: ignore[attr-defined]
-                            **payload,
-                            n=1,
-                        ),
-                        ("max_completion_tokens", "max_tokens"),
-                    )
-                else:
-                    completion = _call_with_token_params(
-                        lambda payload: client.completions.create(  # type: ignore[attr-defined]
-                            **payload,
-                            n=1,
-                        ),
-                        ("max_tokens",),
-                    )
-            except Exception as exc:  # pragma: no cover - network/errors
-                LOGGER.exception(
-                    "OpenAI client %s request failed",
-                    "chat.completions" if use_chat_endpoint else "completions",
-                    extra={
-                        "openai_model": self.model_name,
-                        "openai_api_key": masked_key,
-                        "openai_max_tokens": token_count,
-                        "openai_temperature": temperature,
-                        "openai_top_p": top_p,
-                    },
-                )
-                _raise_for_openai_api_error(exc)
-                completion_error = exc
-
-        if completion is None:
-            if completion_error is not None:
-                _raise_for_openai_api_error(completion_error)
-                raise RuntimeError("OpenAI API request failed.") from completion_error
-            raise RuntimeError(
-                "OpenAI completion client is unavailable. Update the openai package."
-            )
-
-        choices = getattr(completion, "choices", None)
-        if not choices:
-            # ``responses.create`` (new SDK) exposes ``output_text`` instead of ``choices``.
-            text_output = getattr(completion, "output_text", None)
-            return str(text_output or "").strip()
-
-        first_choice = choices[0]
-        text: Optional[str] = None
-
-        if isinstance(first_choice, dict):
-            text = first_choice.get("text")
-            if text is None:
-                message = first_choice.get("message")
-                if isinstance(message, dict):
-                    text = message.get("content")
-        else:
-            text = getattr(first_choice, "text", None)
-            if text is None:
-                message = getattr(first_choice, "message", None)
-                if isinstance(message, dict):
-                    text = message.get("content")
-                else:
-                    text = getattr(message, "content", None)
-
-        if text is None:
-            return ""
-
-        LOGGER.info(
-            "OpenAI %s succeeded",
-            "chat.completion" if use_chat_endpoint else "completion",
-            extra={
-                "openai_model": self.model_name,
-                "openai_api_key": masked_key,
-                "openai_max_tokens": token_count,
-                "openai_temperature": temperature,
-                "openai_top_p": top_p,
-            },
-        )
-        return str(text).strip()
-
-    def get_compute_device(self) -> str:
-        return "OpenAI API"
-
-    def signature(self) -> Tuple[str, str]:
-        return (self.model_name, self.api_key)
 
 
 def _load_openai_config() -> Optional[Dict[str, str]]:
@@ -450,9 +124,8 @@ def _load_openai_config() -> Optional[Dict[str, str]]:
     return {"model": model, "api_key": api_key}
 
 
-def _get_openai_generator() -> OpenAITextGenerator:
+def _get_openai_generator() -> OpenAIUnifiedGenerator:
     """Return a cached OpenAI API adapter configured from disk."""
-
     global _openai_generator, _openai_signature
     config = _load_openai_config()
     if not config:
@@ -462,13 +135,14 @@ def _get_openai_generator() -> OpenAITextGenerator:
 
     signature = (config["model"], config["api_key"])
     if _openai_generator is None or _openai_signature != signature:
-        _openai_generator = OpenAITextGenerator(*signature)
+        _openai_generator = OpenAIUnifiedGenerator(*signature)
         _openai_signature = signature
 
     return _openai_generator
 
 
-def _resolve_text_generator(use_api: bool) -> TextGenerator | OpenAITextGenerator:
+
+def _resolve_text_generator(use_api: bool) -> TextGenerator | OpenAIUnifiedGenerator:
     """Return the requested text generation backend."""
 
     if use_api:
