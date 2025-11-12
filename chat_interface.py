@@ -1125,9 +1125,14 @@ def create_app() -> Flask:
             act_chapter_lists, chapter_draft_lookup
         )
         last_planned = _find_last_planned_chapter(act_chapter_lists)
+        next_after_last_draft = _suggest_next_chapter_after_last_draft(
+            act_chapter_lists, chapter_draft_lookup
+        )
 
         if draft_selected_act is None:
-            if last_unfilled is not None:
+            if next_after_last_draft is not None:
+                draft_selected_act = next_after_last_draft[0]
+            elif last_unfilled is not None:
                 draft_selected_act = last_unfilled[0]
             elif last_planned is not None:
                 draft_selected_act = last_planned[0]
@@ -1137,11 +1142,18 @@ def create_app() -> Flask:
         if draft_selected_chapter is None:
             chapters_for_act = act_chapter_lists.get(draft_selected_act, [])
             if chapters_for_act:
-                chapter_default = _find_last_unfilled_chapter_in_act(
-                    draft_selected_act,
-                    act_chapter_lists,
-                    chapter_draft_lookup,
-                )
+                chapter_default: Optional[int] = None
+                if (
+                    next_after_last_draft is not None
+                    and next_after_last_draft[0] == draft_selected_act
+                ):
+                    chapter_default = next_after_last_draft[1]
+                if chapter_default is None:
+                    chapter_default = _find_last_unfilled_chapter_in_act(
+                        draft_selected_act,
+                        act_chapter_lists,
+                        chapter_draft_lookup,
+                    )
                 if chapter_default is None:
                     chapter_default = _find_last_planned_chapter_in_act(
                         draft_selected_act,
@@ -1833,6 +1845,68 @@ def _collect_project_chapter_lists(project: Project) -> Dict[int, List[Dict[str,
         2: _load_chapter_list(project.act2_chapter_list, project.act2_chapters),
         3: _load_chapter_list(project.act3_chapter_list, project.act3_chapters),
     }
+
+
+def _find_last_drafted_chapter(
+    act_chapter_lists: Dict[int, List[Dict[str, Any]]],
+    chapter_draft_lookup: Dict[str, Dict[str, Any]],
+) -> Optional[Tuple[int, int]]:
+    """Return the act/chapter tuple for the most recently drafted chapter."""
+
+    last_drafted: Optional[Tuple[int, int]] = None
+    for act_number in sorted(act_chapter_lists):
+        entries = act_chapter_lists.get(act_number, [])
+        for entry in entries:
+            number_raw = entry.get("number")
+            try:
+                number = int(number_raw)
+            except (TypeError, ValueError):
+                continue
+            key = f"{act_number}-{number}"
+            draft_entry = chapter_draft_lookup.get(key)
+            content = (draft_entry or {}).get("content", "")
+            if str(content).strip():
+                last_drafted = (int(act_number), number)
+    return last_drafted
+
+
+def _suggest_next_chapter_after_last_draft(
+    act_chapter_lists: Dict[int, List[Dict[str, Any]]],
+    chapter_draft_lookup: Dict[str, Dict[str, Any]],
+) -> Optional[Tuple[int, int]]:
+    """Return the next planned chapter following the most recent draft."""
+
+    last_drafted = _find_last_drafted_chapter(
+        act_chapter_lists, chapter_draft_lookup
+    )
+    if last_drafted is None:
+        return None
+
+    act_number, chapter_number = last_drafted
+    entries = act_chapter_lists.get(act_number, [])
+    for index, entry in enumerate(entries):
+        number_raw = entry.get("number")
+        try:
+            number = int(number_raw)
+        except (TypeError, ValueError):
+            continue
+        if number != chapter_number:
+            continue
+
+        for next_entry in entries[index + 1 :]:
+            next_number_raw = next_entry.get("number")
+            try:
+                next_number = int(next_number_raw)
+            except (TypeError, ValueError):
+                continue
+            key = f"{act_number}-{next_number}"
+            draft_entry = chapter_draft_lookup.get(key)
+            content = (draft_entry or {}).get("content", "")
+            if not str(content).strip():
+                return act_number, next_number
+        break
+
+    return None
 
 
 def _find_last_unfilled_chapter(
