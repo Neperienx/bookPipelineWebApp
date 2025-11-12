@@ -1165,9 +1165,9 @@
         });
       });
 
-      const chapterPlanData = {{ act_chapter_lists | tojson }};
-      const outlineLookup = {{ chapter_outline_lookup | tojson }};
-      const draftLookup = {{ chapter_draft_lookup | tojson }};
+      const chapterPlanData = {{ act_chapter_lists | tojson }} || {};
+      const outlineLookup = {{ chapter_outline_lookup | tojson }} || {};
+      const draftLookup = {{ chapter_draft_lookup | tojson }} || {};
       const draftActSelect = document.getElementById("draftActSelect");
       const draftChapterSelect = document.getElementById("draftChapterSelect");
       const draftOutlinePreview = document.getElementById("draftOutlinePreview");
@@ -1217,10 +1217,17 @@
         draftChapterSelect.disabled = false;
         const current = draftChapterSelect.getAttribute("data-current") || draftChapterSelect.value;
         let selectedSet = false;
+        let lastUnfilledIndex = -1;
         chapters.forEach(function (chapter, index) {
           const option = document.createElement("option");
           option.value = chapter.number;
           option.textContent = "Chapter " + chapter.number + " — " + (chapter.title || "Untitled");
+          const key = String(actValue) + "-" + String(chapter.number);
+          const draftEntry = draftLookup[key];
+          const content = draftEntry && draftEntry.content ? String(draftEntry.content).trim() : "";
+          if (!content) {
+            lastUnfilledIndex = index;
+          }
           if (String(chapter.number) === String(current)) {
             option.selected = true;
             selectedSet = true;
@@ -1228,7 +1235,11 @@
           draftChapterSelect.appendChild(option);
         });
         if (!selectedSet && draftChapterSelect.options.length) {
-          draftChapterSelect.selectedIndex = 0;
+          if (lastUnfilledIndex >= 0) {
+            draftChapterSelect.selectedIndex = lastUnfilledIndex;
+          } else {
+            draftChapterSelect.selectedIndex = draftChapterSelect.options.length - 1;
+          }
         }
         draftChapterSelect.removeAttribute("data-current");
       }
