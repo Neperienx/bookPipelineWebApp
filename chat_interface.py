@@ -16,6 +16,7 @@ import os
 import json
 import re
 import time
+import unicodedata
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 from api_handler import OpenAIUnifiedGenerator
@@ -182,6 +183,36 @@ _SUPPORTING_HEADER_PATTERN = re.compile(
     r"^\s*Character\s*:\s*(.+)$",
     re.IGNORECASE,
 )
+
+_PDF_LATIN1_REPLACEMENTS = {
+    ord("\u2010"): "-",  # hyphen
+    ord("\u2011"): "-",  # non-breaking hyphen
+    ord("\u2012"): "-",  # figure dash
+    ord("\u2013"): "-",  # en dash
+    ord("\u2014"): "-",  # em dash
+    ord("\u2015"): "-",  # horizontal bar
+    ord("\u2212"): "-",  # minus sign
+    ord("\u2018"): "'",  # left single quote
+    ord("\u2019"): "'",  # right single quote / apostrophe
+    ord("\u201A"): "'",  # single low-9 quote
+    ord("\u201B"): "'",  # single high-reversed-9 quote
+    ord("\u2032"): "'",  # prime
+    ord("\u201C"): '"',  # left double quote
+    ord("\u201D"): '"',  # right double quote
+    ord("\u201E"): '"',  # double low-9 quote
+    ord("\u00AB"): '"',  # left-pointing double angle quote
+    ord("\u00BB"): '"',  # right-pointing double angle quote
+    ord("\u2026"): "...",  # ellipsis
+    ord("\u00A0"): " ",  # non-breaking space
+}
+
+
+def _pdf_safe_text(text: str) -> str:
+    """Return ``text`` normalised for the PDF Latin-1 core fonts."""
+
+    normalized = unicodedata.normalize("NFKC", text or "")
+    replaced = normalized.translate(_PDF_LATIN1_REPLACEMENTS)
+    return replaced.encode("latin-1", "replace").decode("latin-1")
 
 
 class Project(db.Model):
@@ -1153,14 +1184,14 @@ def create_app() -> Flask:
         pdf.add_page()
         pdf.set_font("Times", "B", 18)
         title_text = project.name or "Untitled Project"
-        pdf.multi_cell(0, 10, title_text)
+        pdf.multi_cell(0, 10, _pdf_safe_text(title_text))
         pdf.ln(4)
         outline_text = (project.outline or "").strip()
         if outline_text:
             pdf.set_font("Times", "", 12)
-            pdf.multi_cell(0, 6, "Project outline:")
+            pdf.multi_cell(0, 6, _pdf_safe_text("Project outline:"))
             pdf.ln(2)
-            pdf.multi_cell(0, 6, outline_text)
+            pdf.multi_cell(0, 6, _pdf_safe_text(outline_text))
 
         for draft in drafts:
             pdf.add_page()
@@ -1169,11 +1200,11 @@ def create_app() -> Flask:
                 f"Act {draft.act_number} — Chapter {draft.chapter_number}: "
                 f"{draft.title or 'Untitled Chapter'}"
             )
-            pdf.multi_cell(0, 10, header)
+            pdf.multi_cell(0, 10, _pdf_safe_text(header))
             summary = (draft.outline_summary or "").strip()
             if summary:
                 pdf.set_font("Times", "I", 11)
-                pdf.multi_cell(0, 6, f"Outline: {summary}")
+                pdf.multi_cell(0, 6, _pdf_safe_text(f"Outline: {summary}"))
                 pdf.ln(2)
             pdf.set_font("Times", "", 12)
             content = (draft.content or "").strip() or "(No draft text available.)"
@@ -1181,7 +1212,7 @@ def create_app() -> Flask:
                 cleaned = paragraph.strip()
                 if not cleaned:
                     continue
-                pdf.multi_cell(0, 6.5, cleaned)
+                pdf.multi_cell(0, 6.5, _pdf_safe_text(cleaned))
                 pdf.ln(1.5)
 
         pdf_path = Path(__file__).resolve().parent / "temp.pdf"
