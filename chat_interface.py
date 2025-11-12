@@ -174,7 +174,9 @@ _LEGACY_CHAPTER_HEADING_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _TITLE_SPLIT_PATTERN = re.compile(r"\s*[—–-]\s*")
-_ACT_SECTION_PATTERN = re.compile(r"(Act:\s.*?)(?=(?:\nAct:\s)|\Z)", re.DOTALL)
+_ACT_SECTION_PATTERN = re.compile(
+    r"(Act:\s.*?)(?=(?:\r?\nAct:\s)|\Z)", re.DOTALL
+)
 
 
 class Project(db.Model):
@@ -479,7 +481,7 @@ def create_app() -> Flask:
                                 "Act outline updated from assistant, but only "
                                 f"{acts_detected} act section"
                                 f"{'s' if acts_detected != 1 else ''} were detected. "
-                                "The full response was saved under Act I."
+                                "Detected sections were saved; regenerate to fill the remaining acts. "
                                 f"{device_sentence}"
                             )
                     session.modified = True
