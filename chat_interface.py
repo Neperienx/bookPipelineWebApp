@@ -1506,7 +1506,7 @@ def _build_outline_prompt(project: Project, history: Iterable[Dict[str, str]]) -
     if system_prompt:
         prompt_lines.append(f"System: {system_prompt}")
 
-    character_context = _collect_character_context(project.characters)
+    character_context = _build_character_roster(project)
     if character_context and not character_context.strip().startswith(
         "No character descriptions available."
     ):
@@ -1534,7 +1534,7 @@ def _generate_three_act_outline(
     """Generate a three-act outline informed by project context."""
 
     outline_text = (project.outline or "No outline has been provided yet.").strip()
-    character_context = _collect_character_context(project.characters)
+    character_context = _build_character_roster(project)
     notes_text = final_notes.strip() or "No final notes provided."
 
     prompt = _build_full_act_prompt(
@@ -1577,7 +1577,7 @@ def _generate_chapter_outlines(
         raise ValueError("chapters_per_act must be a positive integer")
 
     outline_text = (project.outline or "No outline has been provided yet.").strip()
-    character_context = _collect_character_context(project.characters)
+    character_context = _build_character_roster(project)
     notes_text = final_notes.strip() or "No additional notes provided."
 
     act_outlines = [
@@ -1696,6 +1696,32 @@ def _collect_character_context(characters: Iterable["Character"]) -> str:
         return "No character descriptions available."
 
     return "\n\n".join(entries)
+
+
+def _build_character_roster(project: "Project") -> str:
+    """Return main and supporting character context for prompt construction."""
+
+    main_characters = [
+        character for character in project.characters if not character.is_supporting
+    ]
+    supporting_characters = [
+        character for character in project.characters if character.is_supporting
+    ]
+
+    sections: List[str] = []
+
+    main_roster = _collect_character_context(main_characters)
+    if main_roster.strip() and not main_roster.startswith("No character"):
+        sections.append("Main characters:\n" + main_roster)
+
+    supporting_roster = _collect_character_context(supporting_characters)
+    if supporting_roster.strip() and not supporting_roster.startswith("No character"):
+        sections.append("Supporting characters:\n" + supporting_roster)
+
+    if sections:
+        return "\n\n".join(sections)
+
+    return "No character descriptions available."
 
 
 def _collect_act_outline_text(project: Project) -> str:
