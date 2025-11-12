@@ -1824,25 +1824,19 @@ def _build_concept_analysis_prompt(
             "mentions but does not clearly define."
         ),
     )
-    schema_instructions = config.get(
-        "analysis_schema",
+    response_instructions = config.get(
+        "analysis_response_instructions",
         (
-            '{\n'
-            '  "concepts": [\n'
-            '    {\n'
-            '      "name": "Term or concept as written in the outline",\n'
-            '      "issue": "Why the current description is unclear or what needs clarification"\n'
-            '    }\n'
-            '  ]\n'
-            '}'
+            "List each unclear concept on its own line as 'Concept Name — short note about what needs clarity.' "
+            "If nothing requires revision, reply with 'No unclear concepts found.'"
         ),
     )
 
     user_sections: List[str] = [
         (
             "Evaluate the outline below. Identify only the concepts, organisations, technologies, "
-            "or other terms that are explicitly mentioned but feel ambiguous, contradictory, or "
-            "underspecified."
+            "locations, or other terms that are explicitly mentioned but feel ambiguous, contradictory, "
+            "or underspecified."
         ),
         "Outline:",
         outline_text.strip() or "(no outline provided)",
@@ -1856,11 +1850,8 @@ def _build_concept_analysis_prompt(
         )
     user_sections.extend(
         [
-            (
-                "Return a JSON object exactly matching the schema below. Include only concepts from the "
-                "outline. If nothing seems unclear, return an empty array."
-            ),
-            schema_instructions.strip(),
+            "Response instructions:",
+            response_instructions.strip(),
         ]
     )
 
@@ -1868,6 +1859,7 @@ def _build_concept_analysis_prompt(
     prompt_lines.extend(user_sections)
     prompt_lines.append("Assistant:")
     return "\n".join(prompt_lines)
+
 
 
 def _build_concept_definition_prompt(
@@ -1886,34 +1878,30 @@ def _build_concept_definition_prompt(
             "provide two or three illustrative examples when feasible."
         ),
     )
-    schema_instructions = config.get(
-        "definition_schema",
+    response_instructions = config.get(
+        "definition_response_instructions",
         (
-            '{\n'
-            '  "concepts": [\n'
-            '    {\n'
-            '      "name": "Concept name",\n'
-            '      "definition": "Clear definition",\n'
-            '      "examples": [\n'
-            '        "Short illustrative example"\n'
-            '      ]\n'
-            '    }\n'
-            '  ]\n'
-            '}'
+            "For each concept, start a new paragraph with 'Concept Name:' followed by a precise definition. "
+            "Add a sentence beginning with 'Examples:' that shows one or two ways the concept could manifest in the story."
         ),
     )
 
-    concept_summary = json.dumps(
-        {"concepts": concepts},
-        ensure_ascii=False,
-        indent=2,
-    )
+    concept_lines: List[str] = []
+    for entry in concepts:
+        name = str(entry.get("name", "")).strip() or "Unnamed concept"
+        issue = str(entry.get("issue", "")).strip()
+        if issue:
+            concept_lines.append(f"- {name}: {issue}")
+        else:
+            concept_lines.append(f"- {name}")
+    concept_overview = "\n".join(concept_lines) if concept_lines else "- (No concept issues were provided.)"
+
     user_sections: List[str] = [
-        "Use the outline and the concept issues below to craft precise definitions.",
+        "Use the outline and the concept notes below to craft plain-text definitions the author can apply immediately.",
         "Outline:",
         outline_text.strip() or "(no outline provided)",
         "Concepts requiring clarification:",
-        concept_summary,
+        concept_overview,
     ]
     if additional_guidance.strip():
         user_sections.extend(
@@ -1924,11 +1912,8 @@ def _build_concept_definition_prompt(
         )
     user_sections.extend(
         [
-            (
-                "Respond with JSON matching the schema below. Keep definitions concrete, avoid reusing the "
-                "author's vague language, and list up to three vivid examples for each concept."
-            ),
-            schema_instructions.strip(),
+            "Response instructions:",
+            response_instructions.strip(),
         ]
     )
 
@@ -1938,49 +1923,34 @@ def _build_concept_definition_prompt(
     return "\n".join(prompt_lines)
 
 
+
 def _parse_concept_analysis(raw_response: str) -> List[Dict[str, str]]:
     """Parse the analysis response into a list of concept issues."""
 
     cleaned = _strip_json_code_fences(raw_response)
     json_block = _extract_json_object(cleaned)
-    if not json_block:
-        fallback_items = _parse_plain_concept_analysis(cleaned)
-        if fallback_items:
-            return fallback_items
-        raise ValueError(
-            "The assistant response did not contain the expected JSON object. Please try again."
-        )
+    if json_block:
+        try:
+            payload = json.loads(json_block)
+        except json.JSONDecodeError:
+            payload = None
+        else:
+            if isinstance(payload, dict):
+                items = payload.get("concepts", [])
+                if isinstance(items, list):
+                    results: List[Dict[str, str]] = []
+                    for entry in items:
+                        if not isinstance(entry, dict):
+                            continue
+                        name = str(entry.get("name", "")).strip()
+                        issue = str(entry.get("issue", "")).strip()
+                        if not name:
+                            continue
+                        results.append({"name": name, "issue": issue})
+                    return results
 
-    try:
-        payload = json.loads(json_block)
-    except json.JSONDecodeError as exc:
-        raise ValueError(
-            "The assistant returned invalid JSON while analysing concepts."
-        ) from exc
+    return _parse_plain_concept_analysis(cleaned)
 
-    if not isinstance(payload, dict):
-        raise ValueError(
-            "The assistant response was not a JSON object. Please try again."
-        )
-
-    items = payload.get("concepts", [])
-    if items is None:
-        return []
-    if not isinstance(items, list):
-        raise ValueError(
-            "The assistant returned an unexpected format for the concept list."
-        )
-
-    results: List[Dict[str, str]] = []
-    for entry in items:
-        if not isinstance(entry, dict):
-            continue
-        name = str(entry.get("name", "")).strip()
-        issue = str(entry.get("issue", "")).strip()
-        if not name:
-            continue
-        results.append({"name": name, "issue": issue})
-    return results
 
 
 def _parse_concept_definitions(raw_response: str) -> List[Dict[str, Any]]:
@@ -1988,61 +1958,45 @@ def _parse_concept_definitions(raw_response: str) -> List[Dict[str, Any]]:
 
     cleaned = _strip_json_code_fences(raw_response)
     json_block = _extract_json_object(cleaned)
-    if not json_block:
-        fallback_items = _parse_plain_concept_definitions(cleaned)
-        if fallback_items:
-            return fallback_items
-        raise ValueError(
-            "The assistant response did not contain the expected JSON object. Please try again."
-        )
+    if json_block:
+        try:
+            payload = json.loads(json_block)
+        except json.JSONDecodeError:
+            payload = None
+        else:
+            if isinstance(payload, dict):
+                items = payload.get("concepts", [])
+                if isinstance(items, list):
+                    results: List[Dict[str, Any]] = []
+                    for entry in items:
+                        if not isinstance(entry, dict):
+                            continue
+                        name = str(entry.get("name", "")).strip()
+                        definition = str(entry.get("definition", "")).strip()
+                        examples_raw = entry.get("examples", [])
+                        examples: List[str] = []
+                        if isinstance(examples_raw, list):
+                            for example in examples_raw:
+                                if example is None:
+                                    continue
+                                examples.append(str(example).strip())
+                        elif isinstance(examples_raw, (str, int, float)):
+                            text_value = str(examples_raw).strip()
+                            if text_value:
+                                examples.append(text_value)
+                        if not name:
+                            continue
+                        results.append(
+                            {
+                                "name": name,
+                                "definition": definition,
+                                "examples": [ex for ex in examples if ex],
+                            }
+                        )
+                    return results
 
-    try:
-        payload = json.loads(json_block)
-    except json.JSONDecodeError as exc:
-        raise ValueError(
-            "The assistant returned invalid JSON while defining concepts."
-        ) from exc
+    return _parse_plain_concept_definitions(cleaned)
 
-    if not isinstance(payload, dict):
-        raise ValueError(
-            "The assistant response was not a JSON object. Please try again."
-        )
-
-    items = payload.get("concepts", [])
-    if items is None:
-        return []
-    if not isinstance(items, list):
-        raise ValueError(
-            "The assistant returned an unexpected format for the concept definitions."
-        )
-
-    results: List[Dict[str, Any]] = []
-    for entry in items:
-        if not isinstance(entry, dict):
-            continue
-        name = str(entry.get("name", "")).strip()
-        definition = str(entry.get("definition", "")).strip()
-        examples_raw = entry.get("examples", [])
-        examples: List[str] = []
-        if isinstance(examples_raw, list):
-            for example in examples_raw:
-                if example is None:
-                    continue
-                examples.append(str(example).strip())
-        elif isinstance(examples_raw, (str, int, float)):
-            text = str(examples_raw).strip()
-            if text:
-                examples.append(text)
-        if not name:
-            continue
-        results.append(
-            {
-                "name": name,
-                "definition": definition,
-                "examples": [ex for ex in examples if ex],
-            }
-        )
-    return results
 
 
 def _format_concept_analysis_summary(concepts: List[Dict[str, str]]) -> str:
