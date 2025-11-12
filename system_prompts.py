@@ -12,12 +12,12 @@ SYSTEM_PROMPTS = {
         "max_new_tokens": 512,
     },
     "act_outline": {
-        "max_new_tokens": 512,
+        "max_new_tokens": 1012,
         "base": (
             "You are a collaborative narrative designer helping an author expand a "
             "story into a vivid three-act outline. Honour the provided outline, "
             "character notes, and final directions while keeping pacing taut and "
-            "dramatic."
+            "dramatic. Feel free to invent supporting characters if needed"
         ),
         "format": (
             "Respond in plain text using this exact structure for each act:\n"
@@ -46,7 +46,7 @@ SYSTEM_PROMPTS = {
         },
     },
     "chapter_outline": {
-        "max_new_tokens": 512,
+        "max_new_tokens": 2512,
         "base": (
             "You are a creative writing assistant specialising in expanding act-level "
             "plans into vivid, sequential chapter breakdowns that honour continuity "
@@ -60,7 +60,7 @@ SYSTEM_PROMPTS = {
         ),
         "format": (
             "Respond in plain text. For each chapter, start a new section with the header 'Chapter: Chapter <number> — <Title>'. "
-            "Follow the header with a 2-3 sentence paragraph summary on the next line(s) and leave a blank line between chapters. "
+            "Follow the header with 2-3 scenes that will be happening in this chapter and leave a blank line between chapters. "
             "Do not include bullets or commentary outside these chapter sections."
         ),
     },
