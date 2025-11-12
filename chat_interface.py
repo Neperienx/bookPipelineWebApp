@@ -16,8 +16,6 @@ import os
 import json
 import re
 import time
-import textwrap
-import unicodedata
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 from api_handler import OpenAIUnifiedGenerator
@@ -42,6 +40,7 @@ import torch
 LOGGER = logging.getLogger(__name__)
 
 from text_generator import TextGenerator
+from pdf_handler import PDFExportError, export_chapter_drafts_to_pdf
 from system_prompts import (
     SYSTEM_PROMPTS,
     get_character_fields,
@@ -184,74 +183,6 @@ _SUPPORTING_HEADER_PATTERN = re.compile(
     r"^\s*Character\s*:\s*(.+)$",
     re.IGNORECASE,
 )
-
-_PDF_LATIN1_REPLACEMENTS = {
-    ord("\u2010"): "-",  # hyphen
-    ord("\u2011"): "-",  # non-breaking hyphen
-    ord("\u2012"): "-",  # figure dash
-    ord("\u2013"): "-",  # en dash
-    ord("\u2014"): "-",  # em dash
-    ord("\u2015"): "-",  # horizontal bar
-    ord("\u2212"): "-",  # minus sign
-    ord("\u2018"): "'",  # left single quote
-    ord("\u2019"): "'",  # right single quote / apostrophe
-    ord("\u201A"): "'",  # single low-9 quote
-    ord("\u201B"): "'",  # single high-reversed-9 quote
-    ord("\u2032"): "'",  # prime
-    ord("\u201C"): '"',  # left double quote
-    ord("\u201D"): '"',  # right double quote
-    ord("\u201E"): '"',  # double low-9 quote
-    ord("\u00AB"): '"',  # left-pointing double angle quote
-    ord("\u00BB"): '"',  # right-pointing double angle quote
-    ord("\u2026"): "...",  # ellipsis
-    ord("\u00A0"): " ",  # non-breaking space
-}
-
-
-def _pdf_safe_text(text: str) -> str:
-    """Return ``text`` normalised for the PDF Latin-1 core fonts."""
-
-    normalized = unicodedata.normalize("NFKC", text or "")
-    replaced = normalized.translate(_PDF_LATIN1_REPLACEMENTS)
-    return replaced.encode("latin-1", "replace").decode("latin-1")
-
-
-def _pdf_wrapped_text(text: str, *, width: int = 100) -> str:
-    """Return ``text`` converted to a PDF-safe, manually wrapped string.
-
-    ``FPDF.multi_cell`` cannot render tokens that exceed the available cell
-    width.  When users provide extremely long, unbroken strings (for example
-    generated draft content without whitespace), ``multi_cell`` raises
-    ``FPDFException``.  Pre-wrapping the text by characters gives the renderer
-    explicit break points and avoids the error while keeping the output
-    readable.  The wrapping happens after normalising the string to the Latin-1
-    character set used by the default PDF fonts.
-    """
-
-    safe_text = _pdf_safe_text(text)
-    if not safe_text:
-        return ""
-
-    wrapped_lines: List[str] = []
-    for raw_line in safe_text.splitlines():
-        if not raw_line:
-            wrapped_lines.append("")
-            continue
-
-        line_chunks = textwrap.wrap(
-            raw_line,
-            width=width,
-            break_long_words=True,
-            break_on_hyphens=False,
-        )
-
-        if line_chunks:
-            wrapped_lines.extend(line_chunks)
-        else:
-            wrapped_lines.append("")
-
-    return "\n".join(wrapped_lines)
-
 
 class Project(db.Model):
     """Story project persisted in the local SQLite database."""
@@ -1238,56 +1169,15 @@ def create_app() -> Flask:
             session.modified = True
             return redirect(url_for("project_detail", project_id=project_id))
 
+        output_path = Path(__file__).resolve().parent / "temp.pdf"
         try:
-            from fpdf import FPDF
-        except ImportError:
-            session[error_key] = (
-                "Exporting chapters requires the fpdf2 package. Install it and try again."
+            pdf_path = export_chapter_drafts_to_pdf(
+                project,
+                drafts,
+                output_path=output_path,
             )
-            session.modified = True
-            return redirect(url_for("project_detail", project_id=project_id))
-
-        pdf = FPDF()
-        pdf.set_auto_page_break(auto=True, margin=15)
-        pdf.add_page()
-        pdf.set_font("Times", "B", 18)
-        title_text = project.name or "Untitled Project"
-        pdf.multi_cell(0, 10, _pdf_wrapped_text(title_text))
-        pdf.ln(4)
-        outline_text = (project.outline or "").strip()
-        if outline_text:
-            pdf.set_font("Times", "", 12)
-            pdf.multi_cell(0, 6, _pdf_wrapped_text("Project outline:"))
-            pdf.ln(2)
-            pdf.multi_cell(0, 6, _pdf_wrapped_text(outline_text))
-
-        for draft in drafts:
-            pdf.add_page()
-            pdf.set_font("Times", "B", 14)
-            header = (
-                f"Act {draft.act_number} — Chapter {draft.chapter_number}: "
-                f"{draft.title or 'Untitled Chapter'}"
-            )
-            pdf.multi_cell(0, 10, _pdf_wrapped_text(header))
-            summary = (draft.outline_summary or "").strip()
-            if summary:
-                pdf.set_font("Times", "I", 11)
-                pdf.multi_cell(0, 6, _pdf_wrapped_text(f"Outline: {summary}"))
-                pdf.ln(2)
-            pdf.set_font("Times", "", 12)
-            content = (draft.content or "").strip() or "(No draft text available.)"
-            for paragraph in content.split("\n\n"):
-                cleaned = paragraph.strip()
-                if not cleaned:
-                    continue
-                pdf.multi_cell(0, 6.5, _pdf_wrapped_text(cleaned))
-                pdf.ln(1.5)
-
-        pdf_path = Path(__file__).resolve().parent / "temp.pdf"
-        try:
-            pdf.output(str(pdf_path))
-        except Exception as exc:  # pragma: no cover - defensive
-            session[error_key] = f"Unable to export PDF: {exc}"
+        except PDFExportError as exc:
+            session[error_key] = str(exc)
             session.modified = True
             return redirect(url_for("project_detail", project_id=project_id))
 
