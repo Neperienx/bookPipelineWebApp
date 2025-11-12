@@ -534,20 +534,36 @@
                           Draft polished chapters using your character roster, outline, and recent scenes for continuity.
                         </p>
                       </div>
-                      <form
-                        method="post"
-                        action="{{ url_for('chapter_export_pdf', project_id=project.id) }}"
-                        class="d-flex flex-column align-items-end gap-1"
-                      >
-                        <button
-                          type="submit"
-                          class="btn btn-outline-info btn-sm"
-                          {% if not saved_chapter_count %}disabled{% endif %}
+                      <div class="d-flex flex-column align-items-end gap-2">
+                        <form
+                          method="post"
+                          action="{{ url_for('chapter_export_pdf', project_id=project.id) }}"
+                          class="d-flex flex-column align-items-end gap-1"
                         >
-                          Export chapters to PDF
-                        </button>
-                        <span class="text-secondary small">Creates <code>temp.pdf</code> in the project folder.</span>
-                      </form>
+                          <button
+                            type="submit"
+                            class="btn btn-outline-info btn-sm"
+                            {% if not saved_chapter_count %}disabled{% endif %}
+                          >
+                            Export chapters to PDF
+                          </button>
+                          <span class="text-secondary small">Creates <code>temp.pdf</code> in the project folder.</span>
+                        </form>
+                        <form
+                          method="post"
+                          action="{{ url_for('chapter_export_txt', project_id=project.id) }}"
+                          class="d-flex flex-column align-items-end gap-1"
+                        >
+                          <button
+                            type="submit"
+                            class="btn btn-outline-info btn-sm"
+                            {% if not saved_chapter_count %}disabled{% endif %}
+                          >
+                            Export chapters to TXT
+                          </button>
+                          <span class="text-secondary small">Creates <code>temp.txt</code> in the project folder.</span>
+                        </form>
+                      </div>
                     </div>
                     {% if draft_export_error %}
                       <div class="alert alert-danger" role="alert">{{ draft_export_error }}</div>

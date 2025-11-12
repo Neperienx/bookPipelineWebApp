@@ -41,6 +41,7 @@ LOGGER = logging.getLogger(__name__)
 
 from text_generator import TextGenerator
 from pdf_handler import PDFExportError, export_chapter_drafts_to_pdf
+from text_exporter import TextExportError, export_chapter_drafts_to_txt
 from system_prompts import (
     SYSTEM_PROMPTS,
     get_character_fields,
@@ -1183,6 +1184,50 @@ def create_app() -> Flask:
 
         session[message_key] = (
             f"Exported {len(drafts)} chapter{'s' if len(drafts) != 1 else ''} to {pdf_path.name}."
+        )
+        session.modified = True
+        return redirect(url_for("project_detail", project_id=project_id))
+
+    @app.route(
+        "/projects/<int:project_id>/chapters/export/txt",
+        methods=["POST"],
+    )
+    def chapter_export_txt(project_id: int) -> str:
+        project = db.session.get(Project, project_id)
+        if project is None:
+            abort(404)
+
+        message_key = _draft_export_message_key(project_id)
+        error_key = _draft_export_error_key(project_id)
+
+        drafts = (
+            ChapterDraft.query.filter_by(project_id=project_id)
+            .order_by(
+                ChapterDraft.act_number.asc(),
+                ChapterDraft.chapter_number.asc(),
+            )
+            .all()
+        )
+
+        if not drafts:
+            session[error_key] = "No drafted chapters are available to export yet."
+            session.modified = True
+            return redirect(url_for("project_detail", project_id=project_id))
+
+        output_path = Path(__file__).resolve().parent / "temp.txt"
+        try:
+            txt_path = export_chapter_drafts_to_txt(
+                project,
+                drafts,
+                output_path=output_path,
+            )
+        except TextExportError as exc:
+            session[error_key] = str(exc)
+            session.modified = True
+            return redirect(url_for("project_detail", project_id=project_id))
+
+        session[message_key] = (
+            f"Exported {len(drafts)} chapter{'s' if len(drafts) != 1 else ''} to {txt_path.name}."
         )
         session.modified = True
         return redirect(url_for("project_detail", project_id=project_id))
