@@ -167,6 +167,31 @@
     .loading-indicator.visible {
       display: flex;
     }
+    .chapter-preview-box {
+      border-radius: 0.75rem;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: rgba(15, 23, 42, 0.6);
+      padding: 1rem;
+      min-height: 140px;
+      white-space: pre-wrap;
+    }
+    .chapter-preview-box.empty {
+      color: rgba(226, 232, 240, 0.6);
+      font-style: italic;
+    }
+    .chapter-draft-entry {
+      border-radius: 0.75rem;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: rgba(15, 23, 42, 0.55);
+      padding: 1rem 1.25rem;
+    }
+    .chapter-draft-entry + .chapter-draft-entry {
+      margin-top: 0.75rem;
+    }
+    .draft-metadata {
+      color: rgba(226, 232, 240, 0.65);
+      font-size: 0.85rem;
+    }
   </style>
 {% endblock %}
 {% block content %}
@@ -279,6 +304,23 @@
                   Review the generated chapter plans for each act.
                 {% else %}
                   Break down every act into detailed chapters.
+                {% endif %}
+              </p>
+            </button>
+            <button
+              class="overview-tile"
+              type="button"
+              data-target="draftPanel"
+              data-chat-target="draftChatPanel"
+              aria-controls="draftPanel"
+              aria-selected="false"
+            >
+              <h2 class="h6 mb-1">Chapter drafting</h2>
+              <p>
+                {% if saved_chapter_count %}
+                  Continue refining {{ saved_chapter_count }} saved chapter draft{{ saved_chapter_count != 1 and 's' or '' }}.
+                {% else %}
+                  Expand your outlines into full chapter prose with continuity support.
                 {% endif %}
               </p>
             </button>
@@ -481,6 +523,99 @@
                         <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act III chapters will appear here." readonly></textarea>
                       </div>
                     {% endif %}
+                  </div>
+                </div>
+                <div class="tile-detail" id="draftPanel" role="tabpanel">
+                  <div class="outline-content d-flex flex-column gap-3">
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                      <div>
+                        <h3 class="h6 mb-1">Chapter drafting workspace</h3>
+                        <p class="text-secondary mb-0 small">
+                          Draft polished chapters using your character roster, outline, and recent scenes for continuity.
+                        </p>
+                      </div>
+                      <form
+                        method="post"
+                        action="{{ url_for('chapter_export_pdf', project_id=project.id) }}"
+                        class="d-flex flex-column align-items-end gap-1"
+                      >
+                        <button
+                          type="submit"
+                          class="btn btn-outline-info btn-sm"
+                          {% if not saved_chapter_count %}disabled{% endif %}
+                        >
+                          Export chapters to PDF
+                        </button>
+                        <span class="text-secondary small">Creates <code>temp.pdf</code> in the project folder.</span>
+                      </form>
+                    </div>
+                    {% if draft_export_error %}
+                      <div class="alert alert-danger" role="alert">{{ draft_export_error }}</div>
+                    {% endif %}
+                    {% if draft_export_message %}
+                      <div class="alert alert-success" role="alert">{{ draft_export_message }}</div>
+                    {% endif %}
+                    <div>
+                      <h4 class="h6 mb-1 text-info">Selected act outline</h4>
+                      {% set selected_plan = act_chapter_lists.get(draft_selected_act) %}
+                      {% if selected_plan %}
+                        <div class="chapter-list">
+                          {% for chapter in selected_plan %}
+                            <div class="chapter-card">
+                              <div class="chapter-card-title">Chapter {{ chapter.number }}: {{ chapter.title or 'Untitled Chapter' }}</div>
+                              {% if chapter.summary %}
+                                <p class="chapter-card-summary">{{ chapter.summary }}</p>
+                              {% endif %}
+                            </div>
+                          {% endfor %}
+                        </div>
+                      {% else %}
+                        <div class="chapter-preview-box empty">
+                          Generate the chapter-by-chapter outline for Act {{ draft_selected_act }} to start drafting prose.
+                        </div>
+                      {% endif %}
+                    </div>
+                    <div>
+                      <h4 class="h6 mb-1 text-info">Saved chapter drafts</h4>
+                      {% if saved_chapter_count %}
+                        <div class="d-flex flex-column gap-3">
+                          {% for act_number in [1, 2, 3] %}
+                            {% set entries = chapter_draft_groups.get(act_number, []) %}
+                            {% if entries %}
+                              <div>
+                                <div class="text-uppercase text-secondary small fw-semibold mb-2">Act {{ act_number }}</div>
+                                <div class="d-flex flex-column">
+                                  {% for entry in entries %}
+                                    <div class="chapter-draft-entry">
+                                      <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                                        <div class="fw-semibold">
+                                          Chapter {{ entry.chapter_number }}: {{ entry.title or 'Untitled Chapter' }}
+                                        </div>
+                                        {% if entry.updated_display %}
+                                          <div class="draft-metadata">Updated {{ entry.updated_display }}</div>
+                                        {% endif %}
+                                      </div>
+                                      {% if entry.outline_summary %}
+                                        <p class="draft-metadata mb-2">Outline: {{ entry.outline_summary }}</p>
+                                      {% endif %}
+                                      {% if entry.content %}
+                                        <p class="text-secondary small mb-0">{{ entry.content|truncate(220, True, '…') }}</p>
+                                      {% else %}
+                                        <p class="draft-metadata mb-0">No prose saved yet.</p>
+                                      {% endif %}
+                                    </div>
+                                  {% endfor %}
+                                </div>
+                              </div>
+                            {% endif %}
+                          {% endfor %}
+                        </div>
+                      {% else %}
+                        <div class="chapter-preview-box empty">
+                          No drafted chapters saved yet. Use the assistant to generate your first chapter draft.
+                        </div>
+                      {% endif %}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -835,6 +970,139 @@
               </div>
             </form>
           </div>
+          <div id="draftChatPanel" class="chat-panel" role="tabpanel" aria-labelledby="draftPanel">
+            <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
+              <div>
+                <h2 class="h5 mb-1">Chapter drafting assistant</h2>
+                <p class="text-secondary mb-0">Write full chapters with continuity from prior scenes and your character roster.</p>
+              </div>
+              <form method="post">
+                <input type="hidden" name="chat_type" value="drafts" />
+                <button type="submit" name="reset" value="1" class="btn btn-outline-light btn-sm">Clear chat</button>
+              </form>
+            </div>
+            <div class="chat-messages flex-grow-1 mb-3">
+              {% if draft_history %}
+                {% for message in draft_history %}
+                  <div class="message {{ message.role }}">
+                    <strong class="d-block mb-1 text-uppercase small">{{ message.role }}</strong>
+                    <div>{{ message.content }}</div>
+                    {% if message.device_type %}
+                      <div class="message-device">Generated using the {{ message.device_type }} backend.</div>
+                    {% endif %}
+                  </div>
+                {% endfor %}
+              {% else %}
+                <div class="message assistant">
+                  <strong class="d-block mb-1 text-uppercase small">assistant</strong>
+                  <div>Select a chapter plan and I will expand it into prose, using recent chapters and character notes for continuity.</div>
+                </div>
+              {% endif %}
+            </div>
+            {% if draft_error %}
+              <div class="alert alert-danger" role="alert">{{ draft_error }}</div>
+            {% endif %}
+            {% if draft_success %}
+              <div class="alert alert-success" role="alert">{{ draft_success }}</div>
+            {% endif %}
+            <div id="draftLoadingIndicator" class="loading-indicator" role="status" aria-live="polite">
+              <div class="spinner-border text-info" role="status" aria-hidden="true"></div>
+              <span>Assistant is thinking…</span>
+            </div>
+            <form
+              method="post"
+              id="draftChatForm"
+              data-chat-form
+              data-loading-target="draftLoadingIndicator"
+              class="d-flex flex-column gap-3"
+            >
+              <input type="hidden" name="chat_type" value="drafts" />
+              <div class="row g-3">
+                <div class="col-md-4">
+                  <label for="draftActSelect" class="form-label">Act</label>
+                  <select class="form-select" id="draftActSelect" name="act_number" required>
+                    {% for act_number in [1, 2, 3] %}
+                      <option value="{{ act_number }}" {% if act_number == draft_selected_act %}selected{% endif %}>
+                        Act {{ act_number }}
+                      </option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-md-4">
+                  <label for="draftChapterSelect" class="form-label">Chapter</label>
+                  {% set selected_plan = act_chapter_lists.get(draft_selected_act) %}
+                  <select
+                    class="form-select"
+                    id="draftChapterSelect"
+                    name="chapter_number"
+                    required
+                    data-current="{{ draft_selected_chapter }}"
+                    {% if not selected_plan %}disabled{% endif %}
+                  >
+                    {% if selected_plan %}
+                      {% for chapter in selected_plan %}
+                        <option value="{{ chapter.number }}" {% if chapter.number == draft_selected_chapter %}selected{% endif %}>
+                          Chapter {{ chapter.number }} — {{ chapter.title or 'Untitled' }}
+                        </option>
+                      {% endfor %}
+                    {% else %}
+                      <option value="">Generate the outline first</option>
+                    {% endif %}
+                  </select>
+                </div>
+                <div class="col-md-4">
+                  <label for="draftContextCount" class="form-label">Past chapters for context</label>
+                  <input
+                    type="number"
+                    class="form-control"
+                    id="draftContextCount"
+                    name="context_count"
+                    min="0"
+                    value="{{ draft_context_value }}"
+                  />
+                </div>
+              </div>
+              <div class="row g-3">
+                <div class="col-lg-6">
+                  <label for="draftNotes" class="form-label">Author guidance</label>
+                  <textarea
+                    class="form-control"
+                    id="draftNotes"
+                    name="message"
+                    rows="4"
+                    placeholder="Optional: highlight tone, pacing, or scenes you want to emphasise."
+                  ></textarea>
+                </div>
+                <div class="col-lg-6 d-flex flex-column gap-3">
+                  <div>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                      <span class="small text-uppercase text-secondary fw-semibold">Outline summary</span>
+                      <span class="badge bg-dark text-light" id="draftOutlineLabel">Preview</span>
+                    </div>
+                    <div id="draftOutlinePreview" class="chapter-preview-box empty">
+                      Select a chapter to view its outline summary.
+                    </div>
+                  </div>
+                  <div>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                      <span class="small text-uppercase text-secondary fw-semibold">Saved draft</span>
+                      <span class="badge bg-dark text-light" id="draftSavedLabel">Preview</span>
+                    </div>
+                    <div id="draftSavedPreview" class="chapter-preview-box empty">
+                      No prose saved for the selected chapter yet.
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="d-flex align-items-center justify-content-end gap-3">
+                <div class="form-check mb-0">
+                  <input class="form-check-input" type="checkbox" value="1" id="draftUseApi" name="use_api" />
+                  <label class="form-check-label small" for="draftUseApi">API</label>
+                </div>
+                <button type="submit" class="btn btn-primary" {% if not selected_plan %}disabled{% endif %}>Draft chapter</button>
+              </div>
+            </form>
+          </div>
         </div>
       </div>
     </div>
@@ -896,6 +1164,124 @@
           }
         });
       });
+
+      const chapterPlanData = {{ act_chapter_lists | tojson }};
+      const outlineLookup = {{ chapter_outline_lookup | tojson }};
+      const draftLookup = {{ chapter_draft_lookup | tojson }};
+      const draftActSelect = document.getElementById("draftActSelect");
+      const draftChapterSelect = document.getElementById("draftChapterSelect");
+      const draftOutlinePreview = document.getElementById("draftOutlinePreview");
+      const draftSavedPreview = document.getElementById("draftSavedPreview");
+      const draftOutlineLabel = document.getElementById("draftOutlineLabel");
+      const draftSavedLabel = document.getElementById("draftSavedLabel");
+
+      function clearPreview(element, fallbackText) {
+        if (!element) {
+          return;
+        }
+        element.classList.add("empty");
+        element.textContent = fallbackText;
+      }
+
+      function setPreview(element, text) {
+        if (!element) {
+          return;
+        }
+        const value = (text || "").trim();
+        if (value) {
+          element.classList.remove("empty");
+          element.textContent = value;
+        } else {
+          element.classList.add("empty");
+          element.textContent = "No details available for this chapter.";
+        }
+      }
+
+      function refreshDraftChapterOptions() {
+        if (!draftActSelect || !draftChapterSelect) {
+          return;
+        }
+        const actValue = draftActSelect.value;
+        const chapters = chapterPlanData[String(actValue)] || [];
+        draftChapterSelect.innerHTML = "";
+        if (!chapters.length) {
+          draftChapterSelect.disabled = true;
+          const option = document.createElement("option");
+          option.value = "";
+          option.textContent = "Generate the outline first";
+          draftChapterSelect.appendChild(option);
+          clearPreview(draftOutlinePreview, "Generate the chapter outline to view the summary.");
+          clearPreview(draftSavedPreview, "No prose saved for the selected chapter yet.");
+          return;
+        }
+        draftChapterSelect.disabled = false;
+        const current = draftChapterSelect.getAttribute("data-current") || draftChapterSelect.value;
+        let selectedSet = false;
+        chapters.forEach(function (chapter, index) {
+          const option = document.createElement("option");
+          option.value = chapter.number;
+          option.textContent = "Chapter " + chapter.number + " — " + (chapter.title || "Untitled");
+          if (String(chapter.number) === String(current)) {
+            option.selected = true;
+            selectedSet = true;
+          }
+          draftChapterSelect.appendChild(option);
+        });
+        if (!selectedSet && draftChapterSelect.options.length) {
+          draftChapterSelect.selectedIndex = 0;
+        }
+        draftChapterSelect.removeAttribute("data-current");
+      }
+
+      function updateDraftPreviews() {
+        if (!draftActSelect || !draftChapterSelect) {
+          return;
+        }
+        const actValue = draftActSelect.value;
+        const chapterValue = draftChapterSelect.value;
+        const key = String(actValue) + "-" + String(chapterValue);
+        const outlineEntry = outlineLookup[key];
+        const draftEntry = draftLookup[key];
+        if (draftOutlineLabel) {
+          draftOutlineLabel.textContent = outlineEntry ? "Chapter " + chapterValue : "Preview";
+        }
+        if (draftSavedLabel) {
+          draftSavedLabel.textContent = draftEntry ? "Updated" : "Preview";
+        }
+        if (!chapterValue) {
+          clearPreview(draftOutlinePreview, "Generate the chapter outline to view the summary.");
+          clearPreview(draftSavedPreview, "No prose saved for the selected chapter yet.");
+          return;
+        }
+        if (outlineEntry) {
+          const summary = (outlineEntry.summary || "").trim();
+          const title = outlineEntry.title ? "Chapter " + chapterValue + ": " + outlineEntry.title : "Chapter " + chapterValue;
+          const combined = summary ? title + "\n\n" + summary : title;
+          setPreview(draftOutlinePreview, combined);
+        } else {
+          clearPreview(draftOutlinePreview, "No outline summary available for this chapter.");
+        }
+        if (draftEntry && draftEntry.content) {
+          setPreview(draftSavedPreview, draftEntry.content);
+        } else {
+          clearPreview(draftSavedPreview, "No prose saved for the selected chapter yet.");
+        }
+      }
+
+      if (draftActSelect) {
+        draftActSelect.addEventListener("change", function () {
+          refreshDraftChapterOptions();
+          updateDraftPreviews();
+        });
+      }
+      if (draftChapterSelect) {
+        draftChapterSelect.addEventListener("change", function () {
+          updateDraftPreviews();
+        });
+      }
+
+      refreshDraftChapterOptions();
+      updateDraftPreviews();
     })();
   </script>
 {% endblock %}

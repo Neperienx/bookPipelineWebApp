@@ -64,6 +64,24 @@ SYSTEM_PROMPTS = {
             "Do not include bullets or commentary outside these chapter sections."
         ),
     },
+    "chapter_drafting": {
+        "max_new_tokens": 3072,
+        "base": (
+            "You are a collaborative novelist polishing full chapters of prose. Respect the provided outlines, maintain tonal consistency, and deliver immersive narrative ready for a manuscript."
+        ),
+        "continuity": (
+            "Track ongoing arcs, settings, and character motivations so the new chapter seamlessly follows the existing material."
+        ),
+        "style": (
+            "Write vivid, publication-ready prose with rich sensory detail, purposeful pacing, and authentic dialogue."
+        ),
+        "format": (
+            "Reply with plain text paragraphs suitable for a novel manuscript. Do not use markdown headings, bullet points, or screenplay formatting."
+        ),
+        "length": (
+            "Aim for roughly 900-1200 words unless the outline clearly indicates a different scope."
+        ),
+    },
     "supporting_characters": {
         "max_new_tokens": 712,
         "base": (

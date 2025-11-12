@@ -33,7 +33,7 @@ from flask import (
 )
 from flask_sqlalchemy import SQLAlchemy
 
-from sqlalchemy import inspect, text
+from sqlalchemy import and_, inspect, or_, text
 
 import torch
 
@@ -215,6 +215,12 @@ class Project(db.Model):
         order_by="Concept.created_at.desc()",
         cascade="all, delete-orphan",
     )
+    chapters = db.relationship(
+        "ChapterDraft",
+        back_populates="project",
+        order_by="(ChapterDraft.act_number, ChapterDraft.chapter_number)",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self) -> str:  # pragma: no cover - debug helper
         return f"<Project {self.id} {self.name!r}>"
@@ -266,6 +272,42 @@ class Concept(db.Model):
 
     def __repr__(self) -> str:  # pragma: no cover - debug helper
         return f"<Concept {self.id} project={self.project_id} {self.name!r}>"
+
+
+class ChapterDraft(db.Model):
+    """Full chapter draft generated from an outline."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=False)
+    act_number = db.Column(db.Integer, nullable=False)
+    chapter_number = db.Column(db.Integer, nullable=False)
+    title = db.Column(db.String(255), nullable=True)
+    outline_summary = db.Column(db.Text, nullable=True)
+    content = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    project = db.relationship("Project", back_populates="chapters")
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            "project_id",
+            "act_number",
+            "chapter_number",
+            name="uq_project_act_chapter",
+        ),
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - debug helper
+        return (
+            f"<ChapterDraft project={self.project_id} act={self.act_number} "
+            f"chapter={self.chapter_number}>"
+        )
 
 
 def _ensure_character_columns() -> None:
@@ -400,6 +442,8 @@ def create_app() -> Flask:
         concept_history = session.setdefault(concept_session_key, [])
         supporting_session_key = _supporting_session_key(project_id)
         supporting_history = session.setdefault(supporting_session_key, [])
+        draft_session_key = _draft_session_key(project_id)
+        draft_history = session.setdefault(draft_session_key, [])
         error = None
         success = None
         act_error = None
@@ -414,6 +458,12 @@ def create_app() -> Flask:
         concept_success = None
         supporting_error = None
         supporting_success = None
+        draft_error = None
+        draft_success = None
+        draft_context_default = 2
+        draft_context_value = draft_context_default
+        draft_selected_act: Optional[int] = None
+        draft_selected_chapter: Optional[int] = None
 
         if request.method == "POST":
             chat_type = request.form.get("chat_type", "outline")
@@ -427,6 +477,8 @@ def create_app() -> Flask:
                     session.pop(concept_session_key, None)
                 elif chat_type == "supporting":
                     session.pop(supporting_session_key, None)
+                elif chat_type == "drafts":
+                    session.pop(draft_session_key, None)
                 else:
                     session.pop(session_key, None)
                 return redirect(url_for("project_detail", project_id=project_id))
@@ -698,6 +750,154 @@ def create_app() -> Flask:
                             )
                         session.modified = True
                 session.modified = True
+            elif chat_type == "drafts":
+                act_raw = request.form.get("act_number", "").strip()
+                chapter_raw = request.form.get("chapter_number", "").strip()
+                context_raw = request.form.get("context_count", "").strip()
+                additional_guidance = user_message
+
+                try:
+                    act_number = int(act_raw)
+                    if act_number <= 0:
+                        raise ValueError
+                except ValueError:
+                    draft_error = "Please choose a valid act before drafting."
+                else:
+                    draft_selected_act = act_number
+
+                try:
+                    chapter_number = int(chapter_raw)
+                    if chapter_number <= 0:
+                        raise ValueError
+                except ValueError:
+                    draft_error = (
+                        draft_error
+                        or "Please choose a valid chapter from the outline to draft."
+                    )
+                else:
+                    draft_selected_chapter = chapter_number
+
+                try:
+                    context_count = int(context_raw or draft_context_default)
+                except ValueError:
+                    draft_error = draft_error or (
+                        "Please enter a whole number for the continuity chapters."
+                    )
+                    context_count = draft_context_default
+                else:
+                    if context_count < 0:
+                        draft_error = draft_error or (
+                            "Continuity chapters cannot be negative."
+                        )
+                        context_count = draft_context_default
+                draft_context_value = context_count
+
+                if draft_error is None:
+                    outline_entry = _find_chapter_outline_entry(
+                        project,
+                        draft_selected_act,
+                        draft_selected_chapter,
+                    )
+                    if outline_entry is None:
+                        draft_error = (
+                            "No saved chapter outline was found for the selected act and chapter. "
+                            "Generate the chapter-by-chapter plan first."
+                        )
+                    else:
+                        display_lines = [
+                            (
+                                f"Draft Act {draft_selected_act}, Chapter {draft_selected_chapter}"
+                            ),
+                            (
+                                f"Outline: {outline_entry.get('title', '') or 'Untitled'} — "
+                                f"{outline_entry.get('summary', '') or '(no summary)'}"
+                            ).strip(),
+                        ]
+                        if additional_guidance:
+                            display_lines.extend(
+                                ["", "Author notes:", additional_guidance]
+                            )
+                        if context_count > 0:
+                            display_lines.extend(
+                                [
+                                    "",
+                                    (
+                                        "Include continuity from the most recent "
+                                        f"{context_count} chapter(s)."
+                                    ),
+                                ]
+                            )
+                        user_display_message = "\n".join(
+                            line for line in display_lines if line is not None
+                        ).strip()
+                        draft_history.append(
+                            {"role": "user", "content": user_display_message}
+                        )
+                        generator = None
+                        try:
+                            generator = _resolve_text_generator(use_api_requested)
+                            previous_chapters = _fetch_previous_chapter_drafts(
+                                project.id,
+                                draft_selected_act,
+                                draft_selected_chapter,
+                                context_count,
+                            )
+                            chapter_plan = _collect_project_chapter_lists(project).get(
+                                draft_selected_act,
+                                [],
+                            )
+                            assistant_reply = _generate_chapter_draft(
+                                generator,
+                                project,
+                                draft_selected_act,
+                                draft_selected_chapter,
+                                outline_entry,
+                                chapter_plan,
+                                previous_chapters,
+                                additional_guidance,
+                                context_count,
+                            )
+                        except OpenAIAPIRateLimitError as exc:
+                            draft_error = str(exc)
+                            draft_history.pop()
+                        except RuntimeError as exc:
+                            draft_error = str(exc)
+                            draft_history.pop()
+                        except ValueError as exc:
+                            draft_error = str(exc)
+                            draft_history.pop()
+                        except Exception as exc:  # pragma: no cover - defensive
+                            draft_error = (
+                                "The text generation backend could not create the chapter draft: "
+                                f"{exc}"
+                            )
+                            draft_history.pop()
+                        else:
+                            device_type = generator.get_compute_device()
+                            device_label = _normalise_device_label(device_type)
+                            device_sentence = _device_usage_sentence(device_type)
+                            clean_reply = assistant_reply.strip() or "(no reply)"
+                            draft_history.append(
+                                {
+                                    "role": "assistant",
+                                    "content": clean_reply,
+                                    "device_type": device_label,
+                                }
+                            )
+                            _save_chapter_draft(
+                                project,
+                                draft_selected_act,
+                                draft_selected_chapter,
+                                outline_entry,
+                                clean_reply,
+                            )
+                            db.session.commit()
+                            draft_success = (
+                                "Chapter draft saved to the project."
+                                f"{device_sentence}"
+                            )
+                        session.modified = True
+                session.modified = True
             elif chat_type == "supporting":
                 additional_guidance = user_message
                 act_outline_segments = [
@@ -842,6 +1042,38 @@ def create_app() -> Flask:
         ]
         device_hint = _compute_device_hint()
 
+        act_chapter_lists = _collect_project_chapter_lists(project)
+        (
+            chapter_draft_groups,
+            chapter_draft_lookup,
+        ) = _collect_chapter_draft_payload(project)
+        saved_chapter_count = sum(
+            len(entries) for entries in chapter_draft_groups.values()
+        )
+        chapter_outline_lookup = _build_chapter_outline_lookup(act_chapter_lists)
+
+        if draft_selected_act is None:
+            for candidate_act in (1, 2, 3):
+                if act_chapter_lists.get(candidate_act):
+                    draft_selected_act = candidate_act
+                    break
+            else:
+                draft_selected_act = 1
+
+        if draft_selected_chapter is None:
+            chapters_for_act = act_chapter_lists.get(draft_selected_act, [])
+            if chapters_for_act:
+                draft_selected_chapter = chapters_for_act[0].get("number", 1) or 1
+            else:
+                draft_selected_chapter = 1
+
+        export_message_key = _draft_export_message_key(project_id)
+        export_error_key = _draft_export_error_key(project_id)
+        draft_export_message = session.pop(export_message_key, None)
+        draft_export_error = session.pop(export_error_key, None)
+        if draft_export_message is not None or draft_export_error is not None:
+            session.modified = True
+
         return render_template(
             "project.html",
             project=project,
@@ -863,11 +1095,108 @@ def create_app() -> Flask:
             supporting_history=supporting_history,
             supporting_error=supporting_error,
             supporting_success=supporting_success,
+            draft_history=draft_history,
+            draft_error=draft_error,
+            draft_success=draft_success,
+            draft_context_value=draft_context_value,
+            draft_selected_act=draft_selected_act,
+            draft_selected_chapter=draft_selected_chapter,
+            draft_export_message=draft_export_message,
+            draft_export_error=draft_export_error,
+            saved_chapter_count=saved_chapter_count,
             main_characters=main_characters,
             supporting_characters=supporting_characters_list,
             device_hint=device_hint,
-            act_chapter_lists=_collect_project_chapter_lists(project),
+            act_chapter_lists=act_chapter_lists,
+            chapter_draft_groups=chapter_draft_groups,
+            chapter_draft_lookup=chapter_draft_lookup,
+            chapter_outline_lookup=chapter_outline_lookup,
         )
+
+    @app.route(
+        "/projects/<int:project_id>/chapters/export",
+        methods=["POST"],
+    )
+    def chapter_export_pdf(project_id: int) -> str:
+        project = db.session.get(Project, project_id)
+        if project is None:
+            abort(404)
+
+        message_key = _draft_export_message_key(project_id)
+        error_key = _draft_export_error_key(project_id)
+
+        drafts = (
+            ChapterDraft.query.filter_by(project_id=project_id)
+            .order_by(
+                ChapterDraft.act_number.asc(),
+                ChapterDraft.chapter_number.asc(),
+            )
+            .all()
+        )
+
+        if not drafts:
+            session[error_key] = "No drafted chapters are available to export yet."
+            session.modified = True
+            return redirect(url_for("project_detail", project_id=project_id))
+
+        try:
+            from fpdf import FPDF
+        except ImportError:
+            session[error_key] = (
+                "Exporting chapters requires the fpdf2 package. Install it and try again."
+            )
+            session.modified = True
+            return redirect(url_for("project_detail", project_id=project_id))
+
+        pdf = FPDF()
+        pdf.set_auto_page_break(auto=True, margin=15)
+        pdf.add_page()
+        pdf.set_font("Times", "B", 18)
+        title_text = project.name or "Untitled Project"
+        pdf.multi_cell(0, 10, title_text)
+        pdf.ln(4)
+        outline_text = (project.outline or "").strip()
+        if outline_text:
+            pdf.set_font("Times", "", 12)
+            pdf.multi_cell(0, 6, "Project outline:")
+            pdf.ln(2)
+            pdf.multi_cell(0, 6, outline_text)
+
+        for draft in drafts:
+            pdf.add_page()
+            pdf.set_font("Times", "B", 14)
+            header = (
+                f"Act {draft.act_number} — Chapter {draft.chapter_number}: "
+                f"{draft.title or 'Untitled Chapter'}"
+            )
+            pdf.multi_cell(0, 10, header)
+            summary = (draft.outline_summary or "").strip()
+            if summary:
+                pdf.set_font("Times", "I", 11)
+                pdf.multi_cell(0, 6, f"Outline: {summary}")
+                pdf.ln(2)
+            pdf.set_font("Times", "", 12)
+            content = (draft.content or "").strip() or "(No draft text available.)"
+            for paragraph in content.split("\n\n"):
+                cleaned = paragraph.strip()
+                if not cleaned:
+                    continue
+                pdf.multi_cell(0, 6.5, cleaned)
+                pdf.ln(1.5)
+
+        pdf_path = Path(__file__).resolve().parent / "temp.pdf"
+        try:
+            pdf.output(str(pdf_path))
+        except Exception as exc:  # pragma: no cover - defensive
+            session[error_key] = f"Unable to export PDF: {exc}"
+            session.modified = True
+            return redirect(url_for("project_detail", project_id=project_id))
+
+        session[message_key] = (
+            f"Exported {len(drafts)} chapter{'s' if len(drafts) != 1 else ''} to {pdf_path.name}."
+        )
+        session.modified = True
+        return redirect(url_for("project_detail", project_id=project_id))
 
     @app.route(
         "/projects/<int:project_id>/characters",
@@ -1122,6 +1451,24 @@ def _supporting_session_key(project_id: int) -> str:
     """Return the session key used for supporting character conversations."""
 
     return f"supporting_chat_history_{project_id}"
+
+
+def _draft_session_key(project_id: int) -> str:
+    """Return the session key used for chapter drafting conversations."""
+
+    return f"draft_chat_history_{project_id}"
+
+
+def _draft_export_message_key(project_id: int) -> str:
+    """Return the session key storing PDF export success messages."""
+
+    return f"draft_export_message_{project_id}"
+
+
+def _draft_export_error_key(project_id: int) -> str:
+    """Return the session key storing PDF export error messages."""
+
+    return f"draft_export_error_{project_id}"
 
 
 def _normalise_whitespace(value: str) -> str:
@@ -1399,6 +1746,112 @@ def _collect_project_chapter_lists(project: Project) -> Dict[int, List[Dict[str,
         2: _load_chapter_list(project.act2_chapter_list, project.act2_chapters),
         3: _load_chapter_list(project.act3_chapter_list, project.act3_chapters),
     }
+
+
+def _find_chapter_outline_entry(
+    project: Project, act_number: int, chapter_number: int
+) -> Optional[Dict[str, Any]]:
+    """Return the outline entry for ``act_number``/``chapter_number``."""
+
+    chapter_lists = _collect_project_chapter_lists(project)
+    entries = chapter_lists.get(act_number, [])
+    for entry in entries:
+        number = entry.get("number")
+        try:
+            number_int = int(number)
+        except (TypeError, ValueError):
+            continue
+        if number_int == chapter_number:
+            return entry
+    return None
+
+
+def _fetch_previous_chapter_drafts(
+    project_id: int,
+    act_number: int,
+    chapter_number: int,
+    limit: int,
+) -> List[ChapterDraft]:
+    """Return up to ``limit`` drafts that precede the target chapter."""
+
+    if limit <= 0:
+        return []
+
+    query = (
+        ChapterDraft.query.filter(ChapterDraft.project_id == project_id)
+        .filter(
+            or_(
+                ChapterDraft.act_number < act_number,
+                and_(
+                    ChapterDraft.act_number == act_number,
+                    ChapterDraft.chapter_number < chapter_number,
+                ),
+            )
+        )
+        .order_by(
+            ChapterDraft.act_number.desc(),
+            ChapterDraft.chapter_number.desc(),
+        )
+    )
+
+    drafts = query.limit(limit).all()
+    return list(reversed(drafts))
+
+
+def _collect_chapter_draft_payload(
+    project: Project,
+) -> Tuple[Dict[int, List[Dict[str, Any]]], Dict[str, Dict[str, Any]]]:
+    """Return grouped and lookup views of saved chapter drafts."""
+
+    grouped: Dict[int, List[Dict[str, Any]]] = {1: [], 2: [], 3: []}
+    lookup: Dict[str, Dict[str, Any]] = {}
+
+    drafts = sorted(
+        project.chapters,
+        key=lambda draft: (draft.act_number or 0, draft.chapter_number or 0),
+    )
+
+    for draft in drafts:
+        act_number = int(draft.act_number or 0)
+        chapter_num = int(draft.chapter_number or 0)
+        entry = {
+            "act_number": act_number,
+            "chapter_number": chapter_num,
+            "title": (draft.title or "").strip(),
+            "outline_summary": (draft.outline_summary or "").strip(),
+            "content": (draft.content or "").strip(),
+            "updated_at": draft.updated_at.isoformat() if draft.updated_at else None,
+            "updated_display": (
+                draft.updated_at.strftime("%b %d, %Y %H:%M")
+                if draft.updated_at
+                else ""
+            ),
+        }
+        grouped.setdefault(act_number, []).append(entry)
+        lookup[f"{act_number}-{chapter_num}"] = entry
+
+    return grouped, lookup
+
+
+def _build_chapter_outline_lookup(
+    act_chapter_lists: Dict[int, List[Dict[str, Any]]]
+) -> Dict[str, Dict[str, str]]:
+    """Return a lookup table for chapter outline entries."""
+
+    lookup: Dict[str, Dict[str, str]] = {}
+    for act_number, entries in act_chapter_lists.items():
+        for entry in entries:
+            number = entry.get("number")
+            try:
+                number_int = int(number)
+            except (TypeError, ValueError):
+                continue
+            key = f"{act_number}-{number_int}"
+            lookup[key] = {
+                "title": str(entry.get("title", "")).strip(),
+                "summary": str(entry.get("summary", "")).strip(),
+            }
+    return lookup
 
 
 def _generate_single_act_chapters(
@@ -2166,6 +2619,248 @@ def _build_chapter_prompt(
             "Assistant:",
         ]
     )
+
+
+def _save_chapter_draft(
+    project: Project,
+    act_number: int,
+    chapter_number: int,
+    outline_entry: Mapping[str, Any],
+    content: str,
+) -> ChapterDraft:
+    """Create or update the saved draft for the specified chapter."""
+
+    draft = ChapterDraft.query.filter_by(
+        project_id=project.id,
+        act_number=act_number,
+        chapter_number=chapter_number,
+    ).first()
+    if draft is None:
+        draft = ChapterDraft(
+            project=project,
+            act_number=act_number,
+            chapter_number=chapter_number,
+        )
+
+    title = str(outline_entry.get("title", "")).strip()
+    summary = str(outline_entry.get("summary", "")).strip()
+    cleaned_content = content.strip()
+
+    draft.title = title or None
+    draft.outline_summary = summary or None
+    draft.content = cleaned_content or None
+
+    db.session.add(draft)
+    return draft
+
+
+def _generate_chapter_draft(
+    generator: TextGenerator | OpenAIUnifiedGenerator,
+    project: Project,
+    act_number: int,
+    chapter_number: int,
+    outline_entry: Mapping[str, Any],
+    chapter_plan: Sequence[Mapping[str, Any]],
+    previous_chapters: Sequence[ChapterDraft],
+    additional_guidance: str,
+    requested_context: int,
+) -> str:
+    """Generate a prose draft for the requested chapter."""
+
+    prompt = _build_chapter_draft_prompt(
+        project,
+        act_number,
+        chapter_number,
+        outline_entry,
+        chapter_plan,
+        previous_chapters,
+        additional_guidance,
+        requested_context,
+    )
+    max_tokens = get_prompt_max_new_tokens("chapter_drafting", fallback=2048)
+    response = generator.generate_response(
+        prompt,
+        max_new_tokens=max_tokens,
+    ) or ""
+    return response.strip()
+
+
+def _build_chapter_draft_prompt(
+    project: Project,
+    act_number: int,
+    chapter_number: int,
+    outline_entry: Mapping[str, Any],
+    chapter_plan: Sequence[Mapping[str, Any]],
+    previous_chapters: Sequence[ChapterDraft],
+    additional_guidance: str,
+    requested_context: int,
+) -> str:
+    """Construct a rich prompt for drafting chapter prose."""
+
+    config = SYSTEM_PROMPTS.get("chapter_drafting", {})
+    base_prompt = config.get(
+        "base",
+        (
+            "You are a collaborative novelist drafting polished manuscript pages. "
+            "Honour the provided outline, tone, and character continuity."
+        ),
+    )
+    continuity_prompt = config.get(
+        "continuity",
+        (
+            "Maintain continuity with the existing chapters and planned outline. Track character motivations, subplots, and scene geography."
+        ),
+    )
+    style_prompt = config.get(
+        "style",
+        (
+            "Write immersive, publication-ready prose with concrete sensory detail, distinct character voices, and clear scene transitions."
+        ),
+    )
+    format_prompt = config.get(
+        "format",
+        (
+            "Respond in plain text paragraphs suitable for a novel manuscript. Avoid bullet points, lists, or markdown headings."
+        ),
+    )
+    length_prompt = config.get(
+        "length",
+        "Aim for roughly 900-1200 words unless the outline strongly suggests otherwise.",
+    )
+
+    story_outline = (project.outline or "No project outline has been saved yet.").strip()
+    full_act_outline = _collect_act_outline_text(project)
+    act_outline_text = _get_single_act_outline_text(project, act_number)
+    character_context = _build_character_roster(project)
+    plan_lines: List[str] = []
+    for entry in chapter_plan:
+        number = entry.get("number")
+        title = str(entry.get("title", "")).strip()
+        summary = str(entry.get("summary", "")).strip()
+        if not number:
+            continue
+        plan_lines.append(
+            f"Chapter {number}: {title or 'Untitled'} — {summary or '(no summary)'}"
+        )
+    plan_text = "\n".join(plan_lines) if plan_lines else "(No chapter breakdown saved yet.)"
+
+    target_title = str(outline_entry.get("title", "")).strip()
+    target_summary = str(outline_entry.get("summary", "")).strip()
+
+    previous_context = _format_previous_chapter_context(previous_chapters)
+    general_notes = (project.chapters_final_notes or "").strip()
+    author_notes = additional_guidance.strip()
+
+    user_sections: List[str] = [
+        "Use the materials below to write the next chapter of the novel in polished prose.",
+        "",
+        "Project overview:",
+        story_outline or "(no project outline provided)",
+        "",
+        "Three-act outline reference:",
+        full_act_outline or "(no act outline available)",
+        "",
+        f"Act {act_number} outline:",
+        act_outline_text or "(no act outline available)",
+        "",
+        f"Chapter plan for Act {act_number}:",
+        plan_text,
+        "",
+        f"Target chapter: Act {act_number}, Chapter {chapter_number}",
+        f"Planned title: {target_title or 'Untitled Chapter'}",
+        "Outline summary for this chapter:",
+        target_summary or "(no summary provided)",
+    ]
+
+    if previous_context:
+        user_sections.extend(
+            [
+                "",
+                "Most recent drafted chapters for continuity:",
+                previous_context,
+            ]
+        )
+    elif requested_context > 0:
+        user_sections.extend(
+            [
+                "",
+                "No previous chapter drafts are available yet for continuity reference.",
+            ]
+        )
+
+    if general_notes:
+        user_sections.extend(
+            [
+                "",
+                "General chapter development notes:",
+                general_notes,
+            ]
+        )
+
+    if author_notes:
+        user_sections.extend(
+            [
+                "",
+                "Author notes for this chapter:",
+                author_notes,
+            ]
+        )
+
+    user_sections.extend(
+        [
+            "",
+            "Character roster:",
+            character_context or "No character descriptions available.",
+        ]
+    )
+
+    instruction_lines = ["", "Writing instructions:"]
+    for directive in (continuity_prompt, style_prompt, format_prompt, length_prompt):
+        directive_text = (directive or "").strip()
+        if directive_text:
+            instruction_lines.append(directive_text)
+
+    user_sections.extend(instruction_lines)
+
+    prompt_lines = [f"System: {base_prompt.strip()}", "User:"]
+    prompt_lines.extend(user_sections)
+    prompt_lines.append("Assistant:")
+    return "\n".join(prompt_lines)
+
+
+def _format_previous_chapter_context(
+    chapters: Sequence[ChapterDraft],
+) -> str:
+    """Return a formatted context block describing previous drafts."""
+
+    if not chapters:
+        return ""
+
+    lines: List[str] = []
+    for draft in chapters:
+        header = (
+            f"Act {draft.act_number}, Chapter {draft.chapter_number}: "
+            f"{draft.title or 'Untitled Chapter'}"
+        )
+        lines.append(header)
+        content = (draft.content or "").strip()
+        if content:
+            lines.append(content)
+        lines.append("")
+
+    return "\n".join(lines).strip()
+
+
+def _get_single_act_outline_text(project: Project, act_number: int) -> str:
+    """Return the stored outline text for the requested act."""
+
+    mapping = {
+        1: project.act1_outline,
+        2: project.act2_outline,
+        3: project.act3_outline,
+    }
+    text = mapping.get(act_number) or ""
+    return text.strip()
 
 
 def _build_concept_analysis_prompt(
