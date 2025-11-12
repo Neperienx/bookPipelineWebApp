@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 SYSTEM_PROMPTS = {
-    "outline_assistant": (
-        "You are a creative writing assistant. Use the author's pitch and the provided character roster "
-        "to craft a cohesive story outline in 200 words or fewer. Spotlight tension, stakes, and how the "
-        "featured characters drive the narrative forward."
-    ),
+    "outline_assistant": {
+        "prompt": (
+            "You are a creative writing assistant. Use the author's pitch and the provided character roster "
+            "to craft a cohesive story outline in 200 words or fewer. Spotlight tension, stakes, and how the "
+            "featured characters drive the narrative forward."
+        ),
+        "max_new_tokens": 512,
+    },
     "act_outline": {
+        "max_new_tokens": 512,
         "base": (
             "You are a collaborative narrative designer helping an author expand a "
             "story into a vivid three-act outline. Honour the provided outline, "
@@ -42,6 +46,7 @@ SYSTEM_PROMPTS = {
         },
     },
     "chapter_outline": {
+        "max_new_tokens": 512,
         "base": (
             "You are a creative writing assistant specialising in expanding act-level "
             "plans into vivid, sequential chapter breakdowns that honour continuity "
@@ -60,6 +65,7 @@ SYSTEM_PROMPTS = {
         ),
     },
     "concept_development": {
+        "max_new_tokens": 512,
         "analysis_prompt": (
             "You are a developmental editor who reviews story outlines to find concepts that still feel vague."
             " Call out the ideas that need clearer definitions so the author knows what to expand."
@@ -80,6 +86,7 @@ SYSTEM_PROMPTS = {
         ),
     },
     "character_creation": {
+        "max_new_tokens": 512,
         "base": (
             "You are a writing assistant focused solely on developing character dossiers. "
             "When asked to create a character, limit your response to the requested profile fields. "
@@ -228,3 +235,25 @@ def get_character_input_fields() -> list[dict]:
     config = SYSTEM_PROMPTS.get("character_creation", {})
     input_fields = config.get("input_fields", [])
     return list(input_fields)
+
+
+def get_prompt_max_new_tokens(name: str, fallback: int | None = None) -> int | None:
+    """Return the configured ``max_new_tokens`` for ``name`` if available."""
+
+    entry = SYSTEM_PROMPTS.get(name)
+    if not isinstance(entry, dict):
+        return fallback
+
+    raw_value = entry.get("max_new_tokens")
+    if raw_value is None:
+        return fallback
+
+    try:
+        tokens = int(raw_value)
+    except (TypeError, ValueError):
+        return fallback
+
+    if tokens <= 0:
+        return fallback
+
+    return tokens

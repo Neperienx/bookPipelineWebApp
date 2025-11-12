@@ -44,6 +44,7 @@ from system_prompts import (
     SYSTEM_PROMPTS,
     get_character_fields,
     get_character_input_fields,
+    get_prompt_max_new_tokens,
 )
 
 class OpenAIAPIRateLimitError(RuntimeError):
@@ -688,8 +689,11 @@ def create_app() -> Flask:
                     generator = None
                     try:
                         generator = _resolve_text_generator(use_api_requested)
+                        prompt = _build_outline_prompt(project, history)
+                        max_tokens = get_prompt_max_new_tokens("outline_assistant")
                         assistant_reply_raw = generator.generate_response(
-                            _build_outline_prompt(project, history)
+                            prompt,
+                            max_new_tokens=max_tokens,
                         )
                     except OpenAIAPIRateLimitError as exc:
                         error = str(exc)
@@ -1304,11 +1308,15 @@ def _generate_single_act_chapters(
     last_entries: List[Dict[str, Any]] = []
     debug_messages: List[str] = []
     attempt_start_overall = time.perf_counter()
+    max_tokens = get_prompt_max_new_tokens("chapter_outline")
 
     while attempt < max_attempts:
         attempt += 1
         attempt_start = time.perf_counter()
-        response = generator.generate_response(prompt) or ""
+        response = generator.generate_response(
+            prompt,
+            max_new_tokens=max_tokens,
+        ) or ""
         duration = time.perf_counter() - attempt_start
         response_clean = response.strip()
         is_valid, entries, error_message = _validate_chapter_outline(
@@ -1369,7 +1377,11 @@ def _build_outline_prompt(project: Project, history: Iterable[Dict[str, str]]) -
     """Construct a prompt for the outline assistant that includes characters."""
 
     prompt_lines: List[str] = []
-    system_prompt = SYSTEM_PROMPTS.get("outline_assistant")
+    prompt_config = SYSTEM_PROMPTS.get("outline_assistant")
+    if isinstance(prompt_config, dict):
+        system_prompt = prompt_config.get("prompt")
+    else:
+        system_prompt = prompt_config
     if system_prompt:
         prompt_lines.append(f"System: {system_prompt}")
 
@@ -1409,7 +1421,11 @@ def _generate_three_act_outline(
         character_context,
         notes_text,
     )
-    response = generator.generate_response(prompt) or ""
+    max_tokens = get_prompt_max_new_tokens("act_outline")
+    response = generator.generate_response(
+        prompt,
+        max_new_tokens=max_tokens,
+    ) or ""
     response_clean = response.strip()
 
     act_sections = _split_act_sections(response_clean)
@@ -1504,7 +1520,11 @@ def _identify_unclear_concepts(
     """Return concepts mentioned in the outline that need clarification."""
 
     prompt = _build_concept_analysis_prompt(outline_text, additional_guidance)
-    response = generator.generate_response(prompt) or ""
+    max_tokens = get_prompt_max_new_tokens("concept_development")
+    response = generator.generate_response(
+        prompt,
+        max_new_tokens=max_tokens,
+    ) or ""
     return _parse_concept_analysis(response)
 
 
@@ -1524,7 +1544,11 @@ def _define_core_concepts(
         concepts,
         additional_guidance,
     )
-    response = generator.generate_response(prompt) or ""
+    max_tokens = get_prompt_max_new_tokens("concept_development")
+    response = generator.generate_response(
+        prompt,
+        max_new_tokens=max_tokens,
+    ) or ""
     return _parse_concept_definitions(response)
 
 
@@ -2099,7 +2123,11 @@ def _run_character_profile_generation(
         user_inputs,
         list(input_fields),
     )
-    response = generator.generate_response(prompt) or ""
+    max_tokens = get_prompt_max_new_tokens("character_creation")
+    response = generator.generate_response(
+        prompt,
+        max_new_tokens=max_tokens,
+    ) or ""
     profile_data = _parse_character_json(response, fields)
 
     sections: List[Dict[str, str]] = []
