@@ -64,6 +64,23 @@ SYSTEM_PROMPTS = {
             "Do not include bullets or commentary outside these chapter sections."
         ),
     },
+    "supporting_characters": {
+        "max_new_tokens": 712,
+        "base": (
+            "You are a casting director and narrative designer who ensures a story's supporting cast is complete. "
+            "Study the provided three-act outline and the current roster of fully developed characters."
+        ),
+        "task": (
+            "Identify supporting characters who appear or are strongly implied in the acts but have not been fully documented. "
+            "Skip any characters whose names already appear in the roster list."
+        ),
+        "format": (
+            "Respond in plain text using one section per character. Follow this exact template for every entry:\n"
+            "Character: <Character name>\n"
+            "<Provide 2-3 sentences describing their role, personality, and how they support the protagonist or plot.>\n"
+            "Leave a blank line between characters and avoid extra commentary before or after the list."
+        ),
+    },
     "concept_development": {
         "max_new_tokens": 512,
         "analysis_prompt": (

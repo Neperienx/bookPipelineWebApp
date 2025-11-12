@@ -196,8 +196,8 @@
             >
               <h2 class="h6 mb-1">Character creation</h2>
               <p>
-                {% if project.characters %}
-                  Manage {{ project.characters|length }} character{{ project.characters|length != 1 and 's' or '' }} and generate new profiles.
+                {% if main_characters %}
+                  Manage {{ main_characters|length }} primary character{{ main_characters|length != 1 and 's' or '' }} and generate new profiles.
                 {% else %}
                   Craft the protagonists and supporting cast for your story.
                 {% endif %}
@@ -251,6 +251,23 @@
             <button
               class="overview-tile"
               type="button"
+              data-target="supportingPanel"
+              data-chat-target="supportingChatPanel"
+              aria-controls="supportingPanel"
+              aria-selected="false"
+            >
+              <h2 class="h6 mb-1">Supporting characters</h2>
+              <p>
+                {% if supporting_characters %}
+                  Review quick references for {{ supporting_characters|length }} supporting character{{ supporting_characters|length != 1 and 's' or '' }}.
+                {% else %}
+                  Identify and describe secondary characters that fill out each act.
+                {% endif %}
+              </p>
+            </button>
+            <button
+              class="overview-tile"
+              type="button"
               data-target="chaptersPanel"
               data-chat-target="chapterChatPanel"
               aria-controls="chaptersPanel"
@@ -286,9 +303,9 @@
                         <button type="submit" class="btn btn-sm btn-outline-light">Add new character</button>
                       </form>
                     </div>
-                    {% if project.characters %}
+                    {% if main_characters %}
                       <div class="list-group list-group-flush">
-                        {% for character in project.characters %}
+                        {% for character in main_characters %}
                           <a
                             href="{{ url_for('character_detail', project_id=project.id, character_id=character.id) }}"
                             class="list-group-item list-group-item-action d-flex justify-content-between align-items-start"
@@ -391,6 +408,29 @@
                         <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act I outline will appear here." readonly></textarea>
                         <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act II outline will appear here." readonly></textarea>
                         <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act III outline will appear here." readonly></textarea>
+                      </div>
+                    {% endif %}
+                  </div>
+                </div>
+                <div class="tile-detail" id="supportingPanel" role="tabpanel">
+                  <div class="outline-content d-flex flex-column gap-3">
+                    <div>
+                      <h3 class="h6 mb-1">Supporting cast</h3>
+                      <p class="text-secondary mb-0 small">Quick descriptions for secondary characters referenced in the acts.</p>
+                    </div>
+                    {% if supporting_characters %}
+                      <div class="d-flex flex-column gap-3">
+                        {% for character in supporting_characters %}
+                          <div class="act-outline-box">
+                            <h4 class="h6 mb-2 text-info">{{ character.name or 'Unnamed character' }}</h4>
+                            <p class="mb-0">{{ character.character_description or 'No supporting description saved yet.' }}</p>
+                          </div>
+                        {% endfor %}
+                      </div>
+                    {% else %}
+                      <div class="text-secondary text-center py-4">
+                        <p class="mb-1">No supporting characters have been captured yet.</p>
+                        <p class="mb-0">Use the assistant to identify and summarise the story's secondary cast.</p>
                       </div>
                     {% endif %}
                   </div>
@@ -633,6 +673,68 @@
                   <label class="form-check-label small" for="actUseApi">API</label>
                 </div>
                 <button type="submit" class="btn btn-primary">Send</button>
+              </div>
+            </form>
+          </div>
+          <div id="supportingChatPanel" class="chat-panel" role="tabpanel" aria-labelledby="supportingPanel">
+            <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
+              <div>
+                <h2 class="h5 mb-1">Supporting cast assistant</h2>
+                <p class="text-secondary mb-0">Spot secondary characters implied by the acts and capture reference notes.</p>
+              </div>
+              <form method="post">
+                <input type="hidden" name="chat_type" value="supporting" />
+                <button type="submit" name="reset" value="1" class="btn btn-outline-light btn-sm">Clear chat</button>
+              </form>
+            </div>
+            <div class="chat-messages flex-grow-1 mb-3">
+              {% if supporting_history %}
+                {% for message in supporting_history %}
+                  <div class="message {{ message.role }}">
+                    <strong class="d-block mb-1 text-uppercase small">{{ message.role }}</strong>
+                    <div>{{ message.content }}</div>
+                    {% if message.device_type %}
+                      <div class="message-device">Generated using the {{ message.device_type }} backend.</div>
+                    {% endif %}
+                  </div>
+                {% endfor %}
+              {% else %}
+                <div class="message assistant">
+                  <strong class="d-block mb-1 text-uppercase small">assistant</strong>
+                  <div>Share any notes about the tone or pacing, or leave this blank to automatically draft supporting character blurbs from the current act outline.</div>
+                </div>
+              {% endif %}
+            </div>
+            {% if supporting_error %}
+              <div class="alert alert-danger" role="alert">{{ supporting_error }}</div>
+            {% endif %}
+            {% if supporting_success %}
+              <div class="alert alert-success" role="alert">{{ supporting_success }}</div>
+            {% endif %}
+            <div id="supportingLoadingIndicator" class="loading-indicator" role="status" aria-live="polite">
+              <div class="spinner-border text-info" role="status" aria-hidden="true"></div>
+              <span>Assistant is thinking…</span>
+            </div>
+            <form
+              method="post"
+              id="supportingChatForm"
+              data-chat-form
+              data-loading-target="supportingLoadingIndicator"
+              class="d-flex flex-column gap-3"
+            >
+              <input type="hidden" name="chat_type" value="supporting" />
+              <textarea
+                class="form-control"
+                name="message"
+                rows="3"
+                placeholder="Optional: highlight relationships, tone, or other notes before generating supporting characters."
+              ></textarea>
+              <div class="d-flex align-items-center justify-content-end gap-3">
+                <div class="form-check mb-0">
+                  <input class="form-check-input" type="checkbox" value="1" id="supportingUseApi" name="use_api" />
+                  <label class="form-check-label small" for="supportingUseApi">API</label>
+                </div>
+                <button type="submit" class="btn btn-primary">Generate supporting characters</button>
               </div>
             </form>
           </div>

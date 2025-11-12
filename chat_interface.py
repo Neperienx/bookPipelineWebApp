@@ -178,6 +178,10 @@ _TITLE_SPLIT_PATTERN = re.compile(r"\s*[—–-]\s*")
 _ACT_SECTION_PATTERN = re.compile(
     r"(Act:\s.*?)(?=(?:\r?\nAct:\s)|\Z)", re.DOTALL
 )
+_SUPPORTING_HEADER_PATTERN = re.compile(
+    r"^\s*Character\s*:\s*(.+)$",
+    re.IGNORECASE,
+)
 
 
 class Project(db.Model):
@@ -226,6 +230,7 @@ class Character(db.Model):
     physical_description = db.Column(db.Text, nullable=True)
     character_description = db.Column(db.Text, nullable=True)
     background = db.Column(db.Text, nullable=True)
+    is_supporting = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,
@@ -283,6 +288,10 @@ def _ensure_character_columns() -> None:
         alterations.append("ALTER TABLE character ADD COLUMN character_description TEXT")
     if "background" not in existing_columns:
         alterations.append("ALTER TABLE character ADD COLUMN background TEXT")
+    if "is_supporting" not in existing_columns:
+        alterations.append(
+            "ALTER TABLE character ADD COLUMN is_supporting BOOLEAN NOT NULL DEFAULT 0"
+        )
 
     if not alterations:
         return
@@ -389,6 +398,8 @@ def create_app() -> Flask:
         chapter_history = session.setdefault(chapter_session_key, [])
         concept_session_key = _concept_session_key(project_id)
         concept_history = session.setdefault(concept_session_key, [])
+        supporting_session_key = _supporting_session_key(project_id)
+        supporting_history = session.setdefault(supporting_session_key, [])
         error = None
         success = None
         act_error = None
@@ -401,6 +412,8 @@ def create_app() -> Flask:
         chapter_debug_details: List[str] = []
         concept_error = None
         concept_success = None
+        supporting_error = None
+        supporting_success = None
 
         if request.method == "POST":
             chat_type = request.form.get("chat_type", "outline")
@@ -412,6 +425,8 @@ def create_app() -> Flask:
                     session.pop(chapter_session_key, None)
                 elif chat_type == "concepts":
                     session.pop(concept_session_key, None)
+                elif chat_type == "supporting":
+                    session.pop(supporting_session_key, None)
                 else:
                     session.pop(session_key, None)
                 return redirect(url_for("project_detail", project_id=project_id))
@@ -683,6 +698,95 @@ def create_app() -> Flask:
                             )
                         session.modified = True
                 session.modified = True
+            elif chat_type == "supporting":
+                additional_guidance = user_message
+                act_outline_segments = [
+                    segment.strip()
+                    for segment in [
+                        project.act1_outline or "",
+                        project.act2_outline or "",
+                        project.act3_outline or "",
+                    ]
+                    if segment and segment.strip()
+                ]
+                if not act_outline_segments:
+                    supporting_error = (
+                        "Please generate the act-by-act outline before creating supporting characters."
+                    )
+                else:
+                    user_display_message = additional_guidance or (
+                        "Review the acts and suggest any supporting characters who need quick reference profiles."
+                    )
+                    supporting_history.append(
+                        {"role": "user", "content": user_display_message}
+                    )
+                    generator = None
+                    try:
+                        generator = _resolve_text_generator(use_api_requested)
+                        (
+                            assistant_reply,
+                            parsed_characters,
+                        ) = _generate_supporting_characters(
+                            generator,
+                            project,
+                            additional_guidance,
+                        )
+                    except OpenAIAPIRateLimitError as exc:
+                        supporting_error = str(exc)
+                        supporting_history.pop()
+                    except RuntimeError as exc:
+                        supporting_error = str(exc)
+                        supporting_history.pop()
+                    except ValueError as exc:
+                        supporting_error = str(exc)
+                        supporting_history.pop()
+                    except Exception as exc:  # pragma: no cover - defensive
+                        supporting_error = (
+                            "The text generation backend could not identify supporting characters: "
+                            f"{exc}"
+                        )
+                        supporting_history.pop()
+                    else:
+                        device_type = generator.get_compute_device()
+                        device_label = _normalise_device_label(device_type)
+                        device_sentence = _device_usage_sentence(device_type)
+                        clean_reply = assistant_reply.strip() or "(no reply)"
+                        supporting_history.append(
+                            {
+                                "role": "assistant",
+                                "content": clean_reply,
+                                "device_type": device_label,
+                            }
+                        )
+                        added_count, updated_count = _apply_supporting_character_updates(
+                            project,
+                            parsed_characters,
+                        )
+                        db.session.commit()
+                        changes: List[str] = []
+                        if added_count:
+                            plural = "s" if added_count != 1 else ""
+                            changes.append(
+                                f"created {added_count} new supporting character{plural}"
+                            )
+                        if updated_count:
+                            plural = "s" if updated_count != 1 else ""
+                            changes.append(
+                                f"updated {updated_count} existing profile{plural}"
+                            )
+                        if changes:
+                            change_sentence = ", ".join(changes)
+                            supporting_success = (
+                                f"Supporting cast saved: {change_sentence}."
+                                f"{device_sentence}"
+                            )
+                        else:
+                            supporting_success = (
+                                "No new supporting characters were required; the roster is already up to date."
+                                f"{device_sentence}"
+                            )
+                        session.modified = True
+                session.modified = True
             else:
                 if user_message:
                     history.append({"role": "user", "content": user_message})
@@ -730,6 +834,12 @@ def create_app() -> Flask:
                 else:
                     error = "Please enter a message before sending."
 
+        main_characters = [
+            character for character in project.characters if not character.is_supporting
+        ]
+        supporting_characters_list = [
+            character for character in project.characters if character.is_supporting
+        ]
         device_hint = _compute_device_hint()
 
         return render_template(
@@ -750,6 +860,11 @@ def create_app() -> Flask:
             concept_history=concept_history,
             concept_error=concept_error,
             concept_success=concept_success,
+            supporting_history=supporting_history,
+            supporting_error=supporting_error,
+            supporting_success=supporting_success,
+            main_characters=main_characters,
+            supporting_characters=supporting_characters_list,
             device_hint=device_hint,
             act_chapter_lists=_collect_project_chapter_lists(project),
         )
@@ -1001,6 +1116,12 @@ def _concept_session_key(project_id: int) -> str:
     """Return the session key used for concept development conversations."""
 
     return f"concept_chat_history_{project_id}"
+
+
+def _supporting_session_key(project_id: int) -> str:
+    """Return the session key used for supporting character conversations."""
+
+    return f"supporting_chat_history_{project_id}"
 
 
 def _normalise_whitespace(value: str) -> str:
@@ -1575,6 +1696,192 @@ def _collect_character_context(characters: Iterable["Character"]) -> str:
         return "No character descriptions available."
 
     return "\n\n".join(entries)
+
+
+def _collect_act_outline_text(project: Project) -> str:
+    """Return the combined act outline text for the project."""
+
+    sections: List[str] = []
+    for label, text in [
+        ("Act I", project.act1_outline),
+        ("Act II", project.act2_outline),
+        ("Act III", project.act3_outline),
+    ]:
+        cleaned = (text or "").strip()
+        if cleaned:
+            sections.append(f"{label}:\n{cleaned}")
+
+    return "\n\n".join(sections).strip()
+
+
+def _build_supporting_characters_prompt(
+    project: Project,
+    outline_text: str,
+    additional_guidance: str,
+) -> str:
+    """Construct the prompt sent to the supporting character assistant."""
+
+    config = SYSTEM_PROMPTS.get("supporting_characters", {})
+    lines: List[str] = []
+
+    base = config.get("base")
+    if base:
+        lines.append(f"System: {base}")
+
+    task = config.get("task")
+    if task:
+        lines.append(f"System: {task}")
+
+    format_instructions = config.get("format")
+    if format_instructions:
+        lines.append(f"System: {format_instructions}")
+
+    if outline_text:
+        lines.append("User: Here is the current three-act outline.\n" + outline_text)
+
+    main_roster = _collect_character_context(
+        character for character in project.characters if not character.is_supporting
+    )
+    if main_roster and not main_roster.startswith("No character"):
+        lines.append("User: Fully developed characters.\n" + main_roster)
+
+    supporting_roster = _collect_character_context(
+        character for character in project.characters if character.is_supporting
+    )
+    if supporting_roster and not supporting_roster.startswith("No character"):
+        lines.append(
+            "User: Supporting characters already documented.\n" + supporting_roster
+        )
+
+    existing_names = sorted(
+        {
+            character.name.strip()
+            for character in project.characters
+            if character.name
+        }
+    )
+    if existing_names:
+        lines.append(
+            "User: Avoid duplicating these character names.\n"
+            + ", ".join(existing_names)
+        )
+
+    if additional_guidance:
+        lines.append("User: Additional guidance.\n" + additional_guidance.strip())
+
+    lines.append("Assistant:")
+    return "\n\n".join(lines)
+
+
+def _generate_supporting_characters(
+    generator: TextGenerator | OpenAIUnifiedGenerator,
+    project: Project,
+    additional_guidance: str,
+) -> Tuple[str, List[Dict[str, str]]]:
+    """Generate supporting character summaries based on the act outline."""
+
+    outline_text = _collect_act_outline_text(project)
+    if not outline_text:
+        raise ValueError("No act outline is available to analyse.")
+
+    prompt = _build_supporting_characters_prompt(
+        project,
+        outline_text,
+        additional_guidance,
+    )
+    max_tokens = get_prompt_max_new_tokens("supporting_characters")
+    response = generator.generate_response(
+        prompt,
+        max_new_tokens=max_tokens,
+    ) or ""
+    parsed = _parse_supporting_characters(response)
+    return response, parsed
+
+
+def _parse_supporting_characters(text: str) -> List[Dict[str, str]]:
+    """Parse assistant output into supporting character entries."""
+
+    entries: List[Dict[str, str]] = []
+    current_name: str | None = None
+    description_lines: List[str] = []
+
+    for raw_line in text.splitlines():
+        line = raw_line.rstrip()
+        match = _SUPPORTING_HEADER_PATTERN.match(line)
+        if match:
+            if current_name:
+                description = _normalise_whitespace(" ".join(description_lines))
+                if description:
+                    entries.append(
+                        {"name": current_name, "description": description}
+                    )
+            current_name = match.group(1).strip()
+            description_lines = []
+        else:
+            if current_name is not None:
+                description_lines.append(line.strip())
+
+    if current_name:
+        description = _normalise_whitespace(" ".join(description_lines))
+        if description:
+            entries.append({"name": current_name, "description": description})
+
+    return entries
+
+
+def _apply_supporting_character_updates(
+    project: Project,
+    characters_data: Sequence[Dict[str, str]],
+) -> Tuple[int, int]:
+    """Persist supporting character summaries to the database."""
+
+    if not characters_data:
+        return 0, 0
+
+    existing: Dict[str, Character] = {}
+    for character in project.characters:
+        if not character.name:
+            continue
+        key = character.name.strip().lower()
+        if key not in existing or character.is_supporting:
+            existing[key] = character
+
+    added = 0
+    updated = 0
+    for entry in characters_data:
+        name = _normalise_whitespace(entry.get("name", ""))
+        description = entry.get("description", "").strip()
+        if not name or not description:
+            continue
+
+        key = name.lower()
+        character = existing.get(key)
+        if character is not None:
+            if not character.is_supporting:
+                # Skip fully developed primary characters.
+                continue
+            changes = False
+            if not character.role_in_story:
+                character.role_in_story = "Supporting character"
+                changes = True
+            if (character.character_description or "").strip() != description:
+                character.character_description = description
+                changes = True
+            if changes:
+                updated += 1
+        else:
+            character = Character(
+                project=project,
+                name=name,
+                role_in_story="Supporting character",
+                character_description=description,
+                is_supporting=True,
+            )
+            db.session.add(character)
+            existing[key] = character
+            added += 1
+
+    return added, updated
 
 
 def _split_act_sections(response_text: str) -> List[str]:
