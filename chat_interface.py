@@ -16,6 +16,7 @@ import os
 import json
 import re
 import time
+import textwrap
 import unicodedata
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
@@ -213,6 +214,43 @@ def _pdf_safe_text(text: str) -> str:
     normalized = unicodedata.normalize("NFKC", text or "")
     replaced = normalized.translate(_PDF_LATIN1_REPLACEMENTS)
     return replaced.encode("latin-1", "replace").decode("latin-1")
+
+
+def _pdf_wrapped_text(text: str, *, width: int = 100) -> str:
+    """Return ``text`` converted to a PDF-safe, manually wrapped string.
+
+    ``FPDF.multi_cell`` cannot render tokens that exceed the available cell
+    width.  When users provide extremely long, unbroken strings (for example
+    generated draft content without whitespace), ``multi_cell`` raises
+    ``FPDFException``.  Pre-wrapping the text by characters gives the renderer
+    explicit break points and avoids the error while keeping the output
+    readable.  The wrapping happens after normalising the string to the Latin-1
+    character set used by the default PDF fonts.
+    """
+
+    safe_text = _pdf_safe_text(text)
+    if not safe_text:
+        return ""
+
+    wrapped_lines: List[str] = []
+    for raw_line in safe_text.splitlines():
+        if not raw_line:
+            wrapped_lines.append("")
+            continue
+
+        line_chunks = textwrap.wrap(
+            raw_line,
+            width=width,
+            break_long_words=True,
+            break_on_hyphens=False,
+        )
+
+        if line_chunks:
+            wrapped_lines.extend(line_chunks)
+        else:
+            wrapped_lines.append("")
+
+    return "\n".join(wrapped_lines)
 
 
 class Project(db.Model):
@@ -1184,14 +1222,14 @@ def create_app() -> Flask:
         pdf.add_page()
         pdf.set_font("Times", "B", 18)
         title_text = project.name or "Untitled Project"
-        pdf.multi_cell(0, 10, _pdf_safe_text(title_text))
+        pdf.multi_cell(0, 10, _pdf_wrapped_text(title_text))
         pdf.ln(4)
         outline_text = (project.outline or "").strip()
         if outline_text:
             pdf.set_font("Times", "", 12)
-            pdf.multi_cell(0, 6, _pdf_safe_text("Project outline:"))
+            pdf.multi_cell(0, 6, _pdf_wrapped_text("Project outline:"))
             pdf.ln(2)
-            pdf.multi_cell(0, 6, _pdf_safe_text(outline_text))
+            pdf.multi_cell(0, 6, _pdf_wrapped_text(outline_text))
 
         for draft in drafts:
             pdf.add_page()
@@ -1200,11 +1238,11 @@ def create_app() -> Flask:
                 f"Act {draft.act_number} — Chapter {draft.chapter_number}: "
                 f"{draft.title or 'Untitled Chapter'}"
             )
-            pdf.multi_cell(0, 10, _pdf_safe_text(header))
+            pdf.multi_cell(0, 10, _pdf_wrapped_text(header))
             summary = (draft.outline_summary or "").strip()
             if summary:
                 pdf.set_font("Times", "I", 11)
-                pdf.multi_cell(0, 6, _pdf_safe_text(f"Outline: {summary}"))
+                pdf.multi_cell(0, 6, _pdf_wrapped_text(f"Outline: {summary}"))
                 pdf.ln(2)
             pdf.set_font("Times", "", 12)
             content = (draft.content or "").strip() or "(No draft text available.)"
@@ -1212,7 +1250,7 @@ def create_app() -> Flask:
                 cleaned = paragraph.strip()
                 if not cleaned:
                     continue
-                pdf.multi_cell(0, 6.5, _pdf_safe_text(cleaned))
+                pdf.multi_cell(0, 6.5, _pdf_wrapped_text(cleaned))
                 pdf.ln(1.5)
 
         pdf_path = Path(__file__).resolve().parent / "temp.pdf"
