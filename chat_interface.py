@@ -1162,6 +1162,269 @@ def create_app() -> Flask:
         return jsonify(response_payload)
 
     @app.route(
+        "/projects/<int:project_id>/update_text",
+        methods=["POST"],
+    )
+    def project_update_text(project_id: int):
+        project = db.session.get(Project, project_id)
+        if project is None:
+            abort(404)
+
+        payload = request.get_json(silent=True) or {}
+        field_name = str(payload.get("field", "")).strip()
+        allowed_fields = {
+            "outline",
+            "act1_outline",
+            "act2_outline",
+            "act3_outline",
+        }
+        if field_name not in allowed_fields:
+            return (
+                jsonify({"ok": False, "error": "Unknown or unsupported project field."}),
+                400,
+            )
+
+        raw_value = payload.get("value", "")
+        if raw_value is None:
+            new_value = ""
+        else:
+            new_value = str(raw_value).replace("\r\n", "\n")
+
+        cleaned_value = new_value.strip()
+        setattr(project, field_name, cleaned_value or None)
+        db.session.commit()
+
+        return jsonify({"ok": True, "value": cleaned_value})
+
+    @app.route(
+        "/projects/<int:project_id>/concepts/<int:concept_id>",
+        methods=["PATCH"],
+    )
+    def project_update_concept(project_id: int, concept_id: int):
+        project = db.session.get(Project, project_id)
+        if project is None:
+            abort(404)
+
+        concept = Concept.query.filter_by(id=concept_id, project_id=project_id).first()
+        if concept is None:
+            return jsonify({"ok": False, "error": "Concept not found."}), 404
+
+        payload = request.get_json(silent=True) or {}
+
+        def _clean(value: Any) -> str:
+            if value is None:
+                return ""
+            return str(value).replace("\r\n", "\n").strip()
+
+        name = _clean(payload.get("name")) or concept.name or ""
+        definition = _clean(payload.get("definition")) or concept.definition or ""
+        if not name or not definition:
+            return (
+                jsonify({"ok": False, "error": "Name and definition are required."}),
+                422,
+            )
+
+        concept.name = name
+        concept.definition = definition
+
+        issue = _clean(payload.get("issue"))
+        concept.issue = issue or None
+
+        examples_text = _clean(payload.get("examples"))
+        concept.examples = examples_text or None
+
+        db.session.commit()
+
+        examples_list = []
+        if concept.examples:
+            examples_list = [
+                line.strip()
+                for line in concept.examples.split("\n")
+                if line.strip()
+            ]
+
+        return jsonify(
+            {
+                "ok": True,
+                "concept": {
+                    "id": concept.id,
+                    "name": concept.name,
+                    "issue": concept.issue or "",
+                    "definition": concept.definition,
+                    "examples": examples_list,
+                },
+            }
+        )
+
+    @app.route(
+        "/projects/<int:project_id>/characters/<int:character_id>/update",
+        methods=["PATCH"],
+    )
+    def project_update_character(project_id: int, character_id: int):
+        project = db.session.get(Project, project_id)
+        if project is None:
+            abort(404)
+
+        character = Character.query.filter_by(
+            id=character_id, project_id=project_id
+        ).first()
+        if character is None:
+            return jsonify({"ok": False, "error": "Character not found."}), 404
+
+        payload = request.get_json(silent=True) or {}
+
+        def _clean(value: Any) -> str:
+            if value is None:
+                return ""
+            return str(value).replace("\r\n", "\n").strip()
+
+        if "name" in payload:
+            character.name = _clean(payload.get("name")) or None
+
+        if "role_in_story" in payload:
+            character.role_in_story = _clean(payload.get("role_in_story")) or None
+
+        if "character_description" in payload:
+            character.character_description = (
+                _clean(payload.get("character_description")) or None
+            )
+
+        if "physical_description" in payload:
+            character.physical_description = (
+                _clean(payload.get("physical_description")) or None
+            )
+
+        if "background" in payload:
+            character.background = _clean(payload.get("background")) or None
+
+        db.session.commit()
+
+        return jsonify(
+            {
+                "ok": True,
+                "character": {
+                    "id": character.id,
+                    "name": character.name or "",
+                    "role_in_story": character.role_in_story or "",
+                    "character_description": character.character_description or "",
+                    "is_supporting": bool(character.is_supporting),
+                },
+            }
+        )
+
+    @app.route(
+        "/projects/<int:project_id>/chapters/plan",
+        methods=["PATCH"],
+    )
+    def project_update_chapter_plan(project_id: int):
+        project = db.session.get(Project, project_id)
+        if project is None:
+            abort(404)
+
+        payload = request.get_json(silent=True) or {}
+
+        try:
+            act_number = int(payload.get("act_number"))
+            chapter_number = int(payload.get("chapter_number"))
+        except (TypeError, ValueError):
+            return (
+                jsonify({"ok": False, "error": "Act and chapter numbers are required."}),
+                422,
+            )
+
+        if act_number not in {1, 2, 3} or chapter_number <= 0:
+            return (
+                jsonify({"ok": False, "error": "Invalid act or chapter number."}),
+                422,
+            )
+
+        title_raw = payload.get("title", "")
+        summary_raw = payload.get("summary", "")
+
+        title = str(title_raw or "").replace("\r\n", "\n").strip()
+        summary = str(summary_raw or "").replace("\r\n", "\n").strip()
+
+        if not title or not summary:
+            return (
+                jsonify(
+                    {
+                        "ok": False,
+                        "error": "Both the chapter title and summary are required.",
+                    }
+                ),
+                422,
+            )
+
+        list_attr = {
+            1: "act1_chapter_list",
+            2: "act2_chapter_list",
+            3: "act3_chapter_list",
+        }.get(act_number)
+        text_attr = {
+            1: "act1_chapters",
+            2: "act2_chapters",
+            3: "act3_chapters",
+        }.get(act_number)
+
+        serialised_text = getattr(project, list_attr)
+        fallback_text = getattr(project, text_attr)
+        entries = _load_chapter_list(serialised_text, fallback_text)
+        if not entries:
+            return (
+                jsonify(
+                    {
+                        "ok": False,
+                        "error": "Chapter outline entries are not available for editing.",
+                    }
+                ),
+                404,
+            )
+
+        updated = False
+        for entry in entries:
+            number = entry.get("number")
+            try:
+                number_int = int(number)
+            except (TypeError, ValueError):
+                continue
+            if number_int == chapter_number:
+                entry["title"] = title
+                entry["summary"] = summary
+                updated = True
+                break
+
+        if not updated:
+            return (
+                jsonify(
+                    {
+                        "ok": False,
+                        "error": "The requested chapter could not be found.",
+                    }
+                ),
+                404,
+            )
+
+        serialised_entries = _serialise_chapter_entries(entries)
+        rendered_text = _render_chapter_entries(serialised_entries)
+
+        setattr(project, list_attr, json.dumps(serialised_entries, ensure_ascii=False))
+        setattr(project, text_attr, rendered_text)
+
+        db.session.commit()
+
+        return jsonify(
+            {
+                "ok": True,
+                "entry": {
+                    "act_number": act_number,
+                    "chapter_number": chapter_number,
+                    "title": title,
+                    "summary": summary,
+                },
+            }
+        )
+
+    @app.route(
         "/projects/<int:project_id>/chapters/export",
         methods=["POST"],
     )
