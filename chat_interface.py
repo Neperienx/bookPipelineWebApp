@@ -93,6 +93,9 @@ _openai_generator: OpenAIUnifiedGenerator | None = None
 _openai_signature: Tuple[str, str] | None = None
 _OPENAI_CONFIG_PATH = Path(__file__).resolve().parent / "openai_config.json"
 
+# Default number of previous chapters to reference when drafting new prose.
+_DEFAULT_DRAFT_CONTEXT_COUNT = 2
+
 # Database handle is created globally so unit tests can import the ``db`` object
 # without instantiating the Flask application first.
 db = SQLAlchemy()
@@ -461,7 +464,7 @@ def create_app() -> Flask:
         supporting_success = None
         draft_error = None
         draft_success = None
-        draft_context_default = 2
+        draft_context_default = _DEFAULT_DRAFT_CONTEXT_COUNT
         draft_context_value = draft_context_default
         draft_selected_act: Optional[int] = None
         draft_selected_chapter: Optional[int] = None
@@ -794,110 +797,19 @@ def create_app() -> Flask:
                 draft_context_value = context_count
 
                 if draft_error is None:
-                    outline_entry = _find_chapter_outline_entry(
+                    draft_result = _execute_chapter_draft_generation(
                         project,
+                        draft_history,
                         draft_selected_act,
                         draft_selected_chapter,
+                        context_count,
+                        additional_guidance,
+                        use_api_requested,
                     )
-                    if outline_entry is None:
-                        draft_error = (
-                            "No saved chapter outline was found for the selected act and chapter. "
-                            "Generate the chapter-by-chapter plan first."
-                        )
+                    if draft_result.get("error"):
+                        draft_error = draft_result["error"]
                     else:
-                        display_lines = [
-                            (
-                                f"Draft Act {draft_selected_act}, Chapter {draft_selected_chapter}"
-                            ),
-                            (
-                                f"Outline: {outline_entry.get('title', '') or 'Untitled'} — "
-                                f"{outline_entry.get('summary', '') or '(no summary)'}"
-                            ).strip(),
-                        ]
-                        if additional_guidance:
-                            display_lines.extend(
-                                ["", "Author notes:", additional_guidance]
-                            )
-                        if context_count > 0:
-                            display_lines.extend(
-                                [
-                                    "",
-                                    (
-                                        "Include continuity from the most recent "
-                                        f"{context_count} chapter(s)."
-                                    ),
-                                ]
-                            )
-                        user_display_message = "\n".join(
-                            line for line in display_lines if line is not None
-                        ).strip()
-                        draft_history.append(
-                            {"role": "user", "content": user_display_message}
-                        )
-                        generator = None
-                        try:
-                            generator = _resolve_text_generator(use_api_requested)
-                            previous_chapters = _fetch_previous_chapter_drafts(
-                                project.id,
-                                draft_selected_act,
-                                draft_selected_chapter,
-                                context_count,
-                            )
-                            chapter_plan = _collect_project_chapter_lists(project).get(
-                                draft_selected_act,
-                                [],
-                            )
-                            assistant_reply = _generate_chapter_draft(
-                                generator,
-                                project,
-                                draft_selected_act,
-                                draft_selected_chapter,
-                                outline_entry,
-                                chapter_plan,
-                                previous_chapters,
-                                additional_guidance,
-                                context_count,
-                            )
-                        except OpenAIAPIRateLimitError as exc:
-                            draft_error = str(exc)
-                            draft_history.pop()
-                        except RuntimeError as exc:
-                            draft_error = str(exc)
-                            draft_history.pop()
-                        except ValueError as exc:
-                            draft_error = str(exc)
-                            draft_history.pop()
-                        except Exception as exc:  # pragma: no cover - defensive
-                            draft_error = (
-                                "The text generation backend could not create the chapter draft: "
-                                f"{exc}"
-                            )
-                            draft_history.pop()
-                        else:
-                            device_type = generator.get_compute_device()
-                            device_label = _normalise_device_label(device_type)
-                            device_sentence = _device_usage_sentence(device_type)
-                            clean_reply = assistant_reply.strip() or "(no reply)"
-                            draft_history.append(
-                                {
-                                    "role": "assistant",
-                                    "content": clean_reply,
-                                    "device_type": device_label,
-                                }
-                            )
-                            _save_chapter_draft(
-                                project,
-                                draft_selected_act,
-                                draft_selected_chapter,
-                                outline_entry,
-                                clean_reply,
-                            )
-                            db.session.commit()
-                            draft_success = (
-                                "Chapter draft saved to the project."
-                                f"{device_sentence}"
-                            )
-                        session.modified = True
+                        draft_success = draft_result.get("success")
                 session.modified = True
             elif chat_type == "supporting":
                 additional_guidance = user_message
@@ -1130,6 +1042,7 @@ def create_app() -> Flask:
             draft_error=draft_error,
             draft_success=draft_success,
             draft_context_value=draft_context_value,
+            draft_context_default=draft_context_default,
             draft_selected_act=draft_selected_act,
             draft_selected_chapter=draft_selected_chapter,
             draft_export_message=draft_export_message,
@@ -1143,6 +1056,110 @@ def create_app() -> Flask:
             chapter_draft_lookup=chapter_draft_lookup,
             chapter_outline_lookup=chapter_outline_lookup,
         )
+
+    @app.route(
+        "/projects/<int:project_id>/draft_chapter",
+        methods=["POST"],
+    )
+    def project_draft_chapter(project_id: int):
+        project = db.session.get(Project, project_id)
+        if project is None:
+            abort(404)
+
+        payload = request.get_json(silent=True) or {}
+        use_api_requested = _is_api_requested(payload)
+
+        act_value = payload.get("act_number")
+        chapter_value = payload.get("chapter_number")
+        context_value = payload.get("context_count")
+        additional_guidance = str(payload.get("message", "") or "").strip()
+
+        try:
+            act_number = int(act_value)
+            if act_number <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            return (
+                jsonify({"ok": False, "error": "Please choose a valid act before drafting."}),
+                422,
+            )
+
+        try:
+            chapter_number = int(chapter_value)
+            if chapter_number <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            return (
+                jsonify(
+                    {
+                        "ok": False,
+                        "error": "Please choose a valid chapter from the outline to draft.",
+                    }
+                ),
+                422,
+            )
+
+        if context_value is None:
+            context_count = _DEFAULT_DRAFT_CONTEXT_COUNT
+        else:
+            try:
+                context_count = int(context_value)
+            except (TypeError, ValueError):
+                return (
+                    jsonify(
+                        {
+                            "ok": False,
+                            "error": "Please enter a whole number for the continuity chapters.",
+                        }
+                    ),
+                    422,
+                )
+            if context_count < 0:
+                return (
+                    jsonify(
+                        {
+                            "ok": False,
+                            "error": "Continuity chapters cannot be negative.",
+                        }
+                    ),
+                    422,
+                )
+
+        draft_session_key = _draft_session_key(project_id)
+        draft_history = session.setdefault(draft_session_key, [])
+
+        draft_result = _execute_chapter_draft_generation(
+            project,
+            draft_history,
+            act_number,
+            chapter_number,
+            context_count,
+            additional_guidance,
+            use_api_requested,
+        )
+
+        session.modified = True
+
+        error_message = draft_result.get("error")
+        if error_message:
+            return jsonify({"ok": False, "error": error_message}), 400
+
+        saved_draft = draft_result.get("saved_draft")
+        outline_entry = draft_result.get("outline_entry") or {}
+
+        response_payload = {
+            "ok": True,
+            "draft": _serialise_chapter_draft(saved_draft) if saved_draft else None,
+            "assistant_reply": draft_result.get("assistant_reply"),
+            "device_label": draft_result.get("device_label"),
+            "user_message": draft_result.get("user_display_message"),
+            "outline_entry": {
+                "title": str(outline_entry.get("title", "")).strip(),
+                "summary": str(outline_entry.get("summary", "")).strip(),
+            },
+        }
+
+        return jsonify(response_payload)
 
     @app.route(
         "/projects/<int:project_id>/chapters/export",
@@ -2006,6 +2023,160 @@ def _collect_chapter_draft_payload(
         lookup[f"{act_number}-{chapter_num}"] = entry
 
     return grouped, lookup
+
+
+def _serialise_chapter_draft(draft: ChapterDraft) -> Dict[str, Any]:
+    """Return a JSON-friendly representation of a ``ChapterDraft``."""
+
+    return {
+        "act_number": draft.act_number,
+        "chapter_number": draft.chapter_number,
+        "title": (draft.title or "").strip(),
+        "outline_summary": (draft.outline_summary or "").strip(),
+        "content": (draft.content or "").strip(),
+        "updated_at": draft.updated_at.isoformat() if draft.updated_at else None,
+    }
+
+
+def _execute_chapter_draft_generation(
+    project: Project,
+    draft_history: List[Dict[str, Any]],
+    act_number: int,
+    chapter_number: int,
+    context_count: int,
+    additional_guidance: str,
+    use_api_requested: bool,
+) -> Dict[str, Any]:
+    """Generate and persist a chapter draft, returning status metadata."""
+
+    result: Dict[str, Any] = {
+        "error": None,
+        "success": None,
+        "assistant_reply": None,
+        "device_label": None,
+        "device_sentence": None,
+        "saved_draft": None,
+        "outline_entry": None,
+        "user_display_message": None,
+    }
+
+    outline_entry = _find_chapter_outline_entry(
+        project, act_number, chapter_number
+    )
+    if outline_entry is None:
+        result[
+            "error"
+        ] = (
+            "No saved chapter outline was found for the selected act and chapter. "
+            "Generate the chapter-by-chapter plan first."
+        )
+        return result
+
+    display_lines = [
+        f"Draft Act {act_number}, Chapter {chapter_number}",
+        (
+            "Outline: "
+            f"{outline_entry.get('title', '') or 'Untitled'} — "
+            f"{outline_entry.get('summary', '') or '(no summary)'}"
+        ).strip(),
+    ]
+    if additional_guidance:
+        display_lines.extend(["", "Author notes:", additional_guidance])
+    if context_count > 0:
+        display_lines.extend(
+            [
+                "",
+                (
+                    "Include continuity from the most recent "
+                    f"{context_count} chapter(s)."
+                ),
+            ]
+        )
+
+    user_display_message = "\n".join(
+        line for line in display_lines if line is not None
+    ).strip()
+    result["user_display_message"] = user_display_message
+
+    draft_history.append({"role": "user", "content": user_display_message})
+
+    generator: TextGenerator | OpenAIUnifiedGenerator | None = None
+    try:
+        generator = _resolve_text_generator(use_api_requested)
+        previous_chapters = _fetch_previous_chapter_drafts(
+            project.id,
+            act_number,
+            chapter_number,
+            context_count,
+        )
+        chapter_plan = _collect_project_chapter_lists(project).get(act_number, [])
+        assistant_reply = _generate_chapter_draft(
+            generator,
+            project,
+            act_number,
+            chapter_number,
+            outline_entry,
+            chapter_plan,
+            previous_chapters,
+            additional_guidance,
+            context_count,
+        )
+    except OpenAIAPIRateLimitError as exc:
+        result["error"] = str(exc)
+        draft_history.pop()
+        return result
+    except RuntimeError as exc:
+        result["error"] = str(exc)
+        draft_history.pop()
+        return result
+    except ValueError as exc:
+        result["error"] = str(exc)
+        draft_history.pop()
+        return result
+    except Exception as exc:  # pragma: no cover - defensive
+        result[
+            "error"
+        ] = (
+            "The text generation backend could not create the chapter draft: "
+            f"{exc}"
+        )
+        draft_history.pop()
+        return result
+
+    device_type = generator.get_compute_device() if generator else None
+    device_label = _normalise_device_label(device_type)
+    device_sentence = _device_usage_sentence(device_type)
+    clean_reply = assistant_reply.strip() if assistant_reply else "(no reply)"
+
+    draft_history.append(
+        {
+            "role": "assistant",
+            "content": clean_reply,
+            "device_type": device_label,
+        }
+    )
+
+    saved_draft = _save_chapter_draft(
+        project,
+        act_number,
+        chapter_number,
+        outline_entry,
+        clean_reply,
+    )
+    db.session.commit()
+
+    result.update(
+        {
+            "success": "Chapter draft saved to the project." f"{device_sentence}",
+            "assistant_reply": clean_reply,
+            "device_label": device_label,
+            "device_sentence": device_sentence,
+            "saved_draft": saved_draft,
+            "outline_entry": outline_entry,
+        }
+    )
+
+    return result
 
 
 def _build_chapter_outline_lookup(
