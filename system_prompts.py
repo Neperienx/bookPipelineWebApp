@@ -3,6 +3,17 @@
 from __future__ import annotations
 
 SYSTEM_PROMPTS = {
+    "project_overview": {
+        "max_new_tokens": 512,
+        "base": (
+            "You are a developmental editor distilling an author's questionnaire responses "
+            "into a concise creative brief."
+        ),
+        "response_instructions": (
+            "Write a single cohesive paragraph of roughly 200 words that captures the book's "
+            "core concept, goals, audience, genre positioning, tone, and stylistic aims."
+        ),
+    },
     "outline_assistant": {
         "prompt": (
             "You are a creative writing assistant. Use the author's pitch and the provided character roster "

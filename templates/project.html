@@ -224,6 +224,7 @@
     </div>
     <a href="{{ url_for('dashboard') }}" class="btn btn-outline-light btn-sm">Back to dashboard</a>
   </div>
+  {% set overview_pending = not project_overview_summary %}
   <div class="row g-4 align-items-start">
     <div class="col-xl-3">
       <div class="card h-100">
@@ -251,12 +252,29 @@
               </p>
             </button>
             <button
-              class="overview-tile active"
+              class="overview-tile{% if overview_pending %} active{% endif %}"
+              type="button"
+              data-target="overviewPanel"
+              data-chat-target="overviewChatPanel"
+              aria-controls="overviewPanel"
+              aria-selected="{{ 'true' if overview_pending else 'false' }}"
+            >
+              <h2 class="h6 mb-1">Project overview</h2>
+              <p>
+                {% if project_overview_summary %}
+                  Review and tweak the goals guiding every assistant prompt.
+                {% else %}
+                  Capture the book's goals and audience before outlining.
+                {% endif %}
+              </p>
+            </button>
+            <button
+              class="overview-tile{% if not overview_pending %} active{% endif %}"
               type="button"
               data-target="outlinePanel"
               data-chat-target="outlineChatPanel"
               aria-controls="outlinePanel"
-              aria-selected="true"
+              aria-selected="{{ 'true' if not overview_pending else 'false' }}"
             >
               <h2 class="h6 mb-1">Outline</h2>
               <p>{% if project.outline %}View the latest story outline.{% else %}Create a story outline with the assistant.{% endif %}</p>
@@ -445,7 +463,82 @@
                     {% endif %}
                   </div>
                 </div>
-                <div class="tile-detail active" id="outlinePanel" role="tabpanel">
+                <div class="tile-detail{% if overview_pending %} active{% endif %}" id="overviewPanel" role="tabpanel">
+                  {% if overview_success %}
+                    <div class="alert alert-success" role="alert">{{ overview_success }}</div>
+                  {% endif %}
+                  <div class="outline-content d-flex flex-column gap-3">
+                    <div>
+                      <h3 class="h6 mb-1">Project overview summary</h3>
+                      <p class="text-secondary mb-0 small">A concise brief the assistant will reference throughout the workflow.</p>
+                    </div>
+                    <div
+                      class="editable-block"
+                      data-edit-type="project-text"
+                      data-endpoint="{{ url_for('project_update_text', project_id=project.id) }}"
+                      data-field="project_overview"
+                    >
+                      <div
+                        class="outline-content"
+                        data-edit-display
+                        data-empty-html="{{ '<div class=\'text-secondary\'>No project overview generated yet. Complete the questionnaire to create one.</div>' | tojson | safe }}"
+                      >
+                        {% if project_overview_summary %}
+                          {{ project_overview_summary }}
+                        {% else %}
+                          <div class="text-secondary">No project overview generated yet. Complete the questionnaire to create one.</div>
+                        {% endif %}
+                      </div>
+                      <form class="d-none mt-3" data-edit-form>
+                        <textarea class="form-control" name="value" rows="8">{{ project_overview_summary or '' }}</textarea>
+                        <div class="edit-inline-actions mt-2">
+                          <button type="button" class="btn btn-outline-secondary btn-sm" data-edit-cancel>Cancel</button>
+                          <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                        </div>
+                      </form>
+                      <div class="text-end mt-2" data-edit-actions>
+                        <button type="button" class="btn btn-outline-info btn-sm" data-edit-trigger>Edit overview</button>
+                      </div>
+                      <div class="alert alert-danger mt-2 d-none" data-edit-error></div>
+                      <div class="alert alert-success mt-2 d-none" data-edit-success></div>
+                    </div>
+                    <div>
+                      <h3 class="h6 mb-1">Questionnaire responses</h3>
+                      <p class="text-secondary mb-0 small">These details inform the generated overview.</p>
+                    </div>
+                    {% if overview_sections %}
+                      <div class="d-flex flex-column gap-3">
+                        {% for section in overview_sections %}
+                          <div class="act-outline-box">
+                            <div class="fw-semibold text-info mb-1">{{ section.label }}</div>
+                            {% if section.type == 'list' %}
+                              {% if section.value %}
+                                <ul class="mb-0 small ps-3">
+                                  {% for entry in section.value %}
+                                    <li>{{ entry }}</li>
+                                  {% endfor %}
+                                </ul>
+                              {% else %}
+                                <p class="text-secondary small mb-0">Not provided yet.</p>
+                              {% endif %}
+                            {% else %}
+                              {% if section.value %}
+                                <p class="mb-0">{{ section.value }}</p>
+                              {% else %}
+                                <p class="text-secondary small mb-0">Not provided yet.</p>
+                              {% endif %}
+                            {% endif %}
+                          </div>
+                        {% endfor %}
+                      </div>
+                    {% else %}
+                      <div class="text-secondary text-center py-4">
+                        Complete the questionnaire to capture your project's goals.
+                      </div>
+                    {% endif %}
+                  </div>
+                </div>
+                <div class="tile-detail{% if not overview_pending %} active{% endif %}" id="outlinePanel" role="tabpanel">
                   {% if success %}
                     <div class="alert alert-success" role="alert">{{ success }}</div>
                   {% endif %}
@@ -965,6 +1058,197 @@
             </div>
             <div class="col-12 col-lg-6">
               <div class="chat-column">
+                <div id="overviewChatPanel" class="chat-panel{% if overview_pending %} active{% endif %}" role="tabpanel" aria-labelledby="overviewPanel">
+                  <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
+                    <div>
+                      <h2 class="h5 mb-1">Project overview builder</h2>
+                      <p class="text-secondary mb-0">Answer a few quick questions so the assistant understands your goals.</p>
+                    </div>
+                    {% if project_overview_summary or overview_sections %}
+                      <form method="post">
+                        <input type="hidden" name="chat_type" value="overview" />
+                        <button type="submit" name="clear_overview" value="1" class="btn btn-outline-light btn-sm">Clear overview</button>
+                      </form>
+                    {% endif %}
+                  </div>
+                  {% if overview_error %}
+                    <div class="alert alert-danger" role="alert">{{ overview_error }}</div>
+                  {% endif %}
+                  <form method="post" class="d-flex flex-column gap-4">
+                    <input type="hidden" name="chat_type" value="overview" />
+                    <div class="d-flex flex-column gap-3">
+                      <h3 class="h6 text-uppercase text-secondary mb-0">Project basics</h3>
+                      <div>
+                        <span class="form-label d-block mb-2">Book type</span>
+                        <div class="d-flex flex-column gap-2">
+                          {% for option in book_type_options %}
+                            <div class="form-check">
+                              <input
+                                class="form-check-input"
+                                type="radio"
+                                name="book_type"
+                                id="overviewBookType{{ loop.index }}"
+                                value="{{ option }}"
+                                {% if overview_form.book_type == option %}checked{% endif %}
+                                {% if loop.first %}required{% endif %}
+                              />
+                              <label class="form-check-label" for="overviewBookType{{ loop.index }}">{{ option }}</label>
+                            </div>
+                          {% endfor %}
+                        </div>
+                      </div>
+                      <div>
+                        <label for="overviewElevatorPitch" class="form-label">Elevator pitch</label>
+                        <textarea
+                          class="form-control"
+                          id="overviewElevatorPitch"
+                          name="elevator_pitch"
+                          rows="3"
+                          placeholder="A 1–3 sentence hook for the story."
+                          required
+                        >{{ overview_form.elevator_pitch }}</textarea>
+                      </div>
+                      <div>
+                        <span class="form-label d-block mb-2">Purpose / goal</span>
+                        <div class="d-flex flex-column gap-2">
+                          {% for option in purpose_options %}
+                            <div class="form-check">
+                              <input
+                                class="form-check-input"
+                                type="checkbox"
+                                id="overviewPurpose{{ loop.index }}"
+                                name="purpose"
+                                value="{{ option }}"
+                                {% if option in overview_form.purposes %}checked{% endif %}
+                              />
+                              <label class="form-check-label" for="overviewPurpose{{ loop.index }}">{{ option }}</label>
+                            </div>
+                            {% if option == 'Other' %}
+                              <div class="ms-4">
+                                <label for="overviewPurposeOther" class="form-label small mb-1">Describe other goals</label>
+                                <input
+                                  type="text"
+                                  class="form-control form-control-sm"
+                                  id="overviewPurposeOther"
+                                  name="purpose_other"
+                                  value="{{ overview_form.purpose_other }}"
+                                  placeholder="E.g., motivate readers to take climate action"
+                                />
+                              </div>
+                            {% endif %}
+                          {% endfor %}
+                        </div>
+                      </div>
+                    </div>
+                    <div class="d-flex flex-column gap-3">
+                      <h3 class="h6 text-uppercase text-secondary mb-0">Genre &amp; market positioning</h3>
+                      <div>
+                        <label for="overviewGenre" class="form-label">Primary genre</label>
+                        <select class="form-select" id="overviewGenre" name="genre">
+                          <option value="">Select a genre</option>
+                          {% for option in genre_options %}
+                            <option value="{{ option }}" {% if overview_form.genre == option %}selected{% endif %}>{{ option }}</option>
+                          {% endfor %}
+                        </select>
+                      </div>
+                      <div>
+                        <label for="overviewSubgenres" class="form-label">Subgenres (optional)</label>
+                        <textarea
+                          class="form-control"
+                          id="overviewSubgenres"
+                          name="subgenres"
+                          rows="2"
+                          placeholder="Epic fantasy&#10;Court intrigue"
+                        >{{ overview_form.subgenres | join('\n') }}</textarea>
+                        <div class="form-text">Separate entries with commas or new lines.</div>
+                      </div>
+                      <div>
+                        <span class="form-label d-block mb-2">Target audience</span>
+                        <div class="d-flex flex-column gap-2">
+                          {% for option in target_audience_options %}
+                            <div class="form-check">
+                              <input
+                                class="form-check-input"
+                                type="checkbox"
+                                id="overviewAudience{{ loop.index }}"
+                                name="target_audience"
+                                value="{{ option }}"
+                                {% if option in overview_form.target_audience %}checked{% endif %}
+                              />
+                              <label class="form-check-label" for="overviewAudience{{ loop.index }}">{{ option }}</label>
+                            </div>
+                          {% endfor %}
+                        </div>
+                      </div>
+                      <div>
+                        <label for="overviewComps" class="form-label">Comparable titles (optional)</label>
+                        <textarea
+                          class="form-control"
+                          id="overviewComps"
+                          name="comparable_titles"
+                          rows="2"
+                          placeholder="List books, authors, films, or games that mirror the vibe."
+                        >{{ overview_form.comparable_titles | join('\n') }}</textarea>
+                      </div>
+                    </div>
+                    <div class="d-flex flex-column gap-3">
+                      <h3 class="h6 text-uppercase text-secondary mb-0">Tone, style &amp; atmosphere</h3>
+                      <div>
+                        <span class="form-label d-block mb-2">Tone</span>
+                        <div class="d-flex flex-column gap-2">
+                          {% for option in tone_options %}
+                            <div class="form-check">
+                              <input
+                                class="form-check-input"
+                                type="checkbox"
+                                id="overviewTone{{ loop.index }}"
+                                name="tone"
+                                value="{{ option }}"
+                                {% if option in overview_form.tone %}checked{% endif %}
+                              />
+                              <label class="form-check-label" for="overviewTone{{ loop.index }}">{{ option }}</label>
+                            </div>
+                          {% endfor %}
+                        </div>
+                      </div>
+                      <div>
+                        <span class="form-label d-block mb-2">Narrative style</span>
+                        <div class="d-flex flex-column gap-2">
+                          {% for option in narrative_style_options %}
+                            <div class="form-check">
+                              <input
+                                class="form-check-input"
+                                type="radio"
+                                id="overviewNarrative{{ loop.index }}"
+                                name="narrative_style"
+                                value="{{ option }}"
+                                {% if overview_form.narrative_style == option %}checked{% endif %}
+                              />
+                              <label class="form-check-label" for="overviewNarrative{{ loop.index }}">{{ option }}</label>
+                            </div>
+                          {% endfor %}
+                        </div>
+                      </div>
+                      <div>
+                        <label for="overviewAtmosphere" class="form-label">Atmosphere notes (optional)</label>
+                        <textarea
+                          class="form-control"
+                          id="overviewAtmosphere"
+                          name="atmosphere"
+                          rows="2"
+                          placeholder="Describe the emotional or sensory atmosphere you want to evoke."
+                        >{{ overview_form.atmosphere }}</textarea>
+                      </div>
+                    </div>
+                    <div class="d-flex align-items-center justify-content-end gap-3">
+                      <div class="form-check mb-0">
+                        <input class="form-check-input" type="checkbox" value="1" id="overviewUseApi" name="use_api" />
+                        <label class="form-check-label small" for="overviewUseApi">API</label>
+                      </div>
+                      <button type="submit" class="btn btn-primary">Generate project overview</button>
+                    </div>
+                  </form>
+                </div>
                 <div id="characterChatPanel" class="chat-panel" role="tabpanel" aria-labelledby="charactersPanel">
                   <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
                     <div>
@@ -982,7 +1266,7 @@
                     </div>
                   </div>
                 </div>
-                <div id="outlineChatPanel" class="chat-panel active" role="tabpanel" aria-labelledby="outlinePanel">
+                <div id="outlineChatPanel" class="chat-panel{% if not overview_pending %} active{% endif %}" role="tabpanel" aria-labelledby="outlinePanel">
             <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
               <div>
                 <h2 class="h5 mb-1">Outline assistant</h2>
