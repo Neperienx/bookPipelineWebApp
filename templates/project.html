@@ -192,6 +192,28 @@
       color: rgba(226, 232, 240, 0.65);
       font-size: 0.85rem;
     }
+    .editable-block {
+      position: relative;
+    }
+    .editable-block[data-editing="true"] [data-edit-actions] {
+      display: none !important;
+    }
+    .editable-block textarea.form-control {
+      background: rgba(15, 23, 42, 0.85);
+      color: #e2e8f0;
+      border-color: rgba(148, 163, 184, 0.25);
+    }
+    .editable-block .edit-inline-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.5rem;
+    }
+    .editable-block .edit-inline-actions .btn {
+      min-width: 90px;
+    }
+    .editable-block .alert {
+      padding: 0.5rem 0.75rem;
+    }
   </style>
 {% endblock %}
 {% block content %}
@@ -348,22 +370,71 @@
                     {% if main_characters %}
                       <div class="list-group list-group-flush">
                         {% for character in main_characters %}
-                          <a
-                            href="{{ url_for('character_detail', project_id=project.id, character_id=character.id) }}"
-                            class="list-group-item list-group-item-action d-flex justify-content-between align-items-start"
+                          <div
+                            class="list-group-item list-group-item-action editable-block"
+                            data-edit-type="character"
+                            data-endpoint="{{ url_for('project_update_character', project_id=project.id, character_id=character.id) }}"
+                            data-method="PATCH"
                           >
-                            <div>
-                              <div class="fw-semibold">{{ character.name or 'Untitled character' }}</div>
-                              <div class="text-secondary small">{{ character.role_in_story or 'Role not set yet' }}</div>
+                            <div class="d-flex justify-content-between align-items-start gap-3" data-edit-display>
+                              <div>
+                                <div class="fw-semibold" data-display-name>{{ character.name or 'Untitled character' }}</div>
+                                <div
+                                  class="text-secondary small"
+                                  data-display-role
+                                  data-empty-text="Role not set yet"
+                                >
+                                  {{ character.role_in_story or 'Role not set yet' }}
+                                </div>
+                              </div>
+                              <span class="text-secondary small ms-3">
+                                {% if character.updated_at %}
+                                  Updated {{ character.updated_at.strftime('%b %d, %Y') }}
+                                {% else %}
+                                  Created {{ character.created_at.strftime('%b %d, %Y') }}
+                                {% endif %}
+                              </span>
                             </div>
-                            <span class="text-secondary small ms-3">
-                              {% if character.updated_at %}
-                                Updated {{ character.updated_at.strftime('%b %d, %Y') }}
-                              {% else %}
-                                Created {{ character.created_at.strftime('%b %d, %Y') }}
-                              {% endif %}
-                            </span>
-                          </a>
+                            <form class="d-none mt-2" data-edit-form>
+                              <div class="row g-2">
+                                <div class="col-md-6">
+                                  <label class="form-label small text-uppercase fw-semibold" for="mainName{{ character.id }}">Name</label>
+                                  <input
+                                    type="text"
+                                    class="form-control form-control-sm"
+                                    id="mainName{{ character.id }}"
+                                    name="name"
+                                    value="{{ character.name or '' }}"
+                                  />
+                                </div>
+                                <div class="col-md-6">
+                                  <label class="form-label small text-uppercase fw-semibold" for="mainRole{{ character.id }}">Role in story</label>
+                                  <input
+                                    type="text"
+                                    class="form-control form-control-sm"
+                                    id="mainRole{{ character.id }}"
+                                    name="role_in_story"
+                                    value="{{ character.role_in_story or '' }}"
+                                  />
+                                </div>
+                              </div>
+                              <div class="edit-inline-actions mt-3">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" data-edit-cancel>Cancel</button>
+                                <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                              </div>
+                            </form>
+                            <div class="d-flex justify-content-between align-items-center mt-2" data-edit-actions>
+                              <a
+                                href="{{ url_for('character_detail', project_id=project.id, character_id=character.id) }}"
+                                class="btn btn-link btn-sm ps-0"
+                              >
+                                Open profile
+                              </a>
+                              <button type="button" class="btn btn-outline-info btn-sm" data-edit-trigger>Edit character</button>
+                            </div>
+                            <div class="alert alert-danger mt-2 d-none" data-edit-error></div>
+                            <div class="alert alert-success mt-2 d-none" data-edit-success></div>
+                          </div>
                         {% endfor %}
                       </div>
                     {% else %}
@@ -378,12 +449,35 @@
                   {% if success %}
                     <div class="alert alert-success" role="alert">{{ success }}</div>
                   {% endif %}
-                  <div class="outline-content">
-                    {% if project.outline %}
-                      {{ project.outline }}
-                    {% else %}
-                      <div class="text-secondary">No outline saved yet. Use the chat to tell the assistant about the story you want to write.</div>
-                    {% endif %}
+                  <div
+                    class="editable-block"
+                    data-edit-type="project-text"
+                    data-endpoint="{{ url_for('project_update_text', project_id=project.id) }}"
+                    data-field="outline"
+                  >
+                    <div
+                      class="outline-content"
+                      data-edit-display
+                      data-empty-html="{{ '<div class=\'text-secondary\'>No outline saved yet. Use the chat to tell the assistant about the story you want to write.</div>' | tojson | safe }}"
+                    >
+                      {% if project.outline %}
+                        {{ project.outline }}
+                      {% else %}
+                        <div class="text-secondary">No outline saved yet. Use the chat to tell the assistant about the story you want to write.</div>
+                      {% endif %}
+                    </div>
+                    <form class="d-none mt-3" data-edit-form>
+                      <textarea class="form-control" name="value" rows="10">{{ project.outline or '' }}</textarea>
+                      <div class="edit-inline-actions mt-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-edit-cancel>Cancel</button>
+                        <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                      </div>
+                    </form>
+                    <div class="text-end mt-2" data-edit-actions>
+                      <button type="button" class="btn btn-outline-info btn-sm" data-edit-trigger>Edit outline</button>
+                    </div>
+                    <div class="alert alert-danger mt-2 d-none" data-edit-error></div>
+                    <div class="alert alert-success mt-2 d-none" data-edit-success></div>
                   </div>
                 </div>
                 <div class="tile-detail" id="conceptsPanel" role="tabpanel">
@@ -395,24 +489,85 @@
                     {% if project.concepts %}
                       <div class="d-flex flex-column gap-4">
                         {% for concept in project.concepts %}
-                          <div class="act-outline-box">
-                            <h4 class="h6 mb-2 text-info">{{ concept.name }}</h4>
-                            {% if concept.issue %}
-                              <p class="text-secondary small mb-2">Why it needed clarification: {{ concept.issue }}</p>
-                            {% endif %}
-                            <p class="mb-2">{{ concept.definition }}</p>
-                            {% if concept.examples %}
-                              <div>
+                          <div
+                            class="act-outline-box editable-block"
+                            data-edit-type="concept"
+                            data-endpoint="{{ url_for('project_update_concept', project_id=project.id, concept_id=concept.id) }}"
+                            data-method="PATCH"
+                          >
+                            <div data-edit-display>
+                              <h4 class="h6 mb-2 text-info" data-display-name>{{ concept.name }}</h4>
+                              {% if concept.issue %}
+                                <p class="text-secondary small mb-2" data-display-issue>Why it needed clarification: {{ concept.issue }}</p>
+                              {% else %}
+                                <p class="text-secondary small mb-2 d-none" data-display-issue></p>
+                              {% endif %}
+                              <p class="mb-2" data-display-definition>{{ concept.definition }}</p>
+                              {% set example_candidates = concept.examples.split('\n') if concept.examples else [] %}
+                              {% set trimmed_examples = example_candidates | map('strip') | select | list %}
+                              <div
+                                class="{% if not trimmed_examples %}d-none{% endif %}"
+                                data-display-examples-wrapper
+                              >
                                 <div class="fw-semibold text-uppercase small text-secondary mb-1">Examples</div>
-                                <ul class="mb-0 small ps-3">
-                                  {% for example in concept.examples.split('\n') %}
-                                    {% if example.strip() %}
-                                      <li>{{ example }}</li>
-                                    {% endif %}
+                                <ul class="mb-0 small ps-3" data-display-examples>
+                                  {% for example in trimmed_examples %}
+                                    <li>{{ example }}</li>
                                   {% endfor %}
                                 </ul>
                               </div>
-                            {% endif %}
+                            </div>
+                            <form class="d-none mt-3" data-edit-form>
+                              <div class="row g-2">
+                                <div class="col-md-6">
+                                  <label class="form-label small text-uppercase fw-semibold" for="conceptName{{ concept.id }}">Name</label>
+                                  <input
+                                    type="text"
+                                    class="form-control form-control-sm"
+                                    id="conceptName{{ concept.id }}"
+                                    name="name"
+                                    value="{{ concept.name }}"
+                                    required
+                                  />
+                                </div>
+                                <div class="col-md-6">
+                                  <label class="form-label small text-uppercase fw-semibold" for="conceptIssue{{ concept.id }}">Why it needed clarification</label>
+                                  <input
+                                    type="text"
+                                    class="form-control form-control-sm"
+                                    id="conceptIssue{{ concept.id }}"
+                                    name="issue"
+                                    value="{{ concept.issue or '' }}"
+                                  />
+                                </div>
+                              </div>
+                              <div class="mt-2">
+                                <label class="form-label small text-uppercase fw-semibold" for="conceptDefinition{{ concept.id }}">Definition</label>
+                                <textarea
+                                  class="form-control form-control-sm"
+                                  id="conceptDefinition{{ concept.id }}"
+                                  name="definition"
+                                  rows="4"
+                                  required>{{ concept.definition }}</textarea>
+                              </div>
+                              <div class="mt-2">
+                                <label class="form-label small text-uppercase fw-semibold" for="conceptExamples{{ concept.id }}">Examples (one per line)</label>
+                                <textarea
+                                  class="form-control form-control-sm"
+                                  id="conceptExamples{{ concept.id }}"
+                                  name="examples"
+                                  rows="3">{{ concept.examples or '' }}</textarea>
+                              </div>
+                              <div class="edit-inline-actions mt-3">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" data-edit-cancel>Cancel</button>
+                                <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                              </div>
+                            </form>
+                            <div class="text-end mt-2" data-edit-actions>
+                              <button type="button" class="btn btn-outline-info btn-sm" data-edit-trigger>Edit concept</button>
+                            </div>
+                            <div class="alert alert-danger mt-2 d-none" data-edit-error></div>
+                            <div class="alert alert-success mt-2 d-none" data-edit-success></div>
                           </div>
                         {% endfor %}
                       </div>
@@ -432,17 +587,98 @@
                     </div>
                     {% if project.act1_outline or project.act2_outline or project.act3_outline %}
                       <div class="d-flex flex-column gap-3">
-                        <div>
+                        <div
+                          class="editable-block"
+                          data-edit-type="project-text"
+                          data-endpoint="{{ url_for('project_update_text', project_id=project.id) }}"
+                          data-field="act1_outline"
+                        >
                           <h4 class="h6 mb-1 text-info">Act I</h4>
-                          <div class="act-outline-box">{{ project.act1_outline or 'No outline generated yet.' }}</div>
+                          <div
+                            class="act-outline-box"
+                            data-edit-display
+                            data-empty-html="{{ 'No outline generated yet.' | tojson | safe }}"
+                          >
+                            {% if project.act1_outline %}
+                              {{ project.act1_outline }}
+                            {% else %}
+                              No outline generated yet.
+                            {% endif %}
+                          </div>
+                          <form class="d-none mt-3" data-edit-form>
+                            <textarea class="form-control" name="value" rows="6">{{ project.act1_outline or '' }}</textarea>
+                            <div class="edit-inline-actions mt-2">
+                              <button type="button" class="btn btn-outline-secondary btn-sm" data-edit-cancel>Cancel</button>
+                              <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                            </div>
+                          </form>
+                          <div class="text-end mt-2" data-edit-actions>
+                            <button type="button" class="btn btn-outline-info btn-sm" data-edit-trigger>Edit act</button>
+                          </div>
+                          <div class="alert alert-danger mt-2 d-none" data-edit-error></div>
+                          <div class="alert alert-success mt-2 d-none" data-edit-success></div>
                         </div>
-                        <div>
+                        <div
+                          class="editable-block"
+                          data-edit-type="project-text"
+                          data-endpoint="{{ url_for('project_update_text', project_id=project.id) }}"
+                          data-field="act2_outline"
+                        >
                           <h4 class="h6 mb-1 text-info">Act II</h4>
-                          <div class="act-outline-box">{{ project.act2_outline or 'No outline generated yet.' }}</div>
+                          <div
+                            class="act-outline-box"
+                            data-edit-display
+                            data-empty-html="{{ 'No outline generated yet.' | tojson | safe }}"
+                          >
+                            {% if project.act2_outline %}
+                              {{ project.act2_outline }}
+                            {% else %}
+                              No outline generated yet.
+                            {% endif %}
+                          </div>
+                          <form class="d-none mt-3" data-edit-form>
+                            <textarea class="form-control" name="value" rows="6">{{ project.act2_outline or '' }}</textarea>
+                            <div class="edit-inline-actions mt-2">
+                              <button type="button" class="btn btn-outline-secondary btn-sm" data-edit-cancel>Cancel</button>
+                              <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                            </div>
+                          </form>
+                          <div class="text-end mt-2" data-edit-actions>
+                            <button type="button" class="btn btn-outline-info btn-sm" data-edit-trigger>Edit act</button>
+                          </div>
+                          <div class="alert alert-danger mt-2 d-none" data-edit-error></div>
+                          <div class="alert alert-success mt-2 d-none" data-edit-success></div>
                         </div>
-                        <div>
+                        <div
+                          class="editable-block"
+                          data-edit-type="project-text"
+                          data-endpoint="{{ url_for('project_update_text', project_id=project.id) }}"
+                          data-field="act3_outline"
+                        >
                           <h4 class="h6 mb-1 text-info">Act III</h4>
-                          <div class="act-outline-box">{{ project.act3_outline or 'No outline generated yet.' }}</div>
+                          <div
+                            class="act-outline-box"
+                            data-edit-display
+                            data-empty-html="{{ 'No outline generated yet.' | tojson | safe }}"
+                          >
+                            {% if project.act3_outline %}
+                              {{ project.act3_outline }}
+                            {% else %}
+                              No outline generated yet.
+                            {% endif %}
+                          </div>
+                          <form class="d-none mt-3" data-edit-form>
+                            <textarea class="form-control" name="value" rows="6">{{ project.act3_outline or '' }}</textarea>
+                            <div class="edit-inline-actions mt-2">
+                              <button type="button" class="btn btn-outline-secondary btn-sm" data-edit-cancel>Cancel</button>
+                              <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                            </div>
+                          </form>
+                          <div class="text-end mt-2" data-edit-actions>
+                            <button type="button" class="btn btn-outline-info btn-sm" data-edit-trigger>Edit act</button>
+                          </div>
+                          <div class="alert alert-danger mt-2 d-none" data-edit-error></div>
+                          <div class="alert alert-success mt-2 d-none" data-edit-success></div>
                         </div>
                       </div>
                     {% else %}
@@ -463,9 +699,51 @@
                     {% if supporting_characters %}
                       <div class="d-flex flex-column gap-3">
                         {% for character in supporting_characters %}
-                          <div class="act-outline-box">
-                            <h4 class="h6 mb-2 text-info">{{ character.name or 'Unnamed character' }}</h4>
-                            <p class="mb-0">{{ character.character_description or 'No supporting description saved yet.' }}</p>
+                          <div
+                            class="act-outline-box editable-block"
+                            data-edit-type="character"
+                            data-endpoint="{{ url_for('project_update_character', project_id=project.id, character_id=character.id) }}"
+                            data-method="PATCH"
+                          >
+                            <div data-edit-display>
+                              <h4 class="h6 mb-2 text-info" data-display-name>{{ character.name or 'Unnamed character' }}</h4>
+                              <p
+                                class="mb-0"
+                                data-display-description
+                                data-empty-text="No supporting description saved yet."
+                              >
+                                {{ character.character_description or 'No supporting description saved yet.' }}
+                              </p>
+                            </div>
+                            <form class="d-none mt-3" data-edit-form>
+                              <div class="mb-2">
+                                <label class="form-label small text-uppercase fw-semibold" for="supportingName{{ character.id }}">Name</label>
+                                <input
+                                  type="text"
+                                  class="form-control form-control-sm"
+                                  id="supportingName{{ character.id }}"
+                                  name="name"
+                                  value="{{ character.name or '' }}"
+                                />
+                              </div>
+                              <div class="mb-2">
+                                <label class="form-label small text-uppercase fw-semibold" for="supportingDescription{{ character.id }}">Description</label>
+                                <textarea
+                                  class="form-control form-control-sm"
+                                  id="supportingDescription{{ character.id }}"
+                                  name="character_description"
+                                  rows="4">{{ character.character_description or '' }}</textarea>
+                              </div>
+                              <div class="edit-inline-actions mt-3">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" data-edit-cancel>Cancel</button>
+                                <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                              </div>
+                            </form>
+                            <div class="text-end mt-2" data-edit-actions>
+                              <button type="button" class="btn btn-outline-info btn-sm" data-edit-trigger>Edit character</button>
+                            </div>
+                            <div class="alert alert-danger mt-2 d-none" data-edit-error></div>
+                            <div class="alert alert-success mt-2 d-none" data-edit-success></div>
                           </div>
                         {% endfor %}
                       </div>
@@ -502,11 +780,60 @@
                               {% if chapters %}
                                 <div class="chapter-list">
                                   {% for chapter in chapters %}
-                                    <div class="chapter-card">
-                                      <div class="chapter-card-title">Chapter {{ chapter.number }}: {{ chapter.title or 'Untitled Chapter' }}</div>
-                                      {% if chapter.summary %}
-                                        <p class="chapter-card-summary">{{ chapter.summary }}</p>
-                                      {% endif %}
+                                    <div
+                                      class="chapter-card editable-block"
+                                      data-edit-type="chapter-plan"
+                                      data-endpoint="{{ url_for('project_update_chapter_plan', project_id=project.id) }}"
+                                      data-method="PATCH"
+                                      data-act="{{ act_number }}"
+                                      data-chapter="{{ chapter.number }}"
+                                    >
+                                      <div data-edit-display>
+                                        <div
+                                          class="chapter-card-title"
+                                          data-display-title
+                                          data-title-fallback="Untitled Chapter"
+                                        >
+                                          Chapter {{ chapter.number }}: {{ chapter.title or 'Untitled Chapter' }}
+                                        </div>
+                                        <p
+                                          class="chapter-card-summary{% if not chapter.summary %} d-none{% endif %}"
+                                          data-display-summary
+                                        >
+                                          {{ chapter.summary or '' }}
+                                        </p>
+                                      </div>
+                                      <form class="d-none mt-3" data-edit-form>
+                                        <div class="mb-2">
+                                          <label class="form-label small text-uppercase fw-semibold" for="chapterTitle{{ act_number }}{{ chapter.number }}">Title</label>
+                                          <input
+                                            type="text"
+                                            class="form-control form-control-sm"
+                                            id="chapterTitle{{ act_number }}{{ chapter.number }}"
+                                            name="title"
+                                            value="{{ chapter.title or '' }}"
+                                            required
+                                          />
+                                        </div>
+                                        <div class="mb-2">
+                                          <label class="form-label small text-uppercase fw-semibold" for="chapterSummary{{ act_number }}{{ chapter.number }}">Summary</label>
+                                          <textarea
+                                            class="form-control form-control-sm"
+                                            id="chapterSummary{{ act_number }}{{ chapter.number }}"
+                                            name="summary"
+                                            rows="4"
+                                            required>{{ chapter.summary or '' }}</textarea>
+                                        </div>
+                                        <div class="edit-inline-actions mt-3">
+                                          <button type="button" class="btn btn-outline-secondary btn-sm" data-edit-cancel>Cancel</button>
+                                          <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                                        </div>
+                                      </form>
+                                      <div class="text-end mt-2" data-edit-actions>
+                                        <button type="button" class="btn btn-outline-info btn-sm" data-edit-trigger>Edit chapter</button>
+                                      </div>
+                                      <div class="alert alert-danger mt-2 d-none" data-edit-error></div>
+                                      <div class="alert alert-success mt-2 d-none" data-edit-success></div>
                                     </div>
                                   {% endfor %}
                                 </div>
@@ -1626,6 +1953,369 @@
         refreshDraftChapterOptions();
         updateDraftPreviews();
       }
+
+      function showFeedback(container, type, message) {
+        const errorEl = container.querySelector("[data-edit-error]");
+        const successEl = container.querySelector("[data-edit-success]");
+        if (errorEl) {
+          errorEl.classList.add("d-none");
+          errorEl.textContent = "";
+        }
+        if (successEl) {
+          successEl.classList.add("d-none");
+          successEl.textContent = "";
+        }
+        if (type === "clear") {
+          return;
+        }
+        if (type === "error" && errorEl) {
+          errorEl.textContent = message || "Unable to save changes.";
+          errorEl.classList.remove("d-none");
+        } else if (type === "success" && successEl) {
+          successEl.textContent = message || "Changes saved.";
+          successEl.classList.remove("d-none");
+          window.setTimeout(function () {
+            successEl.classList.add("d-none");
+            successEl.textContent = "";
+          }, 4000);
+        }
+      }
+
+      function toggleEditMode(container, editing) {
+        const display = container.querySelector("[data-edit-display]");
+        const form = container.querySelector("[data-edit-form]");
+        const actions = container.querySelector("[data-edit-actions]");
+        if (!display || !form) {
+          return;
+        }
+        if (editing) {
+          container.dataset.editing = "true";
+          display.classList.add("d-none");
+          form.classList.remove("d-none");
+          if (actions) {
+            actions.classList.add("d-none");
+          }
+        } else {
+          container.dataset.editing = "false";
+          display.classList.remove("d-none");
+          form.classList.add("d-none");
+          if (actions) {
+            actions.classList.remove("d-none");
+          }
+        }
+      }
+
+      function updateFormDefaults(form, values) {
+        Object.keys(values).forEach(function (key) {
+          const field = form.elements.namedItem(key);
+          if (!field) {
+            return;
+          }
+          const newValue = values[key];
+          if (typeof field.value === "string") {
+            field.value = newValue;
+            field.defaultValue = newValue;
+          }
+        });
+      }
+
+      function buildPayload(container, formData) {
+        const type = container.getAttribute("data-edit-type");
+        const payload = {};
+        if (type === "project-text") {
+          payload.field = container.getAttribute("data-field");
+          payload.value = (formData.get("value") || "").toString();
+        } else if (type === "concept") {
+          payload.name = (formData.get("name") || "").toString();
+          payload.issue = (formData.get("issue") || "").toString();
+          payload.definition = (formData.get("definition") || "").toString();
+          payload.examples = (formData.get("examples") || "").toString();
+        } else if (type === "character") {
+          [
+            "name",
+            "role_in_story",
+            "character_description",
+            "physical_description",
+            "background",
+          ].forEach(function (field) {
+            if (formData.has(field)) {
+              payload[field] = (formData.get(field) || "").toString();
+            }
+          });
+        } else if (type === "chapter-plan") {
+          payload.act_number = container.getAttribute("data-act");
+          payload.chapter_number = container.getAttribute("data-chapter");
+          payload.title = (formData.get("title") || "").toString();
+          payload.summary = (formData.get("summary") || "").toString();
+        }
+        return payload;
+      }
+
+      function applyProjectTextUpdate(container, responseValue) {
+        const display = container.querySelector("[data-edit-display]");
+        const form = container.querySelector("[data-edit-form]");
+        if (!display || !form) {
+          return;
+        }
+        const value = (responseValue || "").toString();
+        const emptyHtml = display.getAttribute("data-empty-html");
+        if (value.trim()) {
+          display.textContent = value;
+        } else if (emptyHtml) {
+          try {
+            display.innerHTML = JSON.parse(emptyHtml);
+          } catch (error) {
+            display.textContent = "";
+          }
+        } else {
+          display.textContent = "";
+        }
+        const textarea = form.querySelector("textarea[name='value']");
+        if (textarea) {
+          textarea.value = value;
+          textarea.defaultValue = value;
+        }
+      }
+
+      function applyConceptUpdate(container, concept) {
+        const nameEl = container.querySelector("[data-display-name]");
+        const issueEl = container.querySelector("[data-display-issue]");
+        const definitionEl = container.querySelector("[data-display-definition]");
+        const examplesWrapper = container.querySelector(
+          "[data-display-examples-wrapper]"
+        );
+        const examplesList = container.querySelector("[data-display-examples]");
+        if (nameEl) {
+          nameEl.textContent = concept.name || "Untitled concept";
+        }
+        if (issueEl) {
+          const issueText = concept.issue || "";
+          if (issueText.trim()) {
+            issueEl.textContent = "Why it needed clarification: " + issueText;
+            issueEl.classList.remove("d-none");
+          } else {
+            issueEl.textContent = "";
+            issueEl.classList.add("d-none");
+          }
+        }
+        if (definitionEl) {
+          definitionEl.textContent = concept.definition || "";
+        }
+        if (examplesWrapper && examplesList) {
+          examplesList.innerHTML = "";
+          const examples = Array.isArray(concept.examples)
+            ? concept.examples
+            : [];
+          if (examples.length) {
+            examples.forEach(function (example) {
+              if (!example || !example.trim()) {
+                return;
+              }
+              const item = document.createElement("li");
+              item.textContent = example;
+              examplesList.appendChild(item);
+            });
+            examplesWrapper.classList.remove("d-none");
+          } else {
+            examplesWrapper.classList.add("d-none");
+          }
+        }
+        const form = container.querySelector("[data-edit-form]");
+        if (form) {
+          updateFormDefaults(form, {
+            name: concept.name || "",
+            issue: concept.issue || "",
+            definition: concept.definition || "",
+            examples: (concept.examples || []).join("\n"),
+          });
+        }
+      }
+
+      function applyCharacterUpdate(container, character) {
+        const nameEl = container.querySelector("[data-display-name]");
+        const roleEl = container.querySelector("[data-display-role]");
+        const descriptionEl = container.querySelector(
+          "[data-display-description]"
+        );
+        if (nameEl) {
+          nameEl.textContent = character.name || "Unnamed character";
+        }
+        if (roleEl) {
+          const roleFallback = roleEl.getAttribute("data-empty-text") || "";
+          const roleText = character.role_in_story || "";
+          if (roleText.trim()) {
+            roleEl.textContent = roleText;
+          } else {
+            roleEl.textContent = roleFallback;
+          }
+        }
+        if (descriptionEl) {
+          const fallback = descriptionEl.getAttribute("data-empty-text") || "";
+          const text = character.character_description || "";
+          if (text.trim()) {
+            descriptionEl.textContent = text;
+          } else {
+            descriptionEl.textContent = fallback;
+          }
+        }
+        const form = container.querySelector("[data-edit-form]");
+        if (form) {
+          updateFormDefaults(form, {
+            name: character.name || "",
+            role_in_story: character.role_in_story || "",
+            character_description: character.character_description || "",
+          });
+        }
+      }
+
+      function applyChapterPlanUpdate(container, entry) {
+        const titleEl = container.querySelector("[data-display-title]");
+        const summaryEl = container.querySelector("[data-display-summary]");
+        if (titleEl) {
+          const fallback = titleEl.getAttribute("data-title-fallback") || "Untitled Chapter";
+          const titleText = entry.title && entry.title.trim()
+            ? entry.title
+            : fallback;
+          titleEl.textContent =
+            "Chapter " + entry.chapter_number + ": " + titleText;
+        }
+        if (summaryEl) {
+          if (entry.summary && entry.summary.trim()) {
+            summaryEl.textContent = entry.summary;
+            summaryEl.classList.remove("d-none");
+          } else {
+            summaryEl.textContent = "";
+            summaryEl.classList.add("d-none");
+          }
+        }
+        const form = container.querySelector("[data-edit-form]");
+        if (form) {
+          updateFormDefaults(form, {
+            title: entry.title || "",
+            summary: entry.summary || "",
+          });
+        }
+
+        const actKey = String(entry.act_number);
+        const chapterKey = parseInt(entry.chapter_number, 10);
+        if (chapterPlanData && chapterPlanData[actKey]) {
+          const actEntries = chapterPlanData[actKey];
+          for (let i = 0; i < actEntries.length; i += 1) {
+            if (parseInt(actEntries[i].number, 10) === chapterKey) {
+              actEntries[i].title = entry.title || "";
+              actEntries[i].summary = entry.summary || "";
+              break;
+            }
+          }
+        }
+        const lookupKey = actKey + "-" + String(entry.chapter_number);
+        if (outlineLookup) {
+          outlineLookup[lookupKey] = {
+            title: entry.title || "",
+            summary: entry.summary || "",
+          };
+        }
+        if (typeof refreshDraftChapterOptions === "function") {
+          refreshDraftChapterOptions();
+        }
+        if (typeof updateDraftPreviews === "function") {
+          updateDraftPreviews();
+        }
+      }
+
+      function handleEditableSuccess(container, response) {
+        const type = container.getAttribute("data-edit-type");
+        if (type === "project-text") {
+          applyProjectTextUpdate(container, response.value || "");
+        } else if (type === "concept") {
+          if (response.concept) {
+            applyConceptUpdate(container, response.concept);
+          }
+        } else if (type === "character") {
+          if (response.character) {
+            applyCharacterUpdate(container, response.character);
+          }
+        } else if (type === "chapter-plan") {
+          if (response.entry) {
+            applyChapterPlanUpdate(container, response.entry);
+          }
+        }
+        showFeedback(container, "success", "Changes saved.");
+        toggleEditMode(container, false);
+      }
+
+      function initEditableBlocks() {
+        const containers = document.querySelectorAll("[data-edit-type]");
+        containers.forEach(function (container) {
+          const form = container.querySelector("[data-edit-form]");
+          const editButton = container.querySelector("[data-edit-trigger]");
+          const cancelButton = container.querySelector("[data-edit-cancel]");
+          if (!form) {
+            return;
+          }
+          if (editButton) {
+            editButton.addEventListener("click", function (event) {
+              event.preventDefault();
+              showFeedback(container, "clear", "");
+              toggleEditMode(container, true);
+            });
+          }
+          if (cancelButton) {
+            cancelButton.addEventListener("click", function (event) {
+              event.preventDefault();
+              form.reset();
+              showFeedback(container, "clear", "");
+              toggleEditMode(container, false);
+            });
+          }
+          form.addEventListener("submit", async function (event) {
+            event.preventDefault();
+            const endpoint = container.getAttribute("data-endpoint");
+            if (!endpoint) {
+              return;
+            }
+            const method = container.getAttribute("data-method") || "POST";
+            const formData = new FormData(form);
+            const payload = buildPayload(container, formData);
+            const submitButton = form.querySelector("button[type='submit']");
+            const originalLabel = submitButton ? submitButton.textContent : "";
+            if (submitButton) {
+              submitButton.disabled = true;
+              submitButton.textContent = "Saving…";
+            }
+            showFeedback(container, "clear", "");
+            try {
+              const response = await fetch(endpoint, {
+                method: method,
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-Requested-With": "XMLHttpRequest",
+                },
+                body: JSON.stringify(payload),
+              });
+              const data = await response.json().catch(function () {
+                return null;
+              });
+              if (!response.ok || !data || data.ok === false) {
+                const message = data && data.error ? data.error : "Unable to save changes.";
+                showFeedback(container, "error", message);
+                return;
+              }
+              handleEditableSuccess(container, data);
+            } catch (error) {
+              console.error("Failed to update field", error);
+              showFeedback(container, "error", "A network error prevented saving the update.");
+            } finally {
+              if (submitButton) {
+                submitButton.disabled = false;
+                submitButton.textContent = originalLabel;
+              }
+            }
+          });
+        });
+      }
+
+      initEditableBlocks();
 
       if (draftActSelect) {
         draftActSelect.addEventListener("change", function () {
