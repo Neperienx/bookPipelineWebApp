@@ -10,4 +10,4 @@ __pycache__/
 *$py.class
 
 instance/book_pipeline.db
-
+temp.*
