@@ -1430,16 +1430,45 @@ def create_app() -> Flask:
                     generator = None
                     try:
                         generator = _resolve_text_generator(use_api_requested)
-                        prompt = _build_outline_prompt(project, history)
                         max_tokens = get_prompt_max_new_tokens("outline_assistant")
-                        assistant_reply_raw = generator.generate_response(
-                            prompt,
-                            max_new_tokens=max_tokens,
+                        draft_prompt = _build_outline_prompt(
+                            project, history, stage="draft"
                         )
+                        draft_tokens = (
+                            max_tokens * 3 if isinstance(max_tokens, int) else None
+                        )
+                        draft_response_raw = generator.generate_response(
+                            draft_prompt,
+                            max_new_tokens=draft_tokens,
+                        ) or ""
+                        draft_response = draft_response_raw.strip()
+                        if not draft_response:
+                            raise ValueError(
+                                "The outline assistant returned an empty set of candidates."
+                            )
+
+                        refinement_prompt = _build_outline_prompt(
+                            project,
+                            history,
+                            stage="refine",
+                            outline_candidates=draft_response,
+                        )
+                        assistant_reply_raw = generator.generate_response(
+                            refinement_prompt,
+                            max_new_tokens=max_tokens,
+                        ) or ""
+                        assistant_reply = assistant_reply_raw.strip()
+                        if not assistant_reply:
+                            raise ValueError(
+                                "The outline assistant returned an empty refinement."
+                            )
                     except OpenAIAPIRateLimitError as exc:
                         error = str(exc)
                         history.pop()
                     except RuntimeError as exc:
+                        error = str(exc)
+                        history.pop()
+                    except ValueError as exc:
                         error = str(exc)
                         history.pop()
                     except Exception as exc:  # pragma: no cover - defensive
@@ -1450,7 +1479,6 @@ def create_app() -> Flask:
                         history.pop()
                     else:
                         device_type = generator.get_compute_device()
-                        assistant_reply = assistant_reply_raw or "(no reply)"
                         history.append(
                             {
                                 "role": "assistant",
@@ -1458,7 +1486,7 @@ def create_app() -> Flask:
                                 "device_type": _normalise_device_label(device_type),
                             }
                         )
-                        clean_outline = assistant_reply.strip()
+                        clean_outline = assistant_reply
                         if clean_outline and clean_outline != "(no reply)":
                             project.outline = clean_outline
                             db.session.commit()
@@ -3100,16 +3128,28 @@ def _generate_single_act_chapters(
     return formatted_text, last_entries, debug_messages, False
 
 
-def _build_outline_prompt(project: Project, history: Iterable[Dict[str, str]]) -> str:
+def _build_outline_prompt(
+    project: Project,
+    history: Iterable[Dict[str, str]],
+    *,
+    stage: str = "draft",
+    outline_candidates: str | None = None,
+) -> str:
     """Construct a prompt for the outline assistant that includes characters."""
 
     prompt_lines: List[str] = []
     prompt_config = SYSTEM_PROMPTS.get("outline_assistant")
+    system_prompt = None
+    refinement_prompt = None
     if isinstance(prompt_config, dict):
         system_prompt = prompt_config.get("prompt")
+        refinement_prompt = prompt_config.get("refinement_prompt")
     else:
         system_prompt = prompt_config
-    if system_prompt:
+
+    if stage == "refine" and refinement_prompt:
+        prompt_lines.append(f"System: {refinement_prompt}")
+    elif system_prompt:
         prompt_lines.append(f"System: {system_prompt}")
 
     overview_text = _project_overview_context(project).strip()
@@ -3126,6 +3166,12 @@ def _build_outline_prompt(project: Project, history: Iterable[Dict[str, str]]) -
         prompt_lines.append(
             "System: Reference the following character roster when crafting the outline.\n"
             f"{character_context}"
+        )
+
+    if stage == "refine" and outline_candidates:
+        prompt_lines.append(
+            "System: Evaluate and refine the candidate outlines provided below.\n"
+            f"{outline_candidates}"
         )
 
     for message in history:
