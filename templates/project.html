@@ -1110,12 +1110,42 @@
                   </div>
                 </div>
               </div>
-              <div class="d-flex align-items-center justify-content-end gap-3">
-                <div class="form-check mb-0">
-                  <input class="form-check-input" type="checkbox" value="1" id="draftUseApi" name="use_api" />
-                  <label class="form-check-label small" for="draftUseApi">API</label>
+              <div class="d-flex flex-column gap-2">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                  <div class="form-check mb-0">
+                    <input class="form-check-input" type="checkbox" value="1" id="draftUseApi" name="use_api" />
+                    <label class="form-check-label small" for="draftUseApi">API</label>
+                  </div>
+                  <div class="d-flex align-items-center gap-2">
+                    <button
+                      type="button"
+                      class="btn btn-outline-info"
+                      id="draftWriteAllButton"
+                      {% if not selected_plan %}disabled{% endif %}
+                    >
+                      Write all chapters
+                    </button>
+                    <button type="submit" class="btn btn-primary" {% if not selected_plan %}disabled{% endif %}>
+                      Draft chapter
+                    </button>
+                  </div>
                 </div>
-                <button type="submit" class="btn btn-primary" {% if not selected_plan %}disabled{% endif %}>Draft chapter</button>
+                <div class="w-100">
+                  <div id="draftWriteAllProgress" class="progress d-none" aria-hidden="true">
+                    <div
+                      class="progress-bar progress-bar-striped"
+                      id="draftWriteAllProgressBar"
+                      role="progressbar"
+                      style="width: 0%"
+                      aria-valuemin="0"
+                      aria-valuemax="100"
+                      aria-valuenow="0"
+                    >
+                      0%
+                    </div>
+                  </div>
+                  <div id="draftWriteAllStatus" class="small text-secondary mt-2 d-none" aria-live="polite"></div>
+                </div>
               </div>
             </form>
           </div>
@@ -1181,6 +1211,8 @@
         });
       });
 
+      const projectId = {{ project.id | tojson }};
+      const draftContextDefault = {{ draft_context_default | tojson }};
       const chapterPlanData = {{ act_chapter_lists | tojson }} || {};
       const outlineLookup = {{ chapter_outline_lookup | tojson }} || {};
       const draftLookup = {{ chapter_draft_lookup | tojson }} || {};
@@ -1190,6 +1222,17 @@
       const draftSavedPreview = document.getElementById("draftSavedPreview");
       const draftOutlineLabel = document.getElementById("draftOutlineLabel");
       const draftSavedLabel = document.getElementById("draftSavedLabel");
+      const draftChatForm = document.getElementById("draftChatForm");
+      const draftContextCountInput = document.getElementById("draftContextCount");
+      const draftNotesInput = document.getElementById("draftNotes");
+      const draftUseApiInput = document.getElementById("draftUseApi");
+      const draftWriteAllButton = document.getElementById("draftWriteAllButton");
+      const draftWriteAllProgress = document.getElementById("draftWriteAllProgress");
+      const draftWriteAllProgressBar = document.getElementById("draftWriteAllProgressBar");
+      const draftWriteAllStatus = document.getElementById("draftWriteAllStatus");
+      const draftMessagesContainer = document.querySelector(
+        "#draftChatPanel .chat-messages"
+      );
 
       function clearPreview(element, fallbackText) {
         if (!element) {
@@ -1295,6 +1338,295 @@
         }
       }
 
+      const writeAllStatusBaseClasses = ["small", "mt-2"];
+
+      function collectPendingChapters() {
+        const acts = [1, 2, 3];
+        const pending = [];
+        acts.forEach(function (actNumber) {
+          const chapters = chapterPlanData[String(actNumber)] || [];
+          chapters.forEach(function (chapter) {
+            const number = chapter.number;
+            if (number === undefined || number === null) {
+              return;
+            }
+            const key = String(actNumber) + "-" + String(number);
+            const draftEntry = draftLookup[key];
+            const content = draftEntry && draftEntry.content ? String(draftEntry.content).trim() : "";
+            if (!content) {
+              pending.push({
+                act: Number(actNumber),
+                number: Number(number),
+                title: chapter.title || "",
+                key: key,
+              });
+            }
+          });
+        });
+        return pending;
+      }
+
+      function toggleProgressVisibility(visible) {
+        if (!draftWriteAllProgress || !draftWriteAllProgressBar) {
+          return;
+        }
+        draftWriteAllProgress.classList.toggle("d-none", !visible);
+        draftWriteAllProgress.setAttribute("aria-hidden", visible ? "false" : "true");
+        draftWriteAllProgressBar.classList.toggle("progress-bar-animated", Boolean(visible));
+      }
+
+      function updateProgressBar(completed, total) {
+        if (!draftWriteAllProgressBar) {
+          return;
+        }
+        const safeTotal = total > 0 ? total : 1;
+        const fraction = Math.min(Math.max(completed / safeTotal, 0), 1);
+        const percent = Math.round(fraction * 100);
+        draftWriteAllProgressBar.style.width = percent + "%";
+        draftWriteAllProgressBar.setAttribute("aria-valuenow", String(percent));
+        draftWriteAllProgressBar.textContent = percent + "%";
+      }
+
+      function setWriteAllStatus(message, variant) {
+        if (!draftWriteAllStatus) {
+          return;
+        }
+        draftWriteAllStatus.className = writeAllStatusBaseClasses.join(" ");
+        if (!message) {
+          draftWriteAllStatus.classList.add("d-none");
+          draftWriteAllStatus.textContent = "";
+          return;
+        }
+        if (variant === "error") {
+          draftWriteAllStatus.classList.add("text-danger");
+        } else if (variant === "success") {
+          draftWriteAllStatus.classList.add("text-success");
+        } else {
+          draftWriteAllStatus.classList.add("text-secondary");
+        }
+        draftWriteAllStatus.textContent = message;
+        draftWriteAllStatus.classList.remove("d-none");
+      }
+
+      function appendChatMessage(role, content, deviceLabel) {
+        if (!draftMessagesContainer) {
+          return;
+        }
+        const wrapper = document.createElement("div");
+        wrapper.classList.add("message", role);
+        const heading = document.createElement("strong");
+        heading.className = "d-block mb-1 text-uppercase small";
+        heading.textContent = role;
+        wrapper.appendChild(heading);
+        const body = document.createElement("div");
+        body.textContent = content;
+        wrapper.appendChild(body);
+        if (role === "assistant" && deviceLabel) {
+          const deviceLine = document.createElement("div");
+          deviceLine.className = "message-device";
+          deviceLine.textContent = "Generated using the " + deviceLabel + " backend.";
+          wrapper.appendChild(deviceLine);
+        }
+        draftMessagesContainer.appendChild(wrapper);
+        draftMessagesContainer.scrollTop = draftMessagesContainer.scrollHeight;
+      }
+
+      function resolveContextCount() {
+        if (!draftContextCountInput) {
+          return draftContextDefault;
+        }
+        const value = draftContextCountInput.value;
+        if (value === undefined || value === null || value === "") {
+          return draftContextDefault;
+        }
+        const parsed = parseInt(value, 10);
+        if (Number.isNaN(parsed) || parsed < 0) {
+          return draftContextDefault;
+        }
+        return parsed;
+      }
+
+      async function runWriteAllChapters() {
+        if (!draftWriteAllButton) {
+          return;
+        }
+
+        const pendingChapters = collectPendingChapters();
+        if (!pendingChapters.length) {
+          setWriteAllStatus(
+            "All planned chapters already have saved drafts.",
+            "success"
+          );
+          toggleProgressVisibility(false);
+          return;
+        }
+
+        const originalStates = {
+          writeAllDisabled: draftWriteAllButton.disabled,
+          writeAllLabel: draftWriteAllButton.innerHTML,
+          actDisabled: draftActSelect ? draftActSelect.disabled : false,
+          chapterDisabled: draftChapterSelect ? draftChapterSelect.disabled : false,
+          contextDisabled: draftContextCountInput ? draftContextCountInput.disabled : false,
+          notesDisabled: draftNotesInput ? draftNotesInput.disabled : false,
+          useApiDisabled: draftUseApiInput ? draftUseApiInput.disabled : false,
+          submitDisabled:
+            draftChatForm && draftChatForm.querySelector("button[type='submit']")
+              ? draftChatForm.querySelector("button[type='submit']").disabled
+              : false,
+        };
+
+        const submitButton =
+          draftChatForm && draftChatForm.querySelector("button[type='submit']");
+
+        draftWriteAllButton.disabled = true;
+        draftWriteAllButton.textContent = "Writing…";
+        if (draftActSelect) {
+          draftActSelect.disabled = true;
+        }
+        if (draftChapterSelect) {
+          draftChapterSelect.disabled = true;
+        }
+        if (draftContextCountInput) {
+          draftContextCountInput.disabled = true;
+        }
+        if (draftNotesInput) {
+          draftNotesInput.disabled = true;
+        }
+        if (draftUseApiInput) {
+          draftUseApiInput.disabled = true;
+        }
+        if (submitButton) {
+          submitButton.disabled = true;
+        }
+
+        toggleProgressVisibility(true);
+        updateProgressBar(0, pendingChapters.length);
+        setWriteAllStatus(
+          "Preparing to write " + pendingChapters.length + " chapter(s)…",
+          "info"
+        );
+
+        const contextCount = resolveContextCount();
+        const guidance = draftNotesInput ? draftNotesInput.value.trim() : "";
+        const useApi = draftUseApiInput ? draftUseApiInput.checked : false;
+
+        let completed = 0;
+        let encounteredError = false;
+
+        for (const chapter of pendingChapters) {
+          const chapterLabel =
+            "Act " + chapter.act + ", Chapter " + chapter.number +
+            (chapter.title ? " — " + chapter.title : "");
+          setWriteAllStatus("Writing " + chapterLabel + "…", "info");
+
+          if (draftActSelect) {
+            draftActSelect.value = String(chapter.act);
+          }
+          if (draftChapterSelect) {
+            draftChapterSelect.setAttribute("data-current", String(chapter.number));
+          }
+          refreshDraftChapterOptions();
+          if (draftChapterSelect) {
+            draftChapterSelect.value = String(chapter.number);
+          }
+          updateDraftPreviews();
+
+          try {
+            const response = await fetch(
+              "/projects/" + projectId + "/draft_chapter",
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-Requested-With": "XMLHttpRequest",
+                },
+                body: JSON.stringify({
+                  act_number: chapter.act,
+                  chapter_number: chapter.number,
+                  context_count: contextCount,
+                  message: guidance,
+                  use_api: useApi,
+                }),
+              }
+            );
+
+            const payload = await response.json();
+            if (!response.ok || !payload.ok) {
+              const errorMessage = payload && payload.error ? payload.error : "Chapter drafting failed.";
+              setWriteAllStatus(errorMessage, "error");
+              encounteredError = true;
+              break;
+            }
+
+            if (payload.user_message) {
+              appendChatMessage("user", payload.user_message, "");
+            }
+            if (payload.assistant_reply) {
+              appendChatMessage(
+                "assistant",
+                payload.assistant_reply,
+                payload.device_label || ""
+              );
+            }
+
+            if (payload.draft) {
+              draftLookup[chapter.key] = Object.assign({}, payload.draft);
+            }
+
+            completed += 1;
+            updateProgressBar(completed, pendingChapters.length);
+            setWriteAllStatus(
+              "Saved " + chapterLabel + ".",
+              "success"
+            );
+            updateDraftPreviews();
+          } catch (error) {
+            console.error("Failed to draft chapter", error);
+            setWriteAllStatus(
+              "A network error interrupted the chapter drafting sequence.",
+              "error"
+            );
+            encounteredError = true;
+            break;
+          }
+        }
+
+        if (!encounteredError && completed === pendingChapters.length) {
+          setWriteAllStatus(
+            "All pending chapters have been drafted.",
+            "success"
+          );
+        }
+
+        if (draftWriteAllProgressBar) {
+          draftWriteAllProgressBar.classList.remove("progress-bar-animated");
+        }
+
+        if (draftActSelect) {
+          draftActSelect.disabled = originalStates.actDisabled;
+        }
+        if (draftChapterSelect) {
+          draftChapterSelect.disabled = originalStates.chapterDisabled;
+        }
+        if (draftContextCountInput) {
+          draftContextCountInput.disabled = originalStates.contextDisabled;
+        }
+        if (draftNotesInput) {
+          draftNotesInput.disabled = originalStates.notesDisabled;
+        }
+        if (draftUseApiInput) {
+          draftUseApiInput.disabled = originalStates.useApiDisabled;
+        }
+        if (submitButton) {
+          submitButton.disabled = originalStates.submitDisabled;
+        }
+        draftWriteAllButton.disabled = originalStates.writeAllDisabled;
+        draftWriteAllButton.innerHTML = originalStates.writeAllLabel;
+
+        refreshDraftChapterOptions();
+        updateDraftPreviews();
+      }
+
       if (draftActSelect) {
         draftActSelect.addEventListener("change", function () {
           refreshDraftChapterOptions();
@@ -1304,6 +1636,15 @@
       if (draftChapterSelect) {
         draftChapterSelect.addEventListener("change", function () {
           updateDraftPreviews();
+        });
+      }
+
+      if (draftWriteAllButton) {
+        draftWriteAllButton.addEventListener("click", function () {
+          if (draftWriteAllButton.disabled) {
+            return;
+          }
+          runWriteAllChapters();
         });
       }
 
