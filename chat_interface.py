@@ -240,6 +240,8 @@ class Character(db.Model):
     physical_description = db.Column(db.Text, nullable=True)
     character_description = db.Column(db.Text, nullable=True)
     background = db.Column(db.Text, nullable=True)
+    personality_frictions = db.Column(db.Text, nullable=True)
+    secret = db.Column(db.Text, nullable=True)
     is_supporting = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
@@ -334,6 +336,10 @@ def _ensure_character_columns() -> None:
         alterations.append("ALTER TABLE character ADD COLUMN character_description TEXT")
     if "background" not in existing_columns:
         alterations.append("ALTER TABLE character ADD COLUMN background TEXT")
+    if "personality_frictions" not in existing_columns:
+        alterations.append("ALTER TABLE character ADD COLUMN personality_frictions TEXT")
+    if "secret" not in existing_columns:
+        alterations.append("ALTER TABLE character ADD COLUMN secret TEXT")
     if "is_supporting" not in existing_columns:
         alterations.append(
             "ALTER TABLE character ADD COLUMN is_supporting BOOLEAN NOT NULL DEFAULT 0"
@@ -2751,6 +2757,12 @@ def _collect_character_context(characters: Iterable["Character"]) -> str:
             sections.append(f"Character description: {character.character_description}")
         if character.background:
             sections.append(f"Background: {character.background}")
+        if character.personality_frictions:
+            sections.append(
+                f"Potential frictions & hidden motivations: {character.personality_frictions}"
+            )
+        if character.secret:
+            sections.append(f"Secret: {character.secret}")
         if sections:
             entries.append("\n".join(sections))
 
@@ -3845,7 +3857,10 @@ def _build_character_json_prompt(
             "Do not assume any existing story outline—use only the supplied details "
             "and your own fitting inventions."
         ),
-        "Deliver exactly three sections: physical description, character description, and background.",
+        (
+            "Deliver exactly five sections: physical description, character description, background, "
+            "potential frictions & hidden motivations, and secret."
+        ),
         "Do not draft story beats, scenes, or plot progression.",
     ]
     provided_details: List[str] = []

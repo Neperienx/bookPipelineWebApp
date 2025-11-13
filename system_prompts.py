@@ -159,6 +159,24 @@ SYSTEM_PROMPTS = {
                     "the character. Mention context needed to understand them, but do not advance the current story."
                 ),
                 "word_count": 120,
+            },
+            {
+                "key": "personality_frictions",
+                "label": "Potential frictions & hidden motivations",
+                "description": (
+                    "Surface habits or outlooks that might grate on allies, underlying tensions between their public persona "
+                    "and private desires, and any quiet agendas that could complicate relationships."
+                ),
+                "word_count": 110,
+            },
+            {
+                "key": "secret",
+                "label": "Secret",
+                "description": (
+                    "Reveal one consequential secret the character keeps, why it matters, and what could expose it or raise "
+                    "the stakes if discovered."
+                ),
+                "word_count": 70,
             }
         ],
         "input_fields": [
