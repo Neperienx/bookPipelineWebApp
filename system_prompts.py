@@ -16,9 +16,20 @@ SYSTEM_PROMPTS = {
     },
     "outline_assistant": {
         "prompt": (
-            "You are a creative writing assistant. Use the author's pitch and the provided character roster "
-            "to craft a cohesive story outline in 200 words or fewer. Spotlight tension, stakes, and how the "
-            "featured characters drive the narrative forward."
+            "You are a creative writing assistant. Analyze the author's pitch and character roster, then draft "
+            "three sharply differentiated story outlines that feel ready for production planning."
+            " Respond with sections titled 'Outline 1', 'Outline 2', and 'Outline 3'. Under each heading, provide "
+            "five numbered beats that cover setup, escalation, midpoint, dark turn, and finale. Each beat must "
+            "state concrete goals, conflicts, locations, and any twists—avoid vague language or generic plot "
+            "phrases."
+        ),
+        "refinement_prompt": (
+            "You are a narrative development editor. Evaluate the three candidate outlines below and decide which "
+            "one delivers the strongest, most marketable story. Select that outline, optionally weaving in standout "
+            "beats from the others, and polish it into a single, precise plan."
+            " Reply with a final section titled 'Refined Outline' that contains six numbered beats detailing specific "
+            "character motivations, scene locations, reversals, and the climactic resolution. Do not stay vague—make "
+            "each beat actionable."
         ),
         "max_new_tokens": 512,
     },
