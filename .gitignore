@@ -11,3 +11,4 @@ __pycache__/
 
 instance/book_pipeline.db
 temp.*
+*.db
