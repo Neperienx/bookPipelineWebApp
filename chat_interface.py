@@ -557,7 +557,9 @@ def _project_overview_context(project: Project) -> str:
     return "\n".join(lines).strip()
 
 
-def _build_project_overview_prompt(form_data: Mapping[str, Any]) -> str:
+def _build_project_overview_prompt(
+    form_data: Mapping[str, Any], project: "Project" | None = None
+) -> str:
     """Construct the prompt sent to the model to generate the seed prompt."""
 
     config = SYSTEM_PROMPTS.get("project_overview", {})
@@ -609,6 +611,17 @@ def _build_project_overview_prompt(form_data: Mapping[str, Any]) -> str:
         },
     }
 
+    character_payload = (
+        _collect_project_overview_characters(project) if project is not None else {}
+    )
+    if character_payload:
+        payload["characters"] = character_payload
+
+    if project is not None:
+        roster_summary = _build_character_roster(project).strip()
+        if roster_summary and not roster_summary.startswith("No character"):
+            payload["character_roster_summary"] = roster_summary
+
     input_block = json.dumps(payload, ensure_ascii=False, indent=2)
 
     if instruction_template:
@@ -628,6 +641,62 @@ def _build_project_overview_prompt(form_data: Mapping[str, Any]) -> str:
     prompt_parts.append(user_body.strip())
     prompt_parts.append("Assistant:")
     return "\n".join(prompt_parts)
+
+
+def _collect_project_overview_characters(project: "Project") -> Dict[str, List[Dict[str, str]]]:
+    """Return structured main and supporting character details for prompting."""
+
+    main_entries: List[Dict[str, str]] = []
+    supporting_entries: List[Dict[str, str]] = []
+
+    for character in project.characters:
+        details: Dict[str, str] = {}
+
+        name = (character.name or "").strip()
+        if name:
+            details["name"] = name
+
+        role_in_story = (character.role_in_story or "").strip()
+        if role_in_story:
+            details["role_in_story"] = role_in_story
+
+        physical_description = (character.physical_description or "").strip()
+        if physical_description:
+            details["physical_description"] = physical_description
+
+        character_description = (character.character_description or "").strip()
+        if character_description:
+            details["character_description"] = character_description
+
+        background = (character.background or "").strip()
+        if background:
+            details["background"] = background
+
+        frictions = (character.personality_frictions or "").strip()
+        if frictions:
+            details["personality_frictions"] = frictions
+
+        secret = (character.secret or "").strip()
+        if secret:
+            details["secret"] = secret
+
+        if not details:
+            continue
+
+        details["is_supporting"] = bool(character.is_supporting)
+
+        if character.is_supporting:
+            supporting_entries.append(details)
+        else:
+            main_entries.append(details)
+
+    payload: Dict[str, List[Dict[str, str]]] = {}
+    if main_entries:
+        payload["main_characters"] = main_entries
+    if supporting_entries:
+        payload["supporting_characters"] = supporting_entries
+
+    return payload
 
 
 def _parse_overview_form_submission(
@@ -1050,7 +1119,7 @@ def create_app() -> Flask:
                             generator, fallback_notice = _resolve_text_generator_with_fallback(
                                 use_api_requested
                             )
-                            prompt = _build_project_overview_prompt(form_state)
+                            prompt = _build_project_overview_prompt(form_state, project)
                             max_tokens = get_prompt_max_new_tokens(
                                 "project_overview", fallback=512
                             )
