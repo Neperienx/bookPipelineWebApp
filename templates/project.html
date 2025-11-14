@@ -514,7 +514,7 @@
                           <div class="act-outline-box">
                             <div class="fw-semibold text-info mb-2 text-uppercase small">{{ section.title }}</div>
                             <div class="d-flex flex-column gap-2">
-                              {% for item in section.items %}
+                              {% for item in section["items"] %}
                                 <div>
                                   <div class="fw-semibold small text-light">{{ item.label }}</div>
                                   {% if item.type == 'list' %}
