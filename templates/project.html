@@ -225,6 +225,8 @@
     <a href="{{ url_for('dashboard') }}" class="btn btn-outline-light btn-sm">Back to dashboard</a>
   </div>
   {% set overview_pending = not project_overview_summary %}
+  {% set overview_active = overview_force_active or overview_pending %}
+  {% set outline_active = not overview_active %}
   <div class="row g-4 align-items-start">
     <div class="col-xl-3">
       <div class="card h-100">
@@ -252,12 +254,12 @@
               </p>
             </button>
             <button
-              class="overview-tile{% if overview_pending %} active{% endif %}"
+              class="overview-tile{% if overview_active %} active{% endif %}"
               type="button"
               data-target="overviewPanel"
               data-chat-target="overviewChatPanel"
               aria-controls="overviewPanel"
-              aria-selected="{{ 'true' if overview_pending else 'false' }}"
+              aria-selected="{{ 'true' if overview_active else 'false' }}"
             >
               <h2 class="h6 mb-1">Seed prompt</h2>
               <p>
@@ -269,12 +271,12 @@
               </p>
             </button>
             <button
-              class="overview-tile{% if not overview_pending %} active{% endif %}"
+              class="overview-tile{% if outline_active %} active{% endif %}"
               type="button"
               data-target="outlinePanel"
               data-chat-target="outlineChatPanel"
               aria-controls="outlinePanel"
-              aria-selected="{{ 'true' if not overview_pending else 'false' }}"
+              aria-selected="{{ 'true' if outline_active else 'false' }}"
             >
               <h2 class="h6 mb-1">Outline</h2>
               <p>{% if project.outline %}View the latest story outline.{% else %}Create a story outline with the assistant.{% endif %}</p>
@@ -463,7 +465,7 @@
                     {% endif %}
                   </div>
                 </div>
-                <div class="tile-detail{% if overview_pending %} active{% endif %}" id="overviewPanel" role="tabpanel">
+                <div class="tile-detail{% if overview_active %} active{% endif %}" id="overviewPanel" role="tabpanel">
                   {% if overview_success %}
                     <div class="alert alert-success" role="alert">{{ overview_success }}</div>
                   {% endif %}
@@ -545,7 +547,7 @@
                     {% endif %}
                   </div>
                 </div>
-                <div class="tile-detail{% if not overview_pending %} active{% endif %}" id="outlinePanel" role="tabpanel">
+                <div class="tile-detail{% if outline_active %} active{% endif %}" id="outlinePanel" role="tabpanel">
                   {% if success %}
                     <div class="alert alert-success" role="alert">{{ success }}</div>
                   {% endif %}
@@ -1065,7 +1067,7 @@
             </div>
             <div class="col-12 col-lg-6">
               <div class="chat-column">
-                <div id="overviewChatPanel" class="chat-panel{% if overview_pending %} active{% endif %}" role="tabpanel" aria-labelledby="overviewPanel">
+                <div id="overviewChatPanel" class="chat-panel{% if overview_active %} active{% endif %}" role="tabpanel" aria-labelledby="overviewPanel">
                   <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
                     <div>
                       <h2 class="h5 mb-1">Seed prompt builder</h2>
@@ -1088,22 +1090,31 @@
                       <div>
                         <label for="overviewPitch" class="form-label">User pitch</label>
                         <textarea
-                          class="form-control"
+                          class="form-control{% if overview_field_errors.get('pitch') %} is-invalid{% endif %}"
                           id="overviewPitch"
                           name="pitch"
                           rows="4"
                           placeholder="Describe the core idea, character, or situation in your own words."
-                          required
                         >{{ overview_form.pitch }}</textarea>
+                        {% if overview_field_errors.get('pitch') %}
+                          <div class="invalid-feedback">{{ overview_field_errors.get('pitch') }}</div>
+                        {% endif %}
                       </div>
                       <div>
                         <label for="overviewGenre" class="form-label">Genre</label>
-                        <select class="form-select" id="overviewGenre" name="genre" required>
+                        <select
+                          class="form-select{% if overview_field_errors.get('genre') %} is-invalid{% endif %}"
+                          id="overviewGenre"
+                          name="genre"
+                        >
                           <option value="">Select a genre</option>
                           {% for option in genre_options %}
                             <option value="{{ option }}" {% if overview_form.genre == option %}selected{% endif %}>{{ option }}</option>
                           {% endfor %}
                         </select>
+                        {% if overview_field_errors.get('genre') %}
+                          <div class="invalid-feedback">{{ overview_field_errors.get('genre') }}</div>
+                        {% endif %}
                       </div>
                       <div>
                         <span class="form-label d-block mb-2">Tone &amp; mood</span>
@@ -1111,17 +1122,19 @@
                           {% for option in tone_options %}
                             <div class="form-check">
                               <input
-                                class="form-check-input"
+                                class="form-check-input{% if overview_field_errors.get('tone') %} is-invalid{% endif %}"
                                 type="checkbox"
                                 id="overviewTone{{ loop.index }}"
                                 name="tone"
                                 value="{{ option }}"
                                 {% if option in overview_form.tone %}checked{% endif %}
-                                {% if loop.first %}required{% endif %}
                               />
                               <label class="form-check-label" for="overviewTone{{ loop.index }}">{{ option }}</label>
                             </div>
                           {% endfor %}
+                          {% if overview_field_errors.get('tone') %}
+                            <div class="invalid-feedback d-block">{{ overview_field_errors.get('tone') }}</div>
+                          {% endif %}
                         </div>
                       </div>
                     </div>
@@ -1284,7 +1297,7 @@
                     </div>
                   </div>
                 </div>
-                <div id="outlineChatPanel" class="chat-panel{% if not overview_pending %} active{% endif %}" role="tabpanel" aria-labelledby="outlinePanel">
+                <div id="outlineChatPanel" class="chat-panel{% if outline_active %} active{% endif %}" role="tabpanel" aria-labelledby="outlinePanel">
             <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
               <div>
                 <h2 class="h5 mb-1">Outline assistant</h2>

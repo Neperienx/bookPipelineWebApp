@@ -228,6 +228,42 @@ def _resolve_text_generator(use_api: bool) -> TextGenerator | OpenAIUnifiedGener
     return _get_generator()
 
 
+def _resolve_text_generator_with_fallback(
+    use_api: bool,
+) -> Tuple[TextGenerator | OpenAIUnifiedGenerator, Optional[str]]:
+    """Return a text generator, falling back to the alternate backend if needed."""
+
+    attempts: List[Tuple[bool, Exception]] = []
+    for backend_choice in (use_api, not use_api):
+        try:
+            generator = _resolve_text_generator(backend_choice)
+        except RuntimeError as exc:
+            attempts.append((backend_choice, exc))
+            continue
+
+        fallback_notice: Optional[str] = None
+        if backend_choice != use_api:
+            fallback_notice = (
+                "Switched to the "
+                f"{'API' if backend_choice else 'local model'} backend because the "
+                f"{'API' if use_api else 'local model'} is unavailable."
+            )
+        return generator, fallback_notice
+
+    primary_label = "API" if use_api else "local model"
+    fallback_label = "local model" if use_api else "API"
+    detail_messages = " ".join(
+        f"{'API' if choice else 'Local model'} backend error: {exc}" for choice, exc in attempts
+    )
+    message = (
+        "No text generation backend is available. "
+        f"Configure the {primary_label} or {fallback_label} backend and try again."
+    )
+    if detail_messages:
+        message = f"{message} {detail_messages}"
+    raise RuntimeError(message)
+
+
 def _is_api_requested(data: Mapping[str, Any]) -> bool:
     """Return True when the submitted form asks to use the API backend."""
 
@@ -596,11 +632,12 @@ def _build_project_overview_prompt(form_data: Mapping[str, Any]) -> str:
 
 def _parse_overview_form_submission(
     form: Mapping[str, Any]
-) -> Tuple[Dict[str, Any], List[str]]:
+) -> Tuple[Dict[str, Any], List[str], Dict[str, str]]:
     """Parse and validate the submitted seed prompt form."""
 
     state = _default_overview_form_state()
     errors: List[str] = []
+    field_errors: Dict[str, str] = {}
 
     def _get_list(field: str) -> List[str]:
         getter = getattr(form, "getlist", None)
@@ -615,15 +652,21 @@ def _parse_overview_form_submission(
 
     state["genre"] = _clean_single_choice(form.get("genre"), _PROJECT_GENRE_OPTIONS)
     if not state["genre"]:
-        errors.append("Please choose a primary genre.")
+        message = "Please choose a primary genre."
+        errors.append(message)
+        field_errors["genre"] = message
 
     state["pitch"] = str(form.get("pitch", "")).strip()
     if not state["pitch"]:
-        errors.append("Please provide a short user pitch.")
+        message = "Please provide a short user pitch."
+        errors.append(message)
+        field_errors["pitch"] = message
 
     state["tone"] = _clean_multi_choice(_get_list("tone"), _PROJECT_TONE_OPTIONS)
     if not state["tone"]:
-        errors.append("Select at least one tone or mood.")
+        message = "Select at least one tone or mood."
+        errors.append(message)
+        field_errors["tone"] = message
 
     state["themes"] = _split_overview_list(form.get("themes"))
     state["stakes_level"] = _clean_stakes_level(form.get("stakes_level"))
@@ -644,7 +687,7 @@ def _parse_overview_form_submission(
         form.get("world_realism"), _PROJECT_REALISM_OPTIONS
     )
 
-    return state, errors
+    return state, errors, field_errors
 
 
 _CHAPTER_HEADER_PATTERN = re.compile(
@@ -957,6 +1000,8 @@ def create_app() -> Flask:
         overview_error = None
         overview_success = None
         overview_form_state = _load_project_overview_form(project)
+        overview_field_errors: Dict[str, str] = {}
+        overview_force_active = False
 
         if request.method == "POST":
             chat_type = request.form.get("chat_type", "outline")
@@ -979,6 +1024,7 @@ def create_app() -> Flask:
             use_api_requested = _is_api_requested(request.form)
             user_message = request.form.get("message", "").strip()
             if chat_type == "overview":
+                overview_force_active = True
                 clear_requested = "clear_overview" in request.form
                 if clear_requested:
                     project.project_overview = None
@@ -986,15 +1032,24 @@ def create_app() -> Flask:
                     db.session.commit()
                     overview_success = "Seed prompt cleared."
                     overview_form_state = _default_overview_form_state()
+                    overview_field_errors = {}
                 else:
-                    form_state, errors = _parse_overview_form_submission(request.form)
+                    (
+                        form_state,
+                        errors,
+                        field_errors,
+                    ) = _parse_overview_form_submission(request.form)
                     overview_form_state = form_state
+                    overview_field_errors = field_errors
                     if errors:
                         overview_error = "; ".join(errors)
                     else:
                         generator: TextGenerator | OpenAIUnifiedGenerator | None = None
+                        fallback_notice: Optional[str] = None
                         try:
-                            generator = _resolve_text_generator(use_api_requested)
+                            generator, fallback_notice = _resolve_text_generator_with_fallback(
+                                use_api_requested
+                            )
                             prompt = _build_project_overview_prompt(form_state)
                             max_tokens = get_prompt_max_new_tokens(
                                 "project_overview", fallback=512
@@ -1021,15 +1076,21 @@ def create_app() -> Flask:
                             )
                         else:
                             device_type = generator.get_compute_device() if generator else None
-                            device_sentence = _device_usage_sentence(device_type)
+                            device_sentence = _device_usage_sentence(device_type).strip()
                             summary_clean = _normalise_whitespace(summary)
                             project.project_overview = summary_clean
                             project.project_overview_data = json.dumps(
                                 form_state, ensure_ascii=False
                             )
                             db.session.commit()
-                            overview_success = f"Seed prompt updated.{device_sentence}"
+                            success_parts = ["Seed prompt updated."]
+                            if device_sentence:
+                                success_parts.append(device_sentence)
+                            if fallback_notice:
+                                success_parts.append(fallback_notice.strip())
+                            overview_success = " ".join(success_parts)
                             overview_form_state = _load_project_overview_form(project)
+                            overview_field_errors = {}
             elif chat_type == "acts":
                 if user_message:
                     act_history.append({"role": "user", "content": user_message})
@@ -1605,6 +1666,8 @@ def create_app() -> Flask:
             overview_form=overview_form_state,
             overview_sections=overview_sections,
             project_overview_summary=project_overview_summary,
+            overview_field_errors=overview_field_errors,
+            overview_force_active=overview_force_active,
             genre_options=_PROJECT_GENRE_OPTIONS,
             tone_options=_PROJECT_TONE_OPTIONS,
             audience_options=_PROJECT_AUDIENCE_OPTIONS,
