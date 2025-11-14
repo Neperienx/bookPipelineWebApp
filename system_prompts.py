@@ -342,56 +342,57 @@ SYSTEM_PROMPTS = {
             "When asked to create a character, limit your response to the requested profile fields. "
             "Do not begin plotting scenes or story beats—deliver only the character details."
         ),
-        "json_format_rules": (
-            "Respond exclusively with a single valid JSON object that follows the provided schema. "
-            "Use double quotes for all keys and string values, avoid trailing commas, and do not wrap the JSON "
-            "in Markdown code fences or add any explanatory prose before or after it."
+        "profile_format_instructions": (
+            "Respond with a single, publication-ready character dossier written in natural paragraphs. "
+            "Use Markdown-style headings for each required section, keep the prose vivid but concise, and do not return JSON, "
+            "bullet lists, or conversational framing."
         ),
         "fields": [
             {
-                "key": "physical_description",
-                "label": "Physical description",
+                "key": "profile_text",
+                "label": "Full character profile",
                 "description": (
-                    "Detail the character's immediate physical impression—age cues, build, posture, distinguishing features, "
-                    "and signature clothing or accessories—in concrete, sensory language."
+                    "A cohesive character dossier that another assistant can reference directly. It should stand alone without "
+                    "additional context and cover identity, presence, personality, history, conflicts, secrets, and current goals."
                 ),
-                "word_count": 80,
-            },
-            {
-                "key": "character_description",
-                "label": "Character description",
-                "description": (
-                    "Capture temperament, core motivations, notable skills, and interpersonal style without outlining plot "
-                    "events or future scenes. Keep the focus on who they are in daily life."
-                ),
-                "word_count": 110,
-            },
-            {
-                "key": "background",
-                "label": "Background",
-                "description": (
-                    "Provide a concise history that explains formative experiences, relationships, and turning points shaping "
-                    "the character. Mention context needed to understand them, but do not advance the current story."
-                ),
-                "word_count": 120,
-            },
-            {
-                "key": "personality_frictions",
-                "label": "Potential frictions & hidden motivations",
-                "description": (
-                    "Surface habits or outlooks that might grate on allies, underlying tensions between their public persona "
-                    "and private desires, and any quiet agendas that could complicate relationships."
-                ),
-                "word_count": 110,
-            },
-            {
-                "key": "secret",
-                "label": "Secret",
-                "description": (
-                    "Reveal one consequential secret the character keeps, why it matters, and what could expose it or raise "
-                    "the stakes if discovered."
-                ),
-                "word_count": 70,
+                "sections": [
+                    {
+                        "title": "Identity Snapshot",
+                        "description": (
+                            "Summarise name, age, pronouns, cultural background, occupation or social role, and how others would introduce them."
+                        ),
+                    },
+                    {
+                        "title": "Physical Presence",
+                        "description": (
+                            "Describe posture, build, notable features, style, and any sensory cues that define their appearance."
+                        ),
+                    },
+                    {
+                        "title": "Personality & Drives",
+                        "description": (
+                            "Capture temperament, core motivations, values, fears, skills, and the way they interact with others."
+                        ),
+                    },
+                    {
+                        "title": "History & Relationships",
+                        "description": (
+                            "Highlight formative experiences, key relationships, and turning points that shape who they are today."
+                        ),
+                    },
+                    {
+                        "title": "Conflicts & Secrets",
+                        "description": (
+                            "Explain internal tensions, habits that cause friction, hidden agendas, and any consequential secrets."
+                        ),
+                    },
+                    {
+                        "title": "Current Objectives",
+                        "description": (
+                            "State what they are actively pursuing in the story right now and what is at stake if they fail."
+                        ),
+                    },
+                ],
             }
         ],
         "input_fields": [

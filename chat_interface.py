@@ -660,25 +660,29 @@ def _collect_project_overview_characters(project: "Project") -> Dict[str, List[D
         if role_in_story:
             details["role_in_story"] = role_in_story
 
-        physical_description = (character.physical_description or "").strip()
-        if physical_description:
-            details["physical_description"] = physical_description
+        profile_text = (character.profile_text or "").strip()
+        if profile_text:
+            details["profile_text"] = profile_text
+        else:
+            physical_description = (character.physical_description or "").strip()
+            if physical_description:
+                details["physical_description"] = physical_description
 
-        character_description = (character.character_description or "").strip()
-        if character_description:
-            details["character_description"] = character_description
+            character_description = (character.character_description or "").strip()
+            if character_description:
+                details["character_description"] = character_description
 
-        background = (character.background or "").strip()
-        if background:
-            details["background"] = background
+            background = (character.background or "").strip()
+            if background:
+                details["background"] = background
 
-        frictions = (character.personality_frictions or "").strip()
-        if frictions:
-            details["personality_frictions"] = frictions
+            frictions = (character.personality_frictions or "").strip()
+            if frictions:
+                details["personality_frictions"] = frictions
 
-        secret = (character.secret or "").strip()
-        if secret:
-            details["secret"] = secret
+            secret = (character.secret or "").strip()
+            if secret:
+                details["secret"] = secret
 
         if not details:
             continue
@@ -827,6 +831,7 @@ class Character(db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=False)
     name = db.Column(db.String(160), nullable=True)
     role_in_story = db.Column(db.String(160), nullable=True)
+    profile_text = db.Column(db.Text, nullable=True)
     physical_description = db.Column(db.Text, nullable=True)
     character_description = db.Column(db.Text, nullable=True)
     background = db.Column(db.Text, nullable=True)
@@ -918,6 +923,8 @@ def _ensure_character_columns() -> None:
         return
 
     alterations: List[str] = []
+    if "profile_text" not in existing_columns:
+        alterations.append("ALTER TABLE character ADD COLUMN profile_text TEXT")
     if "role_in_story" not in existing_columns:
         alterations.append("ALTER TABLE character ADD COLUMN role_in_story VARCHAR(160)")
     if "physical_description" not in existing_columns:
@@ -2016,6 +2023,9 @@ def create_app() -> Flask:
         if "role_in_story" in payload:
             character.role_in_story = _clean(payload.get("role_in_story")) or None
 
+        if "profile_text" in payload:
+            character.profile_text = _clean(payload.get("profile_text")) or None
+
         if "character_description" in payload:
             character.character_description = (
                 _clean(payload.get("character_description")) or None
@@ -2038,6 +2048,7 @@ def create_app() -> Flask:
                     "id": character.id,
                     "name": character.name or "",
                     "role_in_story": character.role_in_story or "",
+                    "profile_text": character.profile_text or "",
                     "character_description": character.character_description or "",
                     "is_supporting": bool(character.is_supporting),
                 },
@@ -2389,13 +2400,13 @@ def create_app() -> Flask:
             "base",
             "You are a writing assistant and we want to create a character.",
         )
-        json_rules = config.get("json_format_rules", "")
+        format_rules = config.get("profile_format_instructions", "")
 
         try:
             profile_data, sections, assistant_reply = _run_character_profile_generation(
                 generator,
                 base_prompt,
-                json_rules,
+                format_rules,
                 character_fields,
                 prompt_inputs,
                 input_fields,
@@ -3516,18 +3527,23 @@ def _collect_character_context(characters: Iterable["Character"]) -> str:
             sections.append(f"Name: {character.name}")
         if character.role_in_story:
             sections.append(f"Role in story: {character.role_in_story}")
-        if character.physical_description:
-            sections.append(f"Physical description: {character.physical_description}")
-        if character.character_description:
-            sections.append(f"Character description: {character.character_description}")
-        if character.background:
-            sections.append(f"Background: {character.background}")
-        if character.personality_frictions:
-            sections.append(
-                f"Potential frictions & hidden motivations: {character.personality_frictions}"
-            )
-        if character.secret:
-            sections.append(f"Secret: {character.secret}")
+        profile_text = (character.profile_text or "").strip()
+        if profile_text:
+            sections.append(profile_text)
+        else:
+            if character.physical_description:
+                sections.append(f"Physical description: {character.physical_description}")
+            if character.character_description:
+                sections.append(f"Character description: {character.character_description}")
+            if character.background:
+                sections.append(f"Background: {character.background}")
+            if character.personality_frictions:
+                sections.append(
+                    "Potential frictions & hidden motivations: "
+                    f"{character.personality_frictions}"
+                )
+            if character.secret:
+                sections.append(f"Secret: {character.secret}")
         if sections:
             entries.append("\n".join(sections))
 
@@ -4574,7 +4590,7 @@ def _apply_concept_definitions(
 def _run_character_profile_generation(
     generator: TextGenerator,
     base_prompt: str,
-    json_rules: str,
+    format_rules: str,
     character_fields: Iterable[Dict[str, Any]],
     user_inputs: Dict[str, str],
     input_fields: Iterable[Dict[str, Any]],
@@ -4582,9 +4598,9 @@ def _run_character_profile_generation(
     """Generate a complete character profile and return structured results."""
 
     fields = list(character_fields)
-    prompt = _build_character_json_prompt(
+    prompt = _build_character_profile_prompt(
         base_prompt,
-        json_rules,
+        format_rules,
         fields,
         user_inputs,
         list(input_fields),
@@ -4594,79 +4610,67 @@ def _run_character_profile_generation(
         prompt,
         max_new_tokens=max_tokens,
     ) or ""
-    profile_data = _parse_character_json(response, fields)
+    profile_text = _parse_character_profile_text(response)
 
     sections: List[Dict[str, str]] = []
     for field in fields:
         key = field["key"]
-        content = profile_data.get(key, "").strip()
+        label = field.get("label", key)
         sections.append(
             {
                 "key": key,
-                "label": field.get("label", key),
-                "content": content,
+                "label": label,
+                "content": profile_text,
             }
         )
 
-    assistant_reply = "\n\n".join(
-        f"{section['label']}:\n{section['content'] or '(no response)'}"
-        for section in sections
-    ).strip()
+    profile_data = {section["key"]: section["content"] for section in sections}
+    assistant_reply = profile_text
 
     return profile_data, sections, assistant_reply
 
 
-def _build_character_json_prompt(
+def _build_character_profile_prompt(
     base_prompt: str,
-    json_rules: str,
+    format_rules: str,
     character_fields: Iterable[Dict[str, Any]],
     user_inputs: Dict[str, str],
     input_fields: Iterable[Dict[str, Any]],
 ) -> str:
-    """Construct a prompt that enforces JSON output for the character profile."""
+    """Construct a prompt that asks for a cohesive prose character profile."""
 
     fields = list(character_fields)
-    expected_keys = ", ".join(
-        f'"{field["key"]}"' for field in fields
-    )
-    template_lines = [
-        f'  "{field["key"]}": ""' for field in fields
-    ]
-    json_template = "{\n" + ",\n".join(template_lines) + "\n}"
-
-    field_guidance_lines = [
-        f'- "{field["key"]}" ({field.get("label", field["key"])}): {field.get("description", "")}'
-        for field in fields
-    ]
+    sections: List[Dict[str, str]] = []
+    for field in fields:
+        if field.get("key") != "profile_text":
+            continue
+        raw_sections = field.get("sections")
+        if isinstance(raw_sections, list):
+            for entry in raw_sections:
+                if not isinstance(entry, dict):
+                    continue
+                title = str(entry.get("title", "")).strip()
+                description = str(entry.get("description", "")).strip()
+                if not title:
+                    continue
+                sections.append({"title": title, "description": description})
 
     system_parts: List[str] = []
     if base_prompt.strip():
         system_parts.append(base_prompt.strip())
-    if json_rules.strip():
-        system_parts.append(json_rules.strip())
+    if format_rules.strip():
+        system_parts.append(format_rules.strip())
 
-    system_parts.extend(
-        [
-            "Follow these rules exactly:",
-            (
-                "1. Respond exclusively with a single valid JSON object using double quotes and no "
-                "trailing commas."
-            ),
-            (
-                "2. Include exactly these keys in the root object and populate each one: "
-                f"{expected_keys}."
-            ),
-            "3. Do not include Markdown fences, code blocks, or commentary outside the JSON.",
-            (
-                "4. Keep each field within its suggested word count, using vivid but concise prose that avoids "
-                "story scenes or plot advancement."
-            ),
-            "\nJSON schema template:",
-            json_template,
-            "\nGuidance for each field:",
-            *field_guidance_lines,
-        ]
-    )
+    if sections:
+        system_parts.extend(
+            [
+                "Structure the dossier using the following sections and headings in this order:",
+                *[
+                    f"- {section['title']}: {section['description']}".rstrip()
+                    for section in sections
+                ],
+            ]
+        )
 
     user_lines: List[str] = [
         (
@@ -4674,12 +4678,9 @@ def _build_character_json_prompt(
             "Do not assume any existing story outline—use only the supplied details "
             "and your own fitting inventions."
         ),
-        (
-            "Deliver exactly five sections: physical description, character description, background, "
-            "potential frictions & hidden motivations, and secret."
-        ),
         "Do not draft story beats, scenes, or plot progression.",
     ]
+
     provided_details: List[str] = []
     for field in input_fields:
         key = field.get("key")
@@ -4693,14 +4694,12 @@ def _build_character_json_prompt(
         user_lines.append("Character details supplied by the author:")
         user_lines.extend(provided_details)
         user_lines.append(
-            "Incorporate every provided detail. Invent any missing aspects so the outline feels cohesive."
+            "Incorporate every provided detail. Invent any missing aspects so the profile feels cohesive."
         )
     else:
         user_lines.append(
             "No specific character details were supplied. Invent fitting information that supports the story."
         )
-
-    user_lines.append("Return only the JSON object and nothing else.")
 
     prompt_lines: List[str] = ["System: " + "\n".join(system_parts)]
     prompt_lines.append("User: " + "\n".join(user_lines))
@@ -4708,51 +4707,16 @@ def _build_character_json_prompt(
     return "\n".join(prompt_lines)
 
 
-def _parse_character_json(
-    raw_response: str,
-    character_fields: Iterable[Dict[str, Any]],
-) -> Dict[str, str]:
-    """Parse and validate the JSON response from the assistant."""
+def _parse_character_profile_text(raw_response: str) -> str:
+    """Normalise the assistant response for storage."""
 
-    fields = list(character_fields)
-    cleaned = _strip_json_code_fences(raw_response)
-    json_block = _extract_json_object(cleaned)
-    if not json_block:
+    cleaned = raw_response.strip()
+    cleaned = re.sub(r"^assistant:\s*", "", cleaned, flags=re.IGNORECASE)
+    if not cleaned:
         raise ValueError(
-            "The assistant response did not contain the expected JSON object. Please try again."
+            "The assistant did not provide a character profile. Please try again."
         )
-
-    try:
-        payload = json.loads(json_block)
-    except json.JSONDecodeError as exc:
-        raise ValueError(
-            "The assistant returned invalid JSON. Please try again."
-        ) from exc
-
-    if not isinstance(payload, dict):
-        raise ValueError(
-            "The assistant response was not a JSON object. Please try again."
-        )
-
-    parsed: Dict[str, str] = {}
-    expected_keys = [field["key"] for field in fields]
-    missing = [key for key in expected_keys if key not in payload]
-    if missing:
-        raise ValueError(
-            "The assistant response was missing required fields. Please try again."
-        )
-
-    for key in expected_keys:
-        value = payload.get(key, "")
-        if isinstance(value, (dict, list)):
-            value_text = json.dumps(value, ensure_ascii=False)
-        elif value is None:
-            value_text = ""
-        else:
-            value_text = str(value)
-        parsed[key] = value_text.strip()
-
-    return parsed
+    return cleaned
 
 
 def _parse_plain_concept_analysis(text: str) -> List[Dict[str, str]]:
@@ -4954,10 +4918,23 @@ def _apply_character_profile(
     """Persist the generated character profile to the database model."""
 
     fields = list(character_fields)
+    applied_keys: set[str] = set()
     for field in fields:
         key = field["key"]
-        value = profile_data.get(key, "").strip()
+        raw_value = profile_data.get(key, "")
+        if raw_value is None:
+            value = ""
+        else:
+            value = str(raw_value).strip()
         setattr(character, key, value or None)
+        applied_keys.add(key)
+
+    if "profile_text" in applied_keys:
+        character.physical_description = None
+        character.character_description = None
+        character.background = None
+        character.personality_frictions = None
+        character.secret = None
 
 
 def _normalise_device_label(device_type: str | None) -> str:
