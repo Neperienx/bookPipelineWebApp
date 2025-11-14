@@ -1575,8 +1575,20 @@ def create_app() -> Flask:
                         session.modified = True
                 session.modified = True
             else:
-                if user_message:
-                    history.append({"role": "user", "content": user_message})
+                message_content = user_message
+                if not message_content:
+                    overview_context = _project_overview_context(project).strip()
+                    if overview_context:
+                        message_content = (
+                            "Generate a complete outline from the stored project seed prompt."
+                        )
+                    else:
+                        error = (
+                            "Please share a note or define a seed prompt before generating the outline."
+                        )
+
+                if not error:
+                    history.append({"role": "user", "content": message_content})
                     generator = None
                     try:
                         generator = _resolve_text_generator(use_api_requested)
@@ -1646,8 +1658,6 @@ def create_app() -> Flask:
                                 f"{success_suffix}"
                             )
                     session.modified = True
-                else:
-                    error = "Please enter a message before sending."
 
         main_characters = [
             character for character in project.characters if not character.is_supporting
