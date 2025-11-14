@@ -4,7 +4,7 @@ from __future__ import annotations
 
 SYSTEM_PROMPTS = {
     "project_overview": {
-        "max_new_tokens": 1024,
+        "max_new_tokens": 2024,
         "base": (
             "You are a professional story concept developer. Your task is to take a user's "
             "vague or partial story idea plus structured metadata and expand it into a fully-"
