@@ -96,22 +96,6 @@ _OPENAI_CONFIG_PATH = Path(__file__).resolve().parent / "openai_config.json"
 # Default number of previous chapters to reference when drafting new prose.
 _DEFAULT_DRAFT_CONTEXT_COUNT = 2
 
-# Questionnaire options for the project overview workflow.
-_PROJECT_BOOK_TYPES = [
-    "Fiction",
-    "Nonfiction",
-    "Hybrid (e.g., fictionalized memoir)",
-]
-
-_PROJECT_PURPOSE_OPTIONS = [
-    "Entertain",
-    "Explore themes",
-    "Provide knowledge",
-    "Inspire",
-    "Persuade",
-    "Other",
-]
-
 _PROJECT_GENRE_OPTIONS = [
     "Fantasy",
     "Science Fiction",
@@ -124,15 +108,6 @@ _PROJECT_GENRE_OPTIONS = [
     "Young Adult",
     "Children's",
     "Nonfiction categories (Business, Self-help, Memoir, Tech, etc.)",
-]
-
-_PROJECT_TARGET_AUDIENCE_OPTIONS = [
-    "Adults",
-    "Young Adults",
-    "Middle Grade",
-    "Children",
-    "Professionals (for nonfiction)",
-    "General audience",
 ]
 
 _PROJECT_TONE_OPTIONS = [
@@ -151,14 +126,43 @@ _PROJECT_TONE_OPTIONS = [
     "Atmospheric",
 ]
 
-_PROJECT_NARRATIVE_STYLE_OPTIONS = [
+# Questionnaire options for the seed prompt metadata workflow.
+_PROJECT_AUDIENCE_OPTIONS = [
+    "Adults",
+    "Young Adults",
+    "Middle Grade",
+    "Children",
+    "Professionals (for nonfiction)",
+    "General audience",
+]
+
+_PROJECT_PACE_OPTIONS = [
     "Fast-paced",
-    "Slow & descriptive",
-    "Poetic & lyrical",
-    "Minimalist / dry",
-    "Character-driven",
-    "Plot-driven",
-    "Dialogue-heavy",
+    "Balanced / moderate",
+    "Deliberate slow burn",
+]
+
+_PROJECT_POV_OPTIONS = [
+    "First-person limited",
+    "Third-person limited",
+    "Third-person omniscient",
+    "Dual POV",
+    "Multiple POV ensemble",
+]
+
+_PROJECT_TIME_STRUCTURE_OPTIONS = [
+    "Linear chronology",
+    "Dual timeline",
+    "Non-linear / fractured",
+    "Framed by flashbacks",
+]
+
+_PROJECT_REALISM_OPTIONS = [
+    "Strictly realistic",
+    "Grounded with slight speculative elements",
+    "Low fantasy / soft sci-fi",
+    "High fantasy / far-future sci-fi",
+    "Mythic or surreal",
 ]
 
 # Pattern used to split optional free-text lists (e.g., subgenres, comparable titles).
@@ -308,25 +312,37 @@ def _split_overview_list(value: Any) -> List[str]:
 
 
 def _default_overview_form_state() -> Dict[str, Any]:
-    """Return the default form state for the project overview questionnaire."""
+    """Return the default form state for the seed prompt questionnaire."""
 
     return {
-        "book_type": "",
-        "elevator_pitch": "",
-        "purposes": [],
-        "purpose_other": "",
         "genre": "",
-        "subgenres": [],
-        "target_audience": [],
-        "comparable_titles": [],
+        "pitch": "",
+        "themes": [],
+        "stakes_level": 5,
+        "audience": [],
+        "narrative_pace": "",
+        "pov_style": "",
+        "time_structure": "",
+        "setting": "",
+        "world_realism": "",
         "tone": [],
-        "narrative_style": "",
-        "atmosphere": "",
     }
 
 
+def _clean_stakes_level(value: Any) -> int:
+    """Return an integer stakes level between 1 and 10 (default 5)."""
+
+    try:
+        if isinstance(value, str) and value.strip() == "":
+            raise ValueError("empty")
+        numeric = int(float(value))
+    except (TypeError, ValueError):
+        return 5
+    return max(1, min(10, numeric))
+
+
 def _load_project_overview_data(project: Project) -> Dict[str, Any]:
-    """Deserialize stored project overview metadata."""
+    """Deserialize stored seed prompt metadata."""
 
     raw_payload = (project.project_overview_data or "").strip()
     if not raw_payload:
@@ -339,31 +355,31 @@ def _load_project_overview_data(project: Project) -> Dict[str, Any]:
         return {}
 
     data: Dict[str, Any] = {
-        "book_type": _clean_single_choice(payload.get("book_type"), _PROJECT_BOOK_TYPES),
-        "elevator_pitch": str(payload.get("elevator_pitch", "")).strip(),
-        "purposes": _clean_multi_choice(
-            payload.get("purposes", []), _PROJECT_PURPOSE_OPTIONS
-        ),
-        "purpose_other": str(payload.get("purpose_other", "")).strip(),
         "genre": _clean_single_choice(payload.get("genre"), _PROJECT_GENRE_OPTIONS),
-        "subgenres": _split_overview_list(payload.get("subgenres")),
-        "target_audience": _clean_multi_choice(
-            payload.get("target_audience", []), _PROJECT_TARGET_AUDIENCE_OPTIONS
-        ),
-        "comparable_titles": _split_overview_list(
-            payload.get("comparable_titles")
-        ),
         "tone": _clean_multi_choice(payload.get("tone", []), _PROJECT_TONE_OPTIONS),
-        "narrative_style": _clean_single_choice(
-            payload.get("narrative_style"), _PROJECT_NARRATIVE_STYLE_OPTIONS
+        "pitch": str(payload.get("pitch", "")).strip(),
+        "themes": _split_overview_list(payload.get("themes")),
+        "stakes_level": _clean_stakes_level(payload.get("stakes_level")),
+        "audience": _clean_multi_choice(
+            payload.get("audience", []), _PROJECT_AUDIENCE_OPTIONS
         ),
-        "atmosphere": str(payload.get("atmosphere", "")).strip(),
+        "narrative_pace": _clean_single_choice(
+            payload.get("narrative_pace"), _PROJECT_PACE_OPTIONS
+        ),
+        "pov_style": _clean_single_choice(payload.get("pov_style"), _PROJECT_POV_OPTIONS),
+        "time_structure": _clean_single_choice(
+            payload.get("time_structure"), _PROJECT_TIME_STRUCTURE_OPTIONS
+        ),
+        "setting": str(payload.get("setting", "")).strip(),
+        "world_realism": _clean_single_choice(
+            payload.get("world_realism"), _PROJECT_REALISM_OPTIONS
+        ),
     }
     return data
 
 
 def _load_project_overview_form(project: Project) -> Dict[str, Any]:
-    """Return form defaults populated from the stored project overview."""
+    """Return form defaults populated from the stored seed prompt metadata."""
 
     state = _default_overview_form_state()
     stored = _load_project_overview_data(project)
@@ -371,64 +387,88 @@ def _load_project_overview_form(project: Project) -> Dict[str, Any]:
         return state
     state.update(
         {
-            "book_type": stored.get("book_type", ""),
-            "elevator_pitch": stored.get("elevator_pitch", ""),
-            "purposes": list(stored.get("purposes", [])),
-            "purpose_other": stored.get("purpose_other", ""),
             "genre": stored.get("genre", ""),
-            "subgenres": list(stored.get("subgenres", [])),
-            "target_audience": list(stored.get("target_audience", [])),
-            "comparable_titles": list(stored.get("comparable_titles", [])),
             "tone": list(stored.get("tone", [])),
-            "narrative_style": stored.get("narrative_style", ""),
-            "atmosphere": stored.get("atmosphere", ""),
+            "pitch": stored.get("pitch", ""),
+            "themes": list(stored.get("themes", [])),
+            "stakes_level": stored.get("stakes_level", 5),
+            "audience": list(stored.get("audience", [])),
+            "narrative_pace": stored.get("narrative_pace", ""),
+            "pov_style": stored.get("pov_style", ""),
+            "time_structure": stored.get("time_structure", ""),
+            "setting": stored.get("setting", ""),
+            "world_realism": stored.get("world_realism", ""),
         }
     )
     return state
 
 
 def _prepare_overview_display_sections(data: Mapping[str, Any]) -> List[Dict[str, Any]]:
-    """Return labelled sections for rendering the questionnaire responses."""
+    """Return labelled sections for rendering the seed prompt questionnaire responses."""
 
     if not data:
         return []
 
-    sections: List[Dict[str, Any]] = []
+    def _text(value: Any) -> str:
+        return str(value or "").strip()
 
-    def _append_text(label: str, value: str) -> None:
-        sections.append({"label": label, "type": "text", "value": value.strip()})
+    def _list(values: Iterable[Any]) -> List[str]:
+        return [str(item).strip() for item in values if str(item).strip()]
 
-    def _append_list(label: str, values: Iterable[str]) -> None:
-        cleaned = [str(item).strip() for item in values if str(item).strip()]
-        sections.append({"label": label, "type": "list", "value": cleaned})
+    def _section(title: str, items: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+        return {"title": title, "items": list(items)}
 
-    purposes = list(data.get("purposes", []))
-    purpose_other = str(data.get("purpose_other", "")).strip()
-    display_purposes: List[str] = []
-    for entry in purposes:
-        if entry == "Other" and purpose_other:
-            display_purposes.append(f"Other — {purpose_other}")
-        else:
-            display_purposes.append(str(entry).strip())
-    if not display_purposes and purpose_other:
-        display_purposes.append(purpose_other)
+    must_have_items = [
+        {"label": "User pitch", "type": "text", "value": _text(data.get("pitch"))},
+        {"label": "Genre", "type": "text", "value": _text(data.get("genre"))},
+        {"label": "Tone & mood", "type": "list", "value": _list(data.get("tone", []))},
+    ]
 
-    _append_text("Book type", str(data.get("book_type", "")))
-    _append_text("Elevator pitch", str(data.get("elevator_pitch", "")))
-    _append_list("Purpose / Goal", display_purposes)
-    _append_text("Genre", str(data.get("genre", "")))
-    _append_list("Subgenre", data.get("subgenres", []))
-    _append_list("Target audience", data.get("target_audience", []))
-    _append_list("Comparable titles", data.get("comparable_titles", []))
-    _append_list("Tone", data.get("tone", []))
-    _append_text("Narrative style", str(data.get("narrative_style", "")))
-    _append_text("Atmosphere", str(data.get("atmosphere", "")))
+    very_useful_items = [
+        {"label": "Themes", "type": "list", "value": _list(data.get("themes", []))},
+        {
+            "label": "Stakes level",
+            "type": "text",
+            "value": f"{_clean_stakes_level(data.get('stakes_level', 5))} / 10",
+        },
+    ]
+
+    optional_items = [
+        {"label": "Audience", "type": "list", "value": _list(data.get("audience", []))},
+        {
+            "label": "Narrative pace",
+            "type": "text",
+            "value": _text(data.get("narrative_pace")),
+        },
+        {
+            "label": "POV style",
+            "type": "text",
+            "value": _text(data.get("pov_style")),
+        },
+        {
+            "label": "Time structure",
+            "type": "text",
+            "value": _text(data.get("time_structure")),
+        },
+        {"label": "Setting", "type": "text", "value": _text(data.get("setting"))},
+        {
+            "label": "World realism / fantasy level",
+            "type": "text",
+            "value": _text(data.get("world_realism")),
+        },
+    ]
+
+    sections: List[Dict[str, Any]] = [
+        _section("Must have", must_have_items),
+        _section("Very useful", very_useful_items),
+        _section("Optional / advanced", optional_items),
+    ]
 
     return sections
 
 
 def _project_overview_context(project: Project) -> str:
-    """Return the stored project overview text or a fallback description."""
+    """Return the stored seed prompt text or a fallback description."""
 
     summary = (project.project_overview or "").strip()
     if summary:
@@ -439,124 +479,109 @@ def _project_overview_context(project: Project) -> str:
         return ""
 
     lines: List[str] = []
-    book_type = str(data.get("book_type", "")).strip()
-    if book_type:
-        lines.append(f"Book type: {book_type}")
-    elevator = str(data.get("elevator_pitch", "")).strip()
-    if elevator:
-        lines.append(f"Elevator pitch: {elevator}")
-    purposes = list(data.get("purposes", []))
-    purpose_other = str(data.get("purpose_other", "")).strip()
-    display_purposes: List[str] = []
-    for entry in purposes:
-        if entry == "Other" and purpose_other:
-            display_purposes.append(f"Other — {purpose_other}")
-        else:
-            display_purposes.append(str(entry).strip())
-    if not display_purposes and purpose_other:
-        display_purposes.append(purpose_other)
-    if display_purposes:
-        lines.append("Purpose / Goal: " + ", ".join(display_purposes))
+    pitch = str(data.get("pitch", "")).strip()
+    if pitch:
+        lines.append(f"User pitch: {pitch}")
     genre = str(data.get("genre", "")).strip()
     if genre:
         lines.append(f"Genre: {genre}")
-    subgenres = [str(item).strip() for item in data.get("subgenres", []) if item]
-    if subgenres:
-        lines.append("Subgenre: " + ", ".join(subgenres))
-    audience = [
-        str(item).strip()
-        for item in data.get("target_audience", [])
-        if str(item).strip()
+    tone_values = [
+        str(item).strip() for item in data.get("tone", []) if str(item).strip()
     ]
-    if audience:
-        lines.append("Target audience: " + ", ".join(audience))
-    comps = [
-        str(item).strip()
-        for item in data.get("comparable_titles", [])
-        if str(item).strip()
+    if tone_values:
+        lines.append("Tone & mood: " + ", ".join(tone_values))
+    theme_values = [
+        str(item).strip() for item in data.get("themes", []) if str(item).strip()
     ]
-    if comps:
-        lines.append("Comparable titles: " + "; ".join(comps))
-    tone = [
-        str(item).strip()
-        for item in data.get("tone", [])
-        if str(item).strip()
+    if theme_values:
+        lines.append("Themes: " + ", ".join(theme_values))
+    stakes_level = _clean_stakes_level(data.get("stakes_level", 5))
+    lines.append(f"Stakes level: {stakes_level} / 10")
+    audience_values = [
+        str(item).strip() for item in data.get("audience", []) if str(item).strip()
     ]
-    if tone:
-        lines.append("Tone: " + ", ".join(tone))
-    style = str(data.get("narrative_style", "")).strip()
-    if style:
-        lines.append(f"Narrative style: {style}")
-    atmosphere = str(data.get("atmosphere", "")).strip()
-    if atmosphere:
-        lines.append(f"Atmosphere notes: {atmosphere}")
+    if audience_values:
+        lines.append("Audience: " + ", ".join(audience_values))
+    narrative_pace = str(data.get("narrative_pace", "")).strip()
+    if narrative_pace:
+        lines.append(f"Narrative pace: {narrative_pace}")
+    pov_style = str(data.get("pov_style", "")).strip()
+    if pov_style:
+        lines.append(f"POV style: {pov_style}")
+    time_structure = str(data.get("time_structure", "")).strip()
+    if time_structure:
+        lines.append(f"Time structure: {time_structure}")
+    setting = str(data.get("setting", "")).strip()
+    if setting:
+        lines.append(f"Setting: {setting}")
+    world_realism = str(data.get("world_realism", "")).strip()
+    if world_realism:
+        lines.append(f"World realism: {world_realism}")
 
     return "\n".join(lines).strip()
 
 
 def _build_project_overview_prompt(form_data: Mapping[str, Any]) -> str:
-    """Construct the prompt sent to the model to generate the project overview."""
+    """Construct the prompt sent to the model to generate the seed prompt."""
 
     config = SYSTEM_PROMPTS.get("project_overview", {})
     base_prompt = config.get(
         "base",
         (
-            "You are a developmental editor translating questionnaire responses into a "
-            "concise creative brief."
+            "You are a professional story concept developer. Your task is to take a user's "
+            "story idea metadata and expand it into a seed prompt for downstream outlining."
         ),
     )
-    response_instructions = config.get(
-        "response_instructions",
-        (
-            "Write a single paragraph of around 200 words that summarises the project's "
-            "concept, goals, genre, audience, tone, and stylistic aspirations."
-        ),
-    )
-
-    book_type = _clean_single_choice(form_data.get("book_type"), _PROJECT_BOOK_TYPES)
-    elevator_pitch = str(form_data.get("elevator_pitch", "")).strip()
-    purposes = _clean_multi_choice(
-        form_data.get("purposes", []), _PROJECT_PURPOSE_OPTIONS
-    )
-    purpose_other = str(form_data.get("purpose_other", "")).strip()
-    if "Other" in purposes and purpose_other:
-        display_purposes = [
-            entry if entry != "Other" else f"Other — {purpose_other}"
-            for entry in purposes
-        ]
-    else:
-        display_purposes = purposes[:]
-        if purpose_other and "Other" not in display_purposes:
-            display_purposes.append(f"Other — {purpose_other}")
+    response_instructions = config.get("response_instructions", "")
+    instruction_template = config.get("instructions", "")
 
     genre = _clean_single_choice(form_data.get("genre"), _PROJECT_GENRE_OPTIONS)
-    subgenres = _split_overview_list(form_data.get("subgenres"))
-    audience = _clean_multi_choice(
-        form_data.get("target_audience", []), _PROJECT_TARGET_AUDIENCE_OPTIONS
-    )
-    comps = _split_overview_list(form_data.get("comparable_titles"))
     tone = _clean_multi_choice(form_data.get("tone", []), _PROJECT_TONE_OPTIONS)
-    narrative_style = _clean_single_choice(
-        form_data.get("narrative_style"), _PROJECT_NARRATIVE_STYLE_OPTIONS
+    pitch = str(form_data.get("pitch", "")).strip()
+    themes = _split_overview_list(form_data.get("themes"))
+    stakes_level = _clean_stakes_level(form_data.get("stakes_level"))
+    audience_values = _clean_multi_choice(
+        form_data.get("audience", []), _PROJECT_AUDIENCE_OPTIONS
     )
-    atmosphere = str(form_data.get("atmosphere", "")).strip()
+    narrative_pace = _clean_single_choice(
+        form_data.get("narrative_pace"), _PROJECT_PACE_OPTIONS
+    )
+    pov_style = _clean_single_choice(form_data.get("pov_style"), _PROJECT_POV_OPTIONS)
+    time_structure = _clean_single_choice(
+        form_data.get("time_structure"), _PROJECT_TIME_STRUCTURE_OPTIONS
+    )
+    setting = str(form_data.get("setting", "")).strip()
+    world_realism = _clean_single_choice(
+        form_data.get("world_realism"), _PROJECT_REALISM_OPTIONS
+    )
 
-    user_lines = [
-        "Use the questionnaire responses below to draft a focused project overview.",
-        "Keep the description centred on the author's goals so future prompts stay aligned.",
-        "",
-        f"Book type: {book_type or '(not specified)'}",
-        f"Elevator pitch: {elevator_pitch or '(not provided)'}",
-        "Purpose / Goal: "
-        + (", ".join(display_purposes) if display_purposes else "(not specified)"),
-        f"Genre: {genre or '(not specified)'}",
-        "Subgenre: " + (", ".join(subgenres) if subgenres else "(not specified)"),
-        "Target audience: " + (", ".join(audience) if audience else "(not specified)"),
-        "Comparable titles: " + (", ".join(comps) if comps else "(not specified)"),
-        "Tone: " + (", ".join(tone) if tone else "(not specified)"),
-        f"Narrative style: {narrative_style or '(not specified)'}",
-        f"Atmosphere: {atmosphere or '(not specified)'}",
-    ]
+    audience_text = ", ".join(audience_values).strip()
+
+    payload = {
+        "genre": genre or "",
+        "tone": tone,
+        "themes": themes,
+        "audience": audience_text or None,
+        "stakes_level": stakes_level,
+        "pitch": pitch,
+        "preferences": {
+            "pacing": narrative_pace or None,
+            "pov": pov_style or None,
+            "time_structure": time_structure or None,
+            "setting": setting or None,
+            "realism": world_realism or None,
+        },
+    }
+
+    input_block = json.dumps(payload, ensure_ascii=False, indent=2)
+
+    if instruction_template:
+        if "{{INPUT_BLOCK}}" in instruction_template:
+            user_body = instruction_template.replace("{{INPUT_BLOCK}}", input_block)
+        else:
+            user_body = instruction_template.strip() + "\n\n" + input_block
+    else:
+        user_body = input_block
 
     prompt_parts: List[str] = []
     if base_prompt:
@@ -564,7 +589,7 @@ def _build_project_overview_prompt(form_data: Mapping[str, Any]) -> str:
     if response_instructions:
         prompt_parts.append("System: " + response_instructions.strip())
     prompt_parts.append("User:")
-    prompt_parts.append("\n".join(user_lines).strip())
+    prompt_parts.append(user_body.strip())
     prompt_parts.append("Assistant:")
     return "\n".join(prompt_parts)
 
@@ -572,7 +597,7 @@ def _build_project_overview_prompt(form_data: Mapping[str, Any]) -> str:
 def _parse_overview_form_submission(
     form: Mapping[str, Any]
 ) -> Tuple[Dict[str, Any], List[str]]:
-    """Parse and validate the submitted project overview form."""
+    """Parse and validate the submitted seed prompt form."""
 
     state = _default_overview_form_state()
     errors: List[str] = []
@@ -588,39 +613,36 @@ def _parse_overview_form_submission(
             return [str(item) for item in value]
         return [str(value)]
 
-    state["book_type"] = _clean_single_choice(
-        form.get("book_type"), _PROJECT_BOOK_TYPES
-    )
-    if not state["book_type"]:
-        errors.append("Please choose a book type.")
-
-    elevator_pitch = str(form.get("elevator_pitch", "")).strip()
-    state["elevator_pitch"] = elevator_pitch
-    if not elevator_pitch:
-        errors.append("Please provide a short elevator pitch.")
-
-    state["purposes"] = _clean_multi_choice(
-        _get_list("purpose"), _PROJECT_PURPOSE_OPTIONS
-    )
-    state["purpose_other"] = str(form.get("purpose_other", "")).strip()
-    if "Other" in state["purposes"] and not state["purpose_other"]:
-        errors.append("Please describe the 'Other' purpose for the project.")
-    if not state["purposes"] and not state["purpose_other"]:
-        errors.append("Select at least one goal or describe it in the Other field.")
-
     state["genre"] = _clean_single_choice(form.get("genre"), _PROJECT_GENRE_OPTIONS)
-    state["subgenres"] = _split_overview_list(form.get("subgenres"))
-    state["target_audience"] = _clean_multi_choice(
-        _get_list("target_audience"), _PROJECT_TARGET_AUDIENCE_OPTIONS
+    if not state["genre"]:
+        errors.append("Please choose a primary genre.")
+
+    state["pitch"] = str(form.get("pitch", "")).strip()
+    if not state["pitch"]:
+        errors.append("Please provide a short user pitch.")
+
+    state["tone"] = _clean_multi_choice(_get_list("tone"), _PROJECT_TONE_OPTIONS)
+    if not state["tone"]:
+        errors.append("Select at least one tone or mood.")
+
+    state["themes"] = _split_overview_list(form.get("themes"))
+    state["stakes_level"] = _clean_stakes_level(form.get("stakes_level"))
+    state["audience"] = _clean_multi_choice(
+        _get_list("audience"), _PROJECT_AUDIENCE_OPTIONS
     )
-    state["comparable_titles"] = _split_overview_list(form.get("comparable_titles"))
-    state["tone"] = _clean_multi_choice(
-        _get_list("tone"), _PROJECT_TONE_OPTIONS
+    state["narrative_pace"] = _clean_single_choice(
+        form.get("narrative_pace"), _PROJECT_PACE_OPTIONS
     )
-    state["narrative_style"] = _clean_single_choice(
-        form.get("narrative_style"), _PROJECT_NARRATIVE_STYLE_OPTIONS
+    state["pov_style"] = _clean_single_choice(
+        form.get("pov_style"), _PROJECT_POV_OPTIONS
     )
-    state["atmosphere"] = str(form.get("atmosphere", "")).strip()
+    state["time_structure"] = _clean_single_choice(
+        form.get("time_structure"), _PROJECT_TIME_STRUCTURE_OPTIONS
+    )
+    state["setting"] = str(form.get("setting", "")).strip()
+    state["world_realism"] = _clean_single_choice(
+        form.get("world_realism"), _PROJECT_REALISM_OPTIONS
+    )
 
     return state, errors
 
@@ -962,7 +984,7 @@ def create_app() -> Flask:
                     project.project_overview = None
                     project.project_overview_data = None
                     db.session.commit()
-                    overview_success = "Project overview cleared."
+                    overview_success = "Seed prompt cleared."
                     overview_form_state = _default_overview_form_state()
                 else:
                     form_state, errors = _parse_overview_form_submission(request.form)
@@ -994,7 +1016,7 @@ def create_app() -> Flask:
                             overview_error = str(exc)
                         except Exception as exc:  # pragma: no cover - defensive
                             overview_error = (
-                                "The text generation backend could not produce the project overview: "
+                                "The text generation backend could not produce the seed prompt: "
                                 f"{exc}"
                             )
                         else:
@@ -1006,9 +1028,7 @@ def create_app() -> Flask:
                                 form_state, ensure_ascii=False
                             )
                             db.session.commit()
-                            overview_success = (
-                                f"Project overview updated.{device_sentence}"
-                            )
+                            overview_success = f"Seed prompt updated.{device_sentence}"
                             overview_form_state = _load_project_overview_form(project)
             elif chat_type == "acts":
                 if user_message:
@@ -1585,12 +1605,13 @@ def create_app() -> Flask:
             overview_form=overview_form_state,
             overview_sections=overview_sections,
             project_overview_summary=project_overview_summary,
-            book_type_options=_PROJECT_BOOK_TYPES,
-            purpose_options=_PROJECT_PURPOSE_OPTIONS,
             genre_options=_PROJECT_GENRE_OPTIONS,
-            target_audience_options=_PROJECT_TARGET_AUDIENCE_OPTIONS,
             tone_options=_PROJECT_TONE_OPTIONS,
-            narrative_style_options=_PROJECT_NARRATIVE_STYLE_OPTIONS,
+            audience_options=_PROJECT_AUDIENCE_OPTIONS,
+            pace_options=_PROJECT_PACE_OPTIONS,
+            pov_options=_PROJECT_POV_OPTIONS,
+            time_structure_options=_PROJECT_TIME_STRUCTURE_OPTIONS,
+            world_realism_options=_PROJECT_REALISM_OPTIONS,
             act_history=act_history,
             act_error=act_error,
             act_success=act_success,
@@ -3632,12 +3653,12 @@ def _build_full_act_prompt(
     )
     act_guidance_map = config.get("acts", {})
 
-    overview_block = project_overview.strip() or "No project overview has been defined yet."
+    overview_block = project_overview.strip() or "No seed prompt has been defined yet."
 
     user_sections: List[str] = [
         "Craft a complete three-act outline using the context below.",
         "",
-        "Project goals overview:",
+        "Seed prompt summary:",
         overview_block,
         "",
         "Project outline:",
@@ -3744,7 +3765,7 @@ def _build_chapter_prompt(
     except KeyError:
         format_line = format_instructions
 
-    overview_block = project_overview.strip() or "No project overview has been defined yet."
+    overview_block = project_overview.strip() or "No seed prompt has been defined yet."
 
     outline_sections: List[str] = []
     for outline_act_number, outline_text_value in act_outlines:
@@ -3774,7 +3795,7 @@ def _build_chapter_prompt(
         f"Your role now is to write a chapter-by-chapter outline of this act: {label}.",
         f"You will outline this act in {chapters_per_act} chapters.",
         "",
-        "Project goals overview:",
+        "Seed prompt summary:",
         overview_block,
         "",
         "Story overview:",
@@ -3994,8 +4015,8 @@ def _build_chapter_draft_prompt(
     user_sections: List[str] = [
         "Use the materials below to write the next chapter of the novel in polished prose.",
         "",
-        "Project goals overview:",
-        project_overview_summary or "No project overview has been defined yet.",
+        "Seed prompt summary:",
+        project_overview_summary or "No seed prompt has been defined yet.",
         "",
         "Project outline:",
         story_outline or "(no project outline provided)",
@@ -4143,15 +4164,15 @@ def _build_concept_analysis_prompt(
     if overview_block:
         user_sections.extend(
             [
-                "Project goals overview:",
+                "Seed prompt summary:",
                 overview_block,
             ]
         )
     else:
         user_sections.extend(
             [
-                "Project goals overview:",
-                "No project overview has been defined yet.",
+                "Seed prompt summary:",
+                "No seed prompt has been defined yet.",
             ]
         )
     if additional_guidance.strip():
@@ -4221,15 +4242,15 @@ def _build_concept_definition_prompt(
     if overview_block:
         user_sections.extend(
             [
-                "Project goals overview:",
+                "Seed prompt summary:",
                 overview_block,
             ]
         )
     else:
         user_sections.extend(
             [
-                "Project goals overview:",
-                "No project overview has been defined yet.",
+                "Seed prompt summary:",
+                "No seed prompt has been defined yet.",
             ]
         )
     if additional_guidance.strip():
