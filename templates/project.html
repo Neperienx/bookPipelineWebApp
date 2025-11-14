@@ -66,6 +66,40 @@
       white-space: pre-wrap;
       min-height: 200px;
     }
+    .overview-card {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+    .overview-section {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .overview-section-heading {
+      font-size: 0.85rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 600;
+      color: rgba(148, 163, 184, 0.85);
+    }
+    .tone-help {
+      font-size: 0.75rem;
+      color: rgba(148, 163, 184, 0.85);
+    }
+    .seed-output {
+      border-radius: 0.9rem;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: rgba(15, 23, 42, 0.65);
+      padding: 1rem 1.25rem;
+      white-space: pre-wrap;
+      font-size: 0.9rem;
+      color: rgba(226, 232, 240, 0.88);
+    }
+    .seed-output-empty {
+      color: rgba(148, 163, 184, 0.8);
+      font-style: italic;
+    }
     .act-outline-box {
       border-radius: 0.9rem;
       border: 1px solid rgba(148, 163, 184, 0.2);
@@ -159,8 +193,179 @@
     <a href="{{ url_for('dashboard') }}" class="btn btn-outline-light btn-sm">Back to dashboard</a>
   </div>
   <div class="row g-4">
-    <div class="col-xl-5">
-      <div class="card h-100">
+    <div class="col-xl-5 d-flex flex-column gap-4">
+      <div class="card">
+        <div class="card-body overview-card">
+          <div class="d-flex justify-content-between align-items-start gap-3">
+            <div>
+              <h2 class="h5 mb-1">Project overview</h2>
+              <p class="text-secondary mb-0 small">
+                Summarise the core direction for this story so we can craft a high-quality seed prompt.
+              </p>
+            </div>
+          </div>
+          {% if metadata_error %}
+            <div class="alert alert-danger" role="alert">{{ metadata_error }}</div>
+          {% endif %}
+          {% if metadata_success %}
+            <div class="alert alert-success" role="alert">{{ metadata_success }}</div>
+          {% endif %}
+          {% if seed_error %}
+            <div class="alert alert-danger" role="alert">{{ seed_error }}</div>
+          {% endif %}
+          {% if seed_success %}
+            <div class="alert alert-success" role="alert">{{ seed_success }}</div>
+          {% endif %}
+          <form method="post" class="d-flex flex-column gap-4">
+            <div class="overview-section">
+              <div class="overview-section-heading">Must have</div>
+              <div>
+                <label for="userPitch" class="form-label">User pitch</label>
+                <textarea
+                  class="form-control"
+                  id="userPitch"
+                  name="user_pitch"
+                  rows="3"
+                  placeholder="Share the raw idea in your own words."
+                  required
+                >{{ (project.user_pitch or '')|trim }}</textarea>
+              </div>
+              <div>
+                <label for="genre" class="form-label">Genre</label>
+                <select class="form-select" id="genre" name="genre" required>
+                  <option value="" disabled {% if not project.genre %}selected{% endif %}>Select a genre</option>
+                  {% for value, label in genre_choices %}
+                    <option value="{{ value }}" {% if project.genre == value %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div>
+                <label for="toneMood" class="form-label">Tone &amp; mood</label>
+                <select class="form-select" id="toneMood" name="tone_mood" multiple size="5" required>
+                  {% for value, label in tone_choices %}
+                    <option value="{{ value }}" {% if value in project.tone_mood_list %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+                <div class="tone-help">Hold Ctrl (Windows/Linux) or Cmd (macOS) to select multiple options.</div>
+              </div>
+            </div>
+            <div class="overview-section">
+              <div class="overview-section-heading">Very useful</div>
+              <div>
+                <label for="themes" class="form-label">Themes</label>
+                <textarea
+                  class="form-control"
+                  id="themes"
+                  name="themes"
+                  rows="2"
+                  placeholder="List key themes, separated by commas or new lines."
+                >{{ (project.themes or '')|trim }}</textarea>
+              </div>
+              <div>
+                <label for="stakesLevel" class="form-label">
+                  Stakes level
+                  <span class="badge bg-info text-dark ms-2" id="stakesLevelValue">{{ project.stakes_level or 5 }}</span>
+                </label>
+                <input
+                  type="range"
+                  class="form-range"
+                  id="stakesLevel"
+                  name="stakes_level"
+                  min="1"
+                  max="10"
+                  value="{{ project.stakes_level or 5 }}"
+                />
+                <div class="d-flex justify-content-between text-secondary small">
+                  <span>1</span>
+                  <span>Low</span>
+                  <span>10</span>
+                </div>
+              </div>
+            </div>
+            <div class="overview-section">
+              <div class="overview-section-heading">Optional / advanced</div>
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label for="audience" class="form-label">Audience</label>
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="audience"
+                    name="audience"
+                    placeholder="e.g. Adult, Upper YA"
+                    value="{{ project.audience or '' }}"
+                  />
+                </div>
+                <div class="col-md-6">
+                  <label for="narrativePace" class="form-label">Narrative pace</label>
+                  <select class="form-select" id="narrativePace" name="narrative_pace">
+                    <option value="" {% if not project.narrative_pace %}selected{% endif %}>Select pace</option>
+                    {% for value, label in pace_choices %}
+                      <option value="{{ value }}" {% if project.narrative_pace == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label for="povStyle" class="form-label">POV style</label>
+                  <select class="form-select" id="povStyle" name="pov_style">
+                    <option value="" {% if not project.pov_style %}selected{% endif %}>Select POV</option>
+                    {% for value, label in pov_choices %}
+                      <option value="{{ value }}" {% if project.pov_style == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label for="timeStructure" class="form-label">Time structure</label>
+                  <select class="form-select" id="timeStructure" name="time_structure">
+                    <option value="" {% if not project.time_structure %}selected{% endif %}>Select structure</option>
+                    {% for value, label in time_structure_choices %}
+                      <option value="{{ value }}" {% if project.time_structure == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label for="setting" class="form-label">Setting</label>
+                <textarea
+                  class="form-control"
+                  id="setting"
+                  name="setting"
+                  rows="2"
+                  placeholder="Describe the primary setting or world backdrop."
+                >{{ (project.setting or '')|trim }}</textarea>
+              </div>
+              <div>
+                <label for="worldRealism" class="form-label">World realism / fantasy level</label>
+                <select class="form-select" id="worldRealism" name="world_realism">
+                  <option value="" {% if not project.world_realism %}selected{% endif %}>Select world style</option>
+                  {% for value, label in realism_choices %}
+                    <option value="{{ value }}" {% if project.world_realism == value %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+            <div class="d-flex flex-wrap justify-content-end align-items-center gap-3">
+              <div class="form-check mb-0">
+                <input class="form-check-input" type="checkbox" value="1" id="seedUseApi" name="use_api" />
+                <label class="form-check-label small" for="seedUseApi">API</label>
+              </div>
+              <div class="d-flex gap-2">
+                <button type="submit" name="metadata_action" value="save" class="btn btn-outline-light">Save overview</button>
+                <button type="submit" name="metadata_action" value="generate" class="btn btn-primary">Generate seed prompt</button>
+              </div>
+            </div>
+          </form>
+          <div>
+            <div class="overview-section-heading">Expanded seed prompt</div>
+            {% if project.seed_prompt %}
+              <div class="seed-output">{{ project.seed_prompt }}</div>
+            {% else %}
+              <div class="seed-output seed-output-empty">No seed prompt has been generated yet.</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      <div class="card flex-grow-1">
         <div class="card-body">
           <div class="tile-grid" role="tablist" aria-label="Project sections">
             <button
@@ -747,6 +952,16 @@
           }
         });
       });
+
+      const stakesInput = document.getElementById("stakesLevel");
+      const stakesDisplay = document.getElementById("stakesLevelValue");
+      if (stakesInput && stakesDisplay) {
+        const updateStakes = function () {
+          stakesDisplay.textContent = stakesInput.value;
+        };
+        stakesInput.addEventListener("input", updateStakes);
+        updateStakes();
+      }
     })();
   </script>
 {% endblock %}

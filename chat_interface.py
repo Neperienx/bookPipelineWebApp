@@ -46,6 +46,174 @@ from system_prompts import (
     get_character_input_fields,
 )
 
+
+GENRE_CHOICES: Sequence[Tuple[str, str]] = (
+    ("Fantasy", "Fantasy"),
+    ("Science Fiction", "Science Fiction"),
+    ("Mystery / Thriller", "Mystery / Thriller"),
+    ("Romance", "Romance"),
+    ("Historical", "Historical"),
+    ("Horror", "Horror"),
+    ("Literary", "Literary"),
+    ("Young Adult", "Young Adult"),
+    ("Adventure", "Adventure"),
+    ("Speculative", "Speculative"),
+)
+
+TONE_CHOICES: Sequence[Tuple[str, str]] = (
+    ("Hopeful", "Hopeful"),
+    ("Dark", "Dark"),
+    ("Whimsical", "Whimsical"),
+    ("Suspenseful", "Suspenseful"),
+    ("Romantic", "Romantic"),
+    ("Gritty", "Gritty"),
+    ("Inspirational", "Inspirational"),
+    ("Humorous", "Humorous"),
+    ("Melancholic", "Melancholic"),
+    ("Epic", "Epic"),
+)
+
+PACE_CHOICES: Sequence[Tuple[str, str]] = (
+    ("Leisurely", "Leisurely"),
+    ("Balanced", "Balanced"),
+    ("Fast-paced", "Fast-paced"),
+)
+
+POV_CHOICES: Sequence[Tuple[str, str]] = (
+    ("First-person", "First-person"),
+    ("Third-person limited", "Third-person limited"),
+    ("Third-person omniscient", "Third-person omniscient"),
+    ("Multiple POV", "Multiple POV"),
+)
+
+TIME_STRUCTURE_CHOICES: Sequence[Tuple[str, str]] = (
+    ("Linear", "Linear"),
+    ("Non-linear", "Non-linear"),
+    ("Dual timeline", "Dual timeline"),
+    ("Framed narrative", "Framed narrative"),
+)
+
+REALISM_CHOICES: Sequence[Tuple[str, str]] = (
+    ("Grounded realism", "Grounded realism"),
+    ("Low fantasy / subtle speculative", "Low fantasy / subtle speculative"),
+    ("High fantasy / boldly speculative", "High fantasy / boldly speculative"),
+    ("Alternate history", "Alternate history"),
+)
+
+SEED_PROMPT_TEMPLATE = """You are a professional story concept developer. Your task is to take a user’s vague or partial story idea plus structured metadata (genre, tone, stakes, themes, audience, etc.) and expand it into a fully-fledged, high-quality novel seed prompt.
+
+Your output is NOT an outline and NOT a story.
+Your output is a **polished, detailed seed prompt** that a downstream outlining system will use to generate story structure.
+
+Your job is to create the kind of story brief a professional author or narrative designer would hand to an outlining team.
+
+------------------------------------------------------------
+### INSTRUCTIONS
+Follow these rules carefully:
+
+1. **Honor every element of the user’s metadata.**
+   - Genre
+   - Tone & mood
+   - Themes
+   - Audience
+   - Stakes level
+   - Preferred pacing, POV, structure, or setting (if provided)
+   - World realism level (if provided)
+   - And most importantly: the user's raw pitch text
+
+   Treat everything the user provides as *canon* unless it contradicts itself.
+
+2. **If the user gives too little information, infer missing details intelligently.**
+   - Never leave the story empty.
+   - Never say “the user did not specify.”
+   - Always extrapolate a coherent concept that fits their selections.
+
+3. **Construct a seed prompt at a professional level.**
+   It must include:
+   - **World Rules** (how realistic, fantastical, magical, or historical the world is)
+   - **Protagonist(s)** (roles, starting point, conflicts, emotional drives)
+   - **Genre-specific expectations** (romance progression, mystery engine, fantasy logic, thriller danger, etc.)
+   - **Themes** woven into character arcs
+   - **Stakes** appropriate to the stakes slider (1 = low stakes, 10 = intense)
+   - **Tone & mood** reflected in the story premise
+   - **Structural expectations** if the user selected pacing, POV, time structure
+   - **Special elements** (e.g., reincarnation, echoes, dream-magic, historical era, war backdrop, mythical creatures, forbidden love, etc.)
+   - **Setting** and how it anchors the narrative
+
+4. **If the user mentions supernatural, low-fantasy, memories, visions, echoes, past lives, or similar:**
+   - Keep events subtle, ambiguous, and rooted in perception *unless the genre contradicts this*.
+   - Ensure all supernatural elements remain consistent and believable inside the genre.
+
+5. **If themes imply a historical or secondary timeline** (e.g., “past lives,” “ancestry,” “war echoes”):
+   - Include *at least one* historical or past-life layer in the seed prompt.
+   - Define the emotional/structural relationship between present and past.
+
+6. **Everything must be actionable for an outline generator.**
+   - No vague one-liners.
+   - No abstract poetry.
+   - No “they grow as people.”
+   - Use concrete story ingredients:
+     conflicts, emotional arcs, possible reveals, relational tensions, and thematic focus.
+
+------------------------------------------------------------
+### OUTPUT FORMAT
+
+Respond with a section titled:
+
+**Expanded Seed Prompt**
+
+This section must include:
+
+1. **Genre & Tone Summary**
+2. **World Rules & Realism Level**
+3. **Primary Characters** (protagonist[s] + motivations + flaws + starting state)
+4. **Setting** (time, place, environment expectations)
+5. **Themes** (expressed in story-relevant terms)
+6. **Stakes** (scaled to the stakes slider; emotional, relational, material, or existential)
+7. **Supernatural / Low-Fantasy / Mystery Elements** (only if relevant)
+8. **Structural Expectations** (pacing, POV, time structure—based on metadata)
+9. **Core Story Premise**
+   - 3–5 paragraph-style description of the story's intended direction
+   - including relationships, conflict, escalating tension, and thematic arcs
+   - without writing scenes or spoilers
+   - but with enough specificity for an outlining model to build from
+
+------------------------------------------------------------
+### INPUT FORMAT
+
+You will receive a JSON-style block like this:
+
+{
+  "genre": "...",
+  "tone": [...],
+  "themes": [...],
+  "audience": "...",
+  "stakes_level": 1-10,
+  "pitch": "...",
+  "preferences": {
+     "pacing": "...",
+     "pov": "...",
+     "time_structure": "...",
+     "setting": "...",
+     "realism": "..."
+  }
+}
+
+Use ALL of it in your expansion.
+
+------------------------------------------------------------
+### REMINDER
+Do NOT write:
+- an outline
+- story beats
+- scenes
+- dialogue
+
+Do NOT phrase things as instructions to the outline model.
+
+Your output must be a **finished, coherent seed prompt** ready for the next stage in the pipeline.
+"""
+
 class OpenAIAPIRateLimitError(RuntimeError):
     """Raised when the OpenAI API reports a rate limit condition."""
 
@@ -183,6 +351,18 @@ class Project(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
     outline = db.Column(db.Text, nullable=True)
+    user_pitch = db.Column(db.Text, nullable=True)
+    genre = db.Column(db.String(120), nullable=True)
+    tone_mood = db.Column(db.Text, nullable=True)
+    themes = db.Column(db.Text, nullable=True)
+    stakes_level = db.Column(db.Integer, nullable=True)
+    audience = db.Column(db.String(120), nullable=True)
+    narrative_pace = db.Column(db.String(120), nullable=True)
+    pov_style = db.Column(db.String(120), nullable=True)
+    time_structure = db.Column(db.String(120), nullable=True)
+    setting = db.Column(db.Text, nullable=True)
+    world_realism = db.Column(db.String(120), nullable=True)
+    seed_prompt = db.Column(db.Text, nullable=True)
     act1_outline = db.Column(db.Text, nullable=True)
     act2_outline = db.Column(db.Text, nullable=True)
     act3_outline = db.Column(db.Text, nullable=True)
@@ -208,6 +388,10 @@ class Project(db.Model):
         order_by="Concept.created_at.desc()",
         cascade="all, delete-orphan",
     )
+
+    @property
+    def tone_mood_list(self) -> List[str]:
+        return _deserialise_tone_values(self.tone_mood)
 
     def __repr__(self) -> str:  # pragma: no cover - debug helper
         return f"<Project {self.id} {self.name!r}>"
@@ -314,6 +498,18 @@ def _ensure_project_columns() -> None:
         "act1_chapter_list": "ALTER TABLE project ADD COLUMN act1_chapter_list TEXT",
         "act2_chapter_list": "ALTER TABLE project ADD COLUMN act2_chapter_list TEXT",
         "act3_chapter_list": "ALTER TABLE project ADD COLUMN act3_chapter_list TEXT",
+        "user_pitch": "ALTER TABLE project ADD COLUMN user_pitch TEXT",
+        "genre": "ALTER TABLE project ADD COLUMN genre VARCHAR(120)",
+        "tone_mood": "ALTER TABLE project ADD COLUMN tone_mood TEXT",
+        "themes": "ALTER TABLE project ADD COLUMN themes TEXT",
+        "stakes_level": "ALTER TABLE project ADD COLUMN stakes_level INTEGER",
+        "audience": "ALTER TABLE project ADD COLUMN audience VARCHAR(120)",
+        "narrative_pace": "ALTER TABLE project ADD COLUMN narrative_pace VARCHAR(120)",
+        "pov_style": "ALTER TABLE project ADD COLUMN pov_style VARCHAR(120)",
+        "time_structure": "ALTER TABLE project ADD COLUMN time_structure VARCHAR(120)",
+        "setting": "ALTER TABLE project ADD COLUMN setting TEXT",
+        "world_realism": "ALTER TABLE project ADD COLUMN world_realism VARCHAR(120)",
+        "seed_prompt": "ALTER TABLE project ADD COLUMN seed_prompt TEXT",
     }
 
     for column_name, statement in column_specs.items():
@@ -327,6 +523,72 @@ def _ensure_project_columns() -> None:
         for statement in alterations:
             connection.execute(text(statement))
         connection.commit()
+
+
+def _serialise_tone_values(values: Sequence[str]) -> str:
+    cleaned = [str(value).strip() for value in values if str(value).strip()]
+    return json.dumps(cleaned, ensure_ascii=False)
+
+
+def _deserialise_tone_values(raw_value: Optional[str]) -> List[str]:
+    if not raw_value:
+        return []
+    try:
+        parsed = json.loads(raw_value)
+    except json.JSONDecodeError:
+        parsed = None
+    if isinstance(parsed, list):
+        return [str(item).strip() for item in parsed if str(item).strip()]
+    return [part.strip() for part in raw_value.split(",") if part.strip()]
+
+
+def _parse_theme_entries(raw_value: Optional[str]) -> List[str]:
+    if not raw_value:
+        return []
+    text = str(raw_value).strip()
+    if not text:
+        return []
+    if "\n" in text:
+        entries = [line.strip() for line in text.splitlines() if line.strip()]
+        if entries:
+            return entries
+    if "," in text:
+        entries = [part.strip() for part in text.split(",") if part.strip()]
+        if entries:
+            return entries
+    return [text]
+
+
+def _build_seed_prompt_metadata(project: Project) -> Dict[str, Any]:
+    tone_values = project.tone_mood_list
+    themes = _parse_theme_entries(project.themes)
+    stakes_level = project.stakes_level if project.stakes_level else None
+    if stakes_level is None:
+        stakes_level = 5
+    else:
+        stakes_level = max(1, min(10, int(stakes_level)))
+
+    return {
+        "genre": project.genre or "",
+        "tone": tone_values,
+        "themes": themes,
+        "audience": project.audience or "",
+        "stakes_level": stakes_level,
+        "pitch": project.user_pitch or "",
+        "preferences": {
+            "pacing": project.narrative_pace or "",
+            "pov": project.pov_style or "",
+            "time_structure": project.time_structure or "",
+            "setting": project.setting or "",
+            "realism": project.world_realism or "",
+        },
+    }
+
+
+def _build_seed_prompt_request(project: Project) -> str:
+    metadata = _build_seed_prompt_metadata(project)
+    metadata_json = json.dumps(metadata, ensure_ascii=False, indent=2)
+    return f"{SEED_PROMPT_TEMPLATE}\n\n{metadata_json}\n"
 
 # The Windows desktop deployment expects a specific local GGUF/Transformers
 # directory.  Use it as a sensible default when the app is launched on that
@@ -361,6 +623,7 @@ def create_app() -> Flask:
             name = request.form.get("name", "").strip()
             outline = request.form.get("outline", "").strip() or None
 
+
             if not name:
                 error = "Please provide a project name."
             else:
@@ -368,7 +631,6 @@ def create_app() -> Flask:
                 db.session.add(project)
                 db.session.commit()
                 return redirect(url_for("project_detail", project_id=project.id))
-
         projects = Project.query.order_by(Project.created_at.desc()).all()
         return render_template("dashboard.html", projects=projects, error=error)
 
@@ -398,331 +660,421 @@ def create_app() -> Flask:
         chapter_debug_details: List[str] = []
         concept_error = None
         concept_success = None
+        metadata_error = None
+        metadata_success = None
+        seed_error = None
+        seed_success = None
 
         if request.method == "POST":
-            chat_type = request.form.get("chat_type", "outline")
+            metadata_action = request.form.get("metadata_action")
+            if metadata_action in {"save", "generate"}:
+                form_pitch = request.form.get("user_pitch", "").strip()
+                form_genre = request.form.get("genre", "").strip()
+                tone_values = [value.strip() for value in request.form.getlist("tone_mood") if value.strip()]
+                themes_text = request.form.get("themes", "").strip()
+                stakes_raw = request.form.get("stakes_level", "").strip()
+                audience_text = request.form.get("audience", "").strip()
+                pace_text = request.form.get("narrative_pace", "").strip()
+                pov_text = request.form.get("pov_style", "").strip()
+                time_structure_text = request.form.get("time_structure", "").strip()
+                setting_text = request.form.get("setting", "").strip()
+                realism_text = request.form.get("world_realism", "").strip()
 
-            if "reset" in request.form:
-                if chat_type == "acts":
-                    session.pop(act_session_key, None)
-                elif chat_type == "chapters":
-                    session.pop(chapter_session_key, None)
-                elif chat_type == "concepts":
-                    session.pop(concept_session_key, None)
-                else:
-                    session.pop(session_key, None)
-                return redirect(url_for("project_detail", project_id=project_id))
+                missing_fields: List[str] = []
+                if not form_pitch:
+                    missing_fields.append("User pitch")
+                if not form_genre:
+                    missing_fields.append("Genre")
+                if not tone_values:
+                    missing_fields.append("Tone / mood")
 
-            use_api_requested = _is_api_requested(request.form)
-            user_message = request.form.get("message", "").strip()
-            if chat_type == "acts":
-                if user_message:
-                    act_history.append({"role": "user", "content": user_message})
-                    generator = None
+                stakes_level: Optional[int]
+                if stakes_raw:
                     try:
-                        generator = _resolve_text_generator(use_api_requested)
-                        (
-                            act1_result,
-                            act2_result,
-                            act3_result,
-                            acts_detected,
-                        ) = _generate_three_act_outline(
-                            generator,
-                            project,
-                            user_message,
-                        )
-                    except OpenAIAPIRateLimitError as exc:
-                        act_error = str(exc)
-                        act_history.pop()
-                    except RuntimeError as exc:
-                        act_error = str(exc)
-                        act_history.pop()
-                    except Exception as exc:  # pragma: no cover - defensive
-                        act_error = (
-                            "The text generation backend could not generate the act outline: "
-                            f"{exc}"
-                        )
-                        act_history.pop()
+                        stakes_level = int(stakes_raw)
+                    except ValueError:
+                        metadata_error = "Please choose a stakes level between 1 and 10."
+                        stakes_level = None
                     else:
-                        device_type = generator.get_compute_device()
-                        device_label = _normalise_device_label(device_type)
-                        device_sentence = _device_usage_sentence(device_type)
-                        acts = [
-                            act1_result.strip(),
-                            act2_result.strip(),
-                            act3_result.strip(),
-                        ]
-                        labels = ["Act I", "Act II", "Act III"]
-                        for label, content in zip(labels, acts):
-                            response_text = (
-                                f"{label} outline:\n{content or '(no reply)'}"
-                            )
-                            act_history.append(
-                                {
-                                    "role": "assistant",
-                                    "content": response_text,
-                                    "device_type": device_label,
-                                }
-                            )
-                        project.act_final_notes = user_message
-                        project.act1_outline = acts[0] if acts else ""
-                        project.act2_outline = acts[1] if len(acts) > 1 else ""
-                        project.act3_outline = acts[2] if len(acts) > 2 else ""
-                        db.session.commit()
-                        if acts_detected >= 3:
-                            act_success = (
-                                "Act-by-act outline updated from assistant."
-                                f"{device_sentence}"
+                        if stakes_level < 1 or stakes_level > 10:
+                            metadata_error = "Please choose a stakes level between 1 and 10."
+                else:
+                    stakes_level = None
+
+                if stakes_level is None and metadata_error is None:
+                    stakes_level = 5
+
+                if missing_fields and metadata_error is None:
+                    metadata_error = (
+                        "Please complete the required fields: "
+                        + ", ".join(missing_fields)
+                        + "."
+                    )
+
+                if metadata_error is None:
+                    project.user_pitch = form_pitch
+                    project.genre = form_genre
+                    project.tone_mood = _serialise_tone_values(tone_values)
+                    project.themes = themes_text or None
+                    project.stakes_level = stakes_level
+                    project.audience = audience_text or None
+                    project.narrative_pace = pace_text or None
+                    project.pov_style = pov_text or None
+                    project.time_structure = time_structure_text or None
+                    project.setting = setting_text or None
+                    project.world_realism = realism_text or None
+                    db.session.commit()
+                    metadata_success = "Project overview saved."
+
+                    if metadata_action == "generate":
+                        use_api_requested = _is_api_requested(request.form)
+                        generator = None
+                        try:
+                            generator = _resolve_text_generator(use_api_requested)
+                            prompt_text = _build_seed_prompt_request(project)
+                            seed_text_raw = generator.generate_response(prompt_text)
+                        except OpenAIAPIRateLimitError as exc:
+                            seed_error = str(exc)
+                        except RuntimeError as exc:
+                            seed_error = str(exc)
+                        except Exception as exc:  # pragma: no cover - defensive
+                            seed_error = (
+                                "The text generation backend could not generate the seed prompt: "
+                                f"{exc}"
                             )
                         else:
-                            act_success = (
-                                "Act outline updated from assistant, but only "
-                                f"{acts_detected} act section"
-                                f"{'s' if acts_detected != 1 else ''} were detected. "
-                                "The full response was saved under Act I."
-                                f"{device_sentence}"
+                            seed_text = (seed_text_raw or "").strip()
+                            project.seed_prompt = seed_text or None
+                            db.session.commit()
+                            device_type = generator.get_compute_device() if generator else None
+                            seed_success = (
+                                "Seed prompt generated and saved."
+                                f"{_device_usage_sentence(device_type)}"
                             )
-                    session.modified = True
-                else:
-                    act_error = "Please enter a message before sending."
-            elif chat_type == "chapters":
-                chapters_count_raw = request.form.get("chapters_count", "").strip()
-                try:
-                    chapters_per_act = int(
-                        chapters_count_raw or chapter_count_default
-                    )
-                except ValueError:
-                    chapter_error = "Please enter a valid positive number of chapters."
-                    chapters_per_act = chapter_count_default
-                else:
-                    chapter_count_value = chapters_per_act
+            else:
+                chat_type = request.form.get("chat_type", "outline")
 
-                if chapter_error is None:
-                    if chapters_per_act <= 0:
-                        chapter_error = "Please enter a valid positive number of chapters."
-                    elif not user_message:
-                        chapter_error = "Please enter a message before sending."
+                if "reset" in request.form:
+                    if chat_type == "acts":
+                        session.pop(act_session_key, None)
+                    elif chat_type == "chapters":
+                        session.pop(chapter_session_key, None)
+                    elif chat_type == "concepts":
+                        session.pop(concept_session_key, None)
                     else:
-                        chapter_history.append(
-                            {"role": "user", "content": user_message}
-                        )
+                        session.pop(session_key, None)
+                    return redirect(url_for("project_detail", project_id=project_id))
+
+                use_api_requested = _is_api_requested(request.form)
+                user_message = request.form.get("message", "").strip()
+                if chat_type == "acts":
+                    if user_message:
+                        act_history.append({"role": "user", "content": user_message})
                         generator = None
                         try:
                             generator = _resolve_text_generator(use_api_requested)
                             (
-                                chapter_texts,
-                                chapter_structures,
-                                chapter_debug_details,
-                                chapter_all_valid,
-                            ) = _generate_chapter_outlines(
+                                act1_result,
+                                act2_result,
+                                act3_result,
+                                acts_detected,
+                            ) = _generate_three_act_outline(
                                 generator,
                                 project,
                                 user_message,
-                                chapters_per_act,
                             )
                         except OpenAIAPIRateLimitError as exc:
-                            chapter_error = str(exc)
-                            chapter_history.pop()
+                            act_error = str(exc)
+                            act_history.pop()
                         except RuntimeError as exc:
-                            chapter_error = str(exc)
-                            chapter_history.pop()
+                            act_error = str(exc)
+                            act_history.pop()
                         except Exception as exc:  # pragma: no cover - defensive
-                            chapter_error = (
-                                "The text generation backend could not generate the chapter outline: "
+                            act_error = (
+                                "The text generation backend could not generate the act outline: "
                                 f"{exc}"
                             )
-                            chapter_history.pop()
+                            act_history.pop()
                         else:
-                            if chapter_debug_details:
-                                for entry in chapter_debug_details:
-                                    LOGGER.info("Chapter generation debug: %s", entry)
                             device_type = generator.get_compute_device()
                             device_label = _normalise_device_label(device_type)
                             device_sentence = _device_usage_sentence(device_type)
-                            chapters = [result.strip() for result in chapter_texts]
+                            acts = [
+                                act1_result.strip(),
+                                act2_result.strip(),
+                                act3_result.strip(),
+                            ]
                             labels = ["Act I", "Act II", "Act III"]
-                            for label, content in zip(labels, chapters):
+                            for label, content in zip(labels, acts):
                                 response_text = (
-                                    f"{label} chapters:\n{content or '(no reply)'}"
+                                    f"{label} outline:\n{content or '(no reply)'}"
                                 )
-                                chapter_history.append(
+                                act_history.append(
                                     {
                                         "role": "assistant",
                                         "content": response_text,
                                         "device_type": device_label,
                                     }
                                 )
-                            project.chapters_final_notes = user_message
-                            project.act1_chapters = chapters[0] if chapters else ""
-                            project.act2_chapters = (
-                                chapters[1] if len(chapters) > 1 else ""
-                            )
-                            project.act3_chapters = (
-                                chapters[2] if len(chapters) > 2 else ""
-                            )
-                            project.act1_chapter_list = (
-                                json.dumps(chapter_structures[0], ensure_ascii=False)
-                                if chapter_structures and len(chapter_structures) > 0
-                                else None
-                            )
-                            project.act2_chapter_list = (
-                                json.dumps(chapter_structures[1], ensure_ascii=False)
-                                if chapter_structures and len(chapter_structures) > 1
-                                else None
-                            )
-                            project.act3_chapter_list = (
-                                json.dumps(chapter_structures[2], ensure_ascii=False)
-                                if chapter_structures and len(chapter_structures) > 2
-                                else None
-                            )
+                            project.act_final_notes = user_message
+                            project.act1_outline = acts[0] if acts else ""
+                            project.act2_outline = acts[1] if len(acts) > 1 else ""
+                            project.act3_outline = acts[2] if len(acts) > 2 else ""
                             db.session.commit()
-                            if not chapter_all_valid:
-                                chapter_warning = (
-                                    "Chapter outline generation completed with validation warnings. "
-                                    "Review the debug log below for specifics."
+                            if acts_detected >= 3:
+                                act_success = (
+                                    "Act-by-act outline updated from assistant."
+                                    f"{device_sentence}"
                                 )
-                            chapter_success = (
-                                "Chapter-by-chapter outline updated from assistant."
-                                f"{device_sentence}"
-                            )
+                            else:
+                                act_success = (
+                                    "Act outline updated from assistant, but only "
+                                    f"{acts_detected} act section"
+                                    f"{'s' if acts_detected != 1 else ''} were detected. "
+                                    "The full response was saved under Act I."
+                                    f"{device_sentence}"
+                                )
                         session.modified = True
-            elif chat_type == "concepts":
-                additional_guidance = user_message
-                outline_text = (project.outline or "").strip()
-                if not outline_text:
-                    concept_error = (
-                        "Please generate or save a project outline before refining concepts."
-                    )
-                else:
-                    if additional_guidance:
-                        concept_history.append(
-                            {"role": "user", "content": additional_guidance}
+                    else:
+                        act_error = "Please enter a message before sending."
+                elif chat_type == "chapters":
+                    chapters_count_raw = request.form.get("chapters_count", "").strip()
+                    try:
+                        chapters_per_act = int(
+                            chapters_count_raw or chapter_count_default
+                        )
+                    except ValueError:
+                        chapter_error = "Please enter a valid positive number of chapters."
+                        chapters_per_act = chapter_count_default
+                    else:
+                        chapter_count_value = chapters_per_act
+
+                    if chapter_error is None:
+                        if chapters_per_act <= 0:
+                            chapter_error = "Please enter a valid positive number of chapters."
+                        elif not user_message:
+                            chapter_error = "Please enter a message before sending."
+                        else:
+                            chapter_history.append(
+                                {"role": "user", "content": user_message}
+                            )
+                            generator = None
+                            try:
+                                generator = _resolve_text_generator(use_api_requested)
+                                (
+                                    chapter_texts,
+                                    chapter_structures,
+                                    chapter_debug_details,
+                                    chapter_all_valid,
+                                ) = _generate_chapter_outlines(
+                                    generator,
+                                    project,
+                                    user_message,
+                                    chapters_per_act,
+                                )
+                            except OpenAIAPIRateLimitError as exc:
+                                chapter_error = str(exc)
+                                chapter_history.pop()
+                            except RuntimeError as exc:
+                                chapter_error = str(exc)
+                                chapter_history.pop()
+                            except Exception as exc:  # pragma: no cover - defensive
+                                chapter_error = (
+                                    "The text generation backend could not generate the chapter outline: "
+                                    f"{exc}"
+                                )
+                                chapter_history.pop()
+                            else:
+                                if chapter_debug_details:
+                                    for entry in chapter_debug_details:
+                                        LOGGER.info("Chapter generation debug: %s", entry)
+                                device_type = generator.get_compute_device()
+                                device_label = _normalise_device_label(device_type)
+                                device_sentence = _device_usage_sentence(device_type)
+                                chapters = [result.strip() for result in chapter_texts]
+                                labels = ["Act I", "Act II", "Act III"]
+                                for label, content in zip(labels, chapters):
+                                    response_text = (
+                                        f"{label} chapters:\n{content or '(no reply)'}"
+                                    )
+                                    chapter_history.append(
+                                        {
+                                            "role": "assistant",
+                                            "content": response_text,
+                                            "device_type": device_label,
+                                        }
+                                    )
+                                project.chapters_final_notes = user_message
+                                project.act1_chapters = chapters[0] if chapters else ""
+                                project.act2_chapters = (
+                                    chapters[1] if len(chapters) > 1 else ""
+                                )
+                                project.act3_chapters = (
+                                    chapters[2] if len(chapters) > 2 else ""
+                                )
+                                project.act1_chapter_list = (
+                                    json.dumps(chapter_structures[0], ensure_ascii=False)
+                                    if chapter_structures and len(chapter_structures) > 0
+                                    else None
+                                )
+                                project.act2_chapter_list = (
+                                    json.dumps(chapter_structures[1], ensure_ascii=False)
+                                    if chapter_structures and len(chapter_structures) > 1
+                                    else None
+                                )
+                                project.act3_chapter_list = (
+                                    json.dumps(chapter_structures[2], ensure_ascii=False)
+                                    if chapter_structures and len(chapter_structures) > 2
+                                    else None
+                                )
+                                db.session.commit()
+                                if not chapter_all_valid:
+                                    chapter_warning = (
+                                        "Chapter outline generation completed with validation warnings. "
+                                        "Review the debug log below for specifics."
+                                    )
+                                chapter_success = (
+                                    "Chapter-by-chapter outline updated from assistant."
+                                    f"{device_sentence}"
+                                )
+                            session.modified = True
+                elif chat_type == "concepts":
+                    additional_guidance = user_message
+                    outline_text = (project.outline or "").strip()
+                    if not outline_text:
+                        concept_error = (
+                            "Please generate or save a project outline before refining concepts."
                         )
                     else:
-                        concept_history.append(
-                            {
-                                "role": "user",
-                                "content": (
-                                    "Analyse the outline and clarify any core concepts that seem vague."
-                                ),
-                            }
-                        )
-                    generator = None
-                    try:
-                        generator = _resolve_text_generator(use_api_requested)
-                        analysis_results = _identify_unclear_concepts(
-                            generator,
-                            outline_text,
-                            additional_guidance,
-                        )
-                        definitions: List[Dict[str, Any]] = []
-                        if analysis_results:
-                            definitions = _define_core_concepts(
+                        if additional_guidance:
+                            concept_history.append(
+                                {"role": "user", "content": additional_guidance}
+                            )
+                        else:
+                            concept_history.append(
+                                {
+                                    "role": "user",
+                                    "content": (
+                                        "Analyse the outline and clarify any core concepts that seem vague."
+                                    ),
+                                }
+                            )
+                        generator = None
+                        try:
+                            generator = _resolve_text_generator(use_api_requested)
+                            analysis_results = _identify_unclear_concepts(
                                 generator,
                                 outline_text,
-                                analysis_results,
                                 additional_guidance,
                             )
-                    except OpenAIAPIRateLimitError as exc:
-                        concept_error = str(exc)
-                        concept_history.pop()
-                    except RuntimeError as exc:
-                        concept_error = str(exc)
-                        concept_history.pop()
-                    except ValueError as exc:
-                        concept_error = str(exc)
-                        concept_history.pop()
-                    except Exception as exc:  # pragma: no cover - defensive
-                        concept_error = (
-                            "The text generation backend could not analyse the concepts: "
-                            f"{exc}"
-                        )
-                        concept_history.pop()
-                    else:
-                        device_type = generator.get_compute_device()
-                        device_label = _normalise_device_label(device_type)
-                        device_sentence = _device_usage_sentence(device_type)
-                        analysis_message = _format_concept_analysis_summary(
-                            analysis_results
-                        )
-                        concept_history.append(
-                            {
-                                "role": "assistant",
-                                "content": analysis_message,
-                                "device_type": device_label,
-                            }
-                        )
-                        if analysis_results and definitions:
-                            definition_message = (
-                                _format_concept_definition_summary(definitions)
+                            definitions: List[Dict[str, Any]] = []
+                            if analysis_results:
+                                definitions = _define_core_concepts(
+                                    generator,
+                                    outline_text,
+                                    analysis_results,
+                                    additional_guidance,
+                                )
+                        except OpenAIAPIRateLimitError as exc:
+                            concept_error = str(exc)
+                            concept_history.pop()
+                        except RuntimeError as exc:
+                            concept_error = str(exc)
+                            concept_history.pop()
+                        except ValueError as exc:
+                            concept_error = str(exc)
+                            concept_history.pop()
+                        except Exception as exc:  # pragma: no cover - defensive
+                            concept_error = (
+                                "The text generation backend could not analyse the concepts: "
+                                f"{exc}"
+                            )
+                            concept_history.pop()
+                        else:
+                            device_type = generator.get_compute_device()
+                            device_label = _normalise_device_label(device_type)
+                            device_sentence = _device_usage_sentence(device_type)
+                            analysis_message = _format_concept_analysis_summary(
+                                analysis_results
                             )
                             concept_history.append(
                                 {
                                     "role": "assistant",
-                                    "content": definition_message,
+                                    "content": analysis_message,
                                     "device_type": device_label,
                                 }
                             )
-                            _apply_concept_definitions(
-                                project,
-                                analysis_results,
-                                definitions,
-                            )
-                            db.session.commit()
-                            concept_success = (
-                                "Concept definitions updated from assistant."
-                                f"{device_sentence}"
-                            )
-                        else:
-                            concept_success = (
-                                "No unclear concepts were identified in the outline."
-                                f"{device_sentence}"
-                            )
-                        session.modified = True
-                session.modified = True
-            else:
-                if user_message:
-                    history.append({"role": "user", "content": user_message})
-                    generator = None
-                    try:
-                        generator = _resolve_text_generator(use_api_requested)
-                        assistant_reply_raw = generator.generate_response(
-                            _build_outline_prompt(project, history)
-                        )
-                    except OpenAIAPIRateLimitError as exc:
-                        error = str(exc)
-                        history.pop()
-                    except RuntimeError as exc:
-                        error = str(exc)
-                        history.pop()
-                    except Exception as exc:  # pragma: no cover - defensive
-                        error = (
-                            "The text generation backend could not generate a reply: "
-                            f"{exc}"
-                        )
-                        history.pop()
-                    else:
-                        device_type = generator.get_compute_device()
-                        assistant_reply = assistant_reply_raw or "(no reply)"
-                        history.append(
-                            {
-                                "role": "assistant",
-                                "content": assistant_reply,
-                                "device_type": _normalise_device_label(device_type),
-                            }
-                        )
-                        clean_outline = assistant_reply.strip()
-                        if clean_outline and clean_outline != "(no reply)":
-                            project.outline = clean_outline
-                            db.session.commit()
-                            success_suffix = _device_usage_sentence(device_type)
-                            success = (
-                                "Outline updated from assistant."
-                                f"{success_suffix}"
-                            )
+                            if analysis_results and definitions:
+                                definition_message = (
+                                    _format_concept_definition_summary(definitions)
+                                )
+                                concept_history.append(
+                                    {
+                                        "role": "assistant",
+                                        "content": definition_message,
+                                        "device_type": device_label,
+                                    }
+                                )
+                                _apply_concept_definitions(
+                                    project,
+                                    analysis_results,
+                                    definitions,
+                                )
+                                db.session.commit()
+                                concept_success = (
+                                    "Concept definitions updated from assistant."
+                                    f"{device_sentence}"
+                                )
+                            else:
+                                concept_success = (
+                                    "No unclear concepts were identified in the outline."
+                                    f"{device_sentence}"
+                                )
+                            session.modified = True
                     session.modified = True
                 else:
-                    error = "Please enter a message before sending."
+                    if user_message:
+                        history.append({"role": "user", "content": user_message})
+                        generator = None
+                        try:
+                            generator = _resolve_text_generator(use_api_requested)
+                            assistant_reply_raw = generator.generate_response(
+                                _build_outline_prompt(project, history)
+                            )
+                        except OpenAIAPIRateLimitError as exc:
+                            error = str(exc)
+                            history.pop()
+                        except RuntimeError as exc:
+                            error = str(exc)
+                            history.pop()
+                        except Exception as exc:  # pragma: no cover - defensive
+                            error = (
+                                "The text generation backend could not generate a reply: "
+                                f"{exc}"
+                            )
+                            history.pop()
+                        else:
+                            device_type = generator.get_compute_device()
+                            assistant_reply = assistant_reply_raw or "(no reply)"
+                            history.append(
+                                {
+                                    "role": "assistant",
+                                    "content": assistant_reply,
+                                    "device_type": _normalise_device_label(device_type),
+                                }
+                            )
+                            clean_outline = assistant_reply.strip()
+                            if clean_outline and clean_outline != "(no reply)":
+                                project.outline = clean_outline
+                                db.session.commit()
+                                success_suffix = _device_usage_sentence(device_type)
+                                success = (
+                                    "Outline updated from assistant."
+                                    f"{success_suffix}"
+                                )
+                        session.modified = True
+                    else:
+                        error = "Please enter a message before sending."
 
         device_hint = _compute_device_hint()
 
@@ -746,6 +1098,16 @@ def create_app() -> Flask:
             concept_success=concept_success,
             device_hint=device_hint,
             act_chapter_lists=_collect_project_chapter_lists(project),
+            metadata_error=metadata_error,
+            metadata_success=metadata_success,
+            seed_error=seed_error,
+            seed_success=seed_success,
+            genre_choices=GENRE_CHOICES,
+            tone_choices=TONE_CHOICES,
+            pace_choices=PACE_CHOICES,
+            pov_choices=POV_CHOICES,
+            time_structure_choices=TIME_STRUCTURE_CHOICES,
+            realism_choices=REALISM_CHOICES,
         )
 
     @app.route(
