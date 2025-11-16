@@ -4,7 +4,7 @@ from __future__ import annotations
 
 SYSTEM_PROMPTS = {
     "project_overview": {
-        "max_new_tokens": 2024,
+        "max_new_tokens": 3024,
         "base": (
             "You are a professional story concept developer. Your task is to take a user's "
             "vague or partial story idea plus structured metadata and expand it into a fully-"
@@ -60,6 +60,10 @@ SYSTEM_PROMPTS = {
             "   - No “they grow as people.”\n"
             "   - Use concrete story ingredients:  \n"
             "     conflicts, emotional arcs, possible reveals, relational tensions, and thematic focus.\n\n"
+            "7. **Every seed prompt must define a clear external story spine and a satisfying end-state.**  \n"
+            "   - The spine should be a grounded, genre-appropriate objective or life pivot (for example, a shared project, major life decision, journey, investigation, or milestone).\n"
+            "   - This spine must anchor the romance or character arc, create act-level progression, and allow a concrete, fulfilling resolution in the final act.\n"
+            "   - Even in slow-burn, low-stakes, or highly introspective stories, ensure there is a visible goal, trajectory, and endpoint for the narrative to move toward.\n\n"
             "------------------------------------------------------------\n"
             "### OUTPUT FORMAT\n\n"
             "Respond with a section titled:\n\n"
