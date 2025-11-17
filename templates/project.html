@@ -224,9 +224,6 @@
     </div>
     <a href="{{ url_for('dashboard') }}" class="btn btn-outline-light btn-sm">Back to dashboard</a>
   </div>
-  {% set overview_pending = not project_overview_summary %}
-  {% set overview_active = overview_force_active or overview_pending %}
-  {% set outline_active = not overview_active %}
   <div class="row g-4 align-items-start">
     <div class="col-xl-3">
       <div class="card h-100">
@@ -250,6 +247,23 @@
                   Manage {{ main_characters|length }} primary character{{ main_characters|length != 1 and 's' or '' }} and generate new profiles.
                 {% else %}
                   Craft the protagonists and supporting cast for your story.
+                {% endif %}
+              </p>
+            </button>
+            <button
+              class="overview-tile{% if ideation_active %} active{% endif %}"
+              type="button"
+              data-target="ideationPanel"
+              data-chat-target="ideationChatPanel"
+              aria-controls="ideationPanel"
+              aria-selected="{{ 'true' if ideation_active else 'false' }}"
+            >
+              <h2 class="h6 mb-1">Idea catalyst</h2>
+              <p>
+                {% if ideation_history %}
+                  Continue the conversation that will ultimately feed your seed prompt.
+                {% else %}
+                  Brainstorm genre, scope, and themes with the assistant before filling out the metadata.
                 {% endif %}
               </p>
             </button>
@@ -463,6 +477,40 @@
                         <p class="mb-0">Use the button above to generate your first character profile.</p>
                       </div>
                     {% endif %}
+                  </div>
+                </div>
+                <div class="tile-detail{% if ideation_active %} active{% endif %}" id="ideationPanel" role="tabpanel">
+                  <div class="outline-content d-flex flex-column gap-3">
+                    <div>
+                      <h3 class="h6 mb-1">Idea catalyst</h3>
+                      <p class="text-secondary mb-0 small">Capture the author's intent in plain language before committing to the formal seed prompt.</p>
+                    </div>
+                    <div class="act-outline-box">
+                      <div class="fw-semibold text-info mb-2 text-uppercase small">How this stage works</div>
+                      <p class="mb-2 small">Use the chat on the right to explore genre, fantasy or realism level, narrative ambitions, and core themes. The assistant remembers the latest {{ ideation_context_window or 5000 }}-token slice of the conversation, so keep the exchange focused on the canon you want to carry forward.</p>
+                      <p class="mb-0 small">When the idea feels crisp, switch to the seed prompt step to formalise the metadata questionnaire.</p>
+                    </div>
+                    <div class="act-outline-box">
+                      <div class="fw-semibold text-info mb-2 text-uppercase small">Characters shared with the assistant</div>
+                      {% if main_characters or supporting_characters %}
+                        <div class="d-flex flex-column gap-3">
+                          {% for character in main_characters %}
+                            <div>
+                              <div class="fw-semibold small text-light">{{ character.name or 'Untitled character' }}</div>
+                              <p class="text-secondary small mb-0">{{ character.role_in_story or 'Role not provided yet.' }}</p>
+                            </div>
+                          {% endfor %}
+                          {% for character in supporting_characters %}
+                            <div>
+                              <div class="fw-semibold small text-light">{{ character.name or 'Untitled character' }} <span class="badge bg-secondary-subtle text-secondary ms-1">Supporting</span></div>
+                              <p class="text-secondary small mb-0">{{ character.role_in_story or 'Role not provided yet.' }}</p>
+                            </div>
+                          {% endfor %}
+                        </div>
+                      {% else %}
+                        <p class="text-secondary small mb-0">No characters created yet. Generate a character profile to feed more canon into the idea catalyst.</p>
+                      {% endif %}
+                    </div>
                   </div>
                 </div>
                 <div class="tile-detail{% if overview_active %} active{% endif %}" id="overviewPanel" role="tabpanel">
@@ -1067,6 +1115,55 @@
             </div>
             <div class="col-12 col-lg-6">
               <div class="chat-column">
+                <div id="ideationChatPanel" class="chat-panel{% if ideation_active %} active{% endif %}" role="tabpanel" aria-labelledby="ideationPanel">
+                  <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
+                    <div>
+                      <h2 class="h5 mb-1">Idea catalyst assistant</h2>
+                      <p class="text-secondary mb-0">Hold a conversation to shape the exact idea that will inform your seed prompt.</p>
+                    </div>
+                    <form method="post">
+                      <input type="hidden" name="chat_type" value="ideation" />
+                      <button type="submit" name="reset" value="1" class="btn btn-outline-light btn-sm">Clear chat</button>
+                    </form>
+                  </div>
+                  <p class="text-secondary small mb-3">The assistant remembers roughly {{ ideation_context_window or 5000 }} tokens of context from this chat. When the discussion gets long, older messages are trimmed first.</p>
+                  <div class="chat-messages flex-grow-1 mb-3">
+                    {% if ideation_history %}
+                      {% for message in ideation_history %}
+                        <div class="message {{ message.role }}">
+                          <strong class="d-block mb-1 text-uppercase small">{{ message.role }}</strong>
+                          <div>{{ message.content }}</div>
+                          {% if message.device_type %}
+                            <div class="message-device">Generated using the {{ message.device_type }} backend.</div>
+                          {% endif %}
+                        </div>
+                      {% endfor %}
+                    {% else %}
+                      <div class="text-secondary text-center w-100 my-auto">Describe the spark—genre, fantastical level, or themes—and the assistant will ask clarifying questions.</div>
+                    {% endif %}
+                  </div>
+                  {% if ideation_error %}
+                    <div class="alert alert-danger" role="alert">{{ ideation_error }}</div>
+                  {% endif %}
+                  {% if ideation_success %}
+                    <div class="alert alert-success" role="alert">{{ ideation_success }}</div>
+                  {% endif %}
+                  <div id="ideationLoadingIndicator" class="loading-indicator" role="status" aria-live="polite">
+                    <div class="spinner-border text-info" role="status" aria-hidden="true"></div>
+                    <span>Assistant is thinking…</span>
+                  </div>
+                  <form method="post" data-chat-form data-loading-target="ideationLoadingIndicator" class="d-flex flex-column gap-3">
+                    <input type="hidden" name="chat_type" value="ideation" />
+                    <textarea class="form-control" name="message" rows="3" placeholder="Share an inspiration, question, or requirement for the story seed."></textarea>
+                    <div class="d-flex align-items-center justify-content-end gap-3">
+                      <div class="form-check mb-0">
+                        <input class="form-check-input" type="checkbox" value="1" id="ideationUseApi" name="use_api" />
+                        <label class="form-check-label small" for="ideationUseApi">API</label>
+                      </div>
+                      <button type="submit" class="btn btn-primary">Send to assistant</button>
+                    </div>
+                  </form>
+                </div>
                 <div id="overviewChatPanel" class="chat-panel{% if overview_active %} active{% endif %}" role="tabpanel" aria-labelledby="overviewPanel">
                   <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
                     <div>

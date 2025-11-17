@@ -3,6 +3,16 @@
 from __future__ import annotations
 
 SYSTEM_PROMPTS = {
+    "idea_catalyst": {
+        "max_new_tokens": 1024,
+        "context_window_tokens": 5000,
+        "system_prompt": (
+            "You are a helpful writing assistant. You will help the author get their ideas in shape. "
+            "Ask focused questions about the genre, the desired level of fantasy or realism, the themes they want to explore, "
+            "and the emotional goals for the story so you can scope the project together. "
+            "Encourage concrete answers, highlight gaps, and capture a crisp description of the intended book."
+        ),
+    },
     "project_overview": {
         "max_new_tokens": 3024,
         "base": (
@@ -530,3 +540,29 @@ def get_prompt_max_new_tokens(name: str, fallback: int | None = None) -> int | N
         return fallback
 
     return tokens
+
+
+def get_prompt_context_window(name: str, fallback: int | None = None) -> int | None:
+    """Return the configured context window for ``name`` if available."""
+
+    entry = SYSTEM_PROMPTS.get(name)
+    if not isinstance(entry, dict):
+        return fallback
+
+    raw_value = (
+        entry.get("context_window_tokens")
+        or entry.get("context_window")
+        or entry.get("max_context_tokens")
+    )
+    if raw_value is None:
+        return fallback
+
+    try:
+        limit = int(raw_value)
+    except (TypeError, ValueError):
+        return fallback
+
+    if limit <= 0:
+        return fallback
+
+    return limit
