@@ -46,6 +46,7 @@ from system_prompts import (
     SYSTEM_PROMPTS,
     get_character_fields,
     get_character_input_fields,
+    get_prompt_context_window,
     get_prompt_max_new_tokens,
 )
 
@@ -1043,6 +1044,8 @@ def create_app() -> Flask:
 
         session_key = _session_key(project_id)
         history = session.setdefault(session_key, [])
+        ideation_session_key = _ideation_session_key(project_id)
+        ideation_history = session.setdefault(ideation_session_key, [])
         act_session_key = _act_session_key(project_id)
         act_history = session.setdefault(act_session_key, [])
         chapter_session_key = _chapter_session_key(project_id)
@@ -1055,6 +1058,8 @@ def create_app() -> Flask:
         draft_history = session.setdefault(draft_session_key, [])
         error = None
         success = None
+        ideation_error = None
+        ideation_success = None
         act_error = None
         act_success = None
         chapter_error = None
@@ -1078,6 +1083,10 @@ def create_app() -> Flask:
         overview_form_state = _load_project_overview_form(project)
         overview_field_errors: Dict[str, str] = {}
         overview_force_active = False
+        ideation_force_active = False
+        ideation_context_window = get_prompt_context_window(
+            "idea_catalyst", fallback=5000
+        )
 
         if request.method == "POST":
             chat_type = request.form.get("chat_type", "outline")
@@ -1093,6 +1102,8 @@ def create_app() -> Flask:
                     session.pop(supporting_session_key, None)
                 elif chat_type == "drafts":
                     session.pop(draft_session_key, None)
+                elif chat_type == "ideation":
+                    session.pop(ideation_session_key, None)
                 else:
                     session.pop(session_key, None)
                 return redirect(url_for("project_detail", project_id=project_id))
@@ -1167,6 +1178,64 @@ def create_app() -> Flask:
                             overview_success = " ".join(success_parts)
                             overview_form_state = _load_project_overview_form(project)
                             overview_field_errors = {}
+            elif chat_type == "ideation":
+                ideation_force_active = True
+                message_content = user_message
+                if not message_content:
+                    ideation_error = (
+                        "Share a sentence or question so the idea catalyst can respond."
+                    )
+                else:
+                    ideation_history.append({"role": "user", "content": message_content})
+                    generator = None
+                    try:
+                        generator = _resolve_text_generator(use_api_requested)
+                        prompt = _build_idea_catalyst_prompt(
+                            project,
+                            ideation_history,
+                            context_window_tokens=ideation_context_window,
+                        )
+                        max_tokens = get_prompt_max_new_tokens(
+                            "idea_catalyst", fallback=768
+                        )
+                        response_raw = generator.generate_response(
+                            prompt,
+                            max_new_tokens=max_tokens,
+                        ) or ""
+                        assistant_reply = response_raw.strip()
+                        if not assistant_reply:
+                            raise ValueError(
+                                "The idea catalyst assistant returned an empty reply."
+                            )
+                    except OpenAIAPIRateLimitError as exc:
+                        ideation_error = str(exc)
+                        ideation_history.pop()
+                    except RuntimeError as exc:
+                        ideation_error = str(exc)
+                        ideation_history.pop()
+                    except ValueError as exc:
+                        ideation_error = str(exc)
+                        ideation_history.pop()
+                    except Exception as exc:  # pragma: no cover - defensive
+                        ideation_error = (
+                            "The text generation backend could not generate a reply: "
+                            f"{exc}"
+                        )
+                        ideation_history.pop()
+                    else:
+                        device_type = generator.get_compute_device()
+                        ideation_history.append(
+                            {
+                                "role": "assistant",
+                                "content": assistant_reply,
+                                "device_type": _normalise_device_label(device_type),
+                            }
+                        )
+                        ideation_success = (
+                            "Conversation updated with the idea catalyst."
+                            f"{_device_usage_sentence(device_type)}"
+                        )
+                    session.modified = True
             elif chat_type == "acts":
                 if user_message:
                     act_history.append({"role": "user", "content": user_message})
@@ -1740,6 +1809,22 @@ def create_app() -> Flask:
             _load_project_overview_data(project)
         )
         project_overview_summary = (project.project_overview or "").strip()
+        overview_pending = not project_overview_summary
+
+        if ideation_force_active:
+            ideation_active = True
+            overview_active = False
+        elif overview_force_active:
+            ideation_active = False
+            overview_active = True
+        elif overview_pending:
+            ideation_active = True
+            overview_active = False
+        else:
+            ideation_active = False
+            overview_active = False
+
+        outline_active = not (ideation_active or overview_active)
 
         return render_template(
             "project.html",
@@ -1747,13 +1832,19 @@ def create_app() -> Flask:
             history=history,
             error=error,
             success=success,
+            ideation_history=ideation_history,
+            ideation_error=ideation_error,
+            ideation_success=ideation_success,
+            ideation_context_window=ideation_context_window,
+            ideation_active=ideation_active,
+            overview_active=overview_active,
+            outline_active=outline_active,
             overview_error=overview_error,
             overview_success=overview_success,
             overview_form=overview_form_state,
             overview_sections=overview_sections,
             project_overview_summary=project_overview_summary,
             overview_field_errors=overview_field_errors,
-            overview_force_active=overview_force_active,
             genre_options=_PROJECT_GENRE_OPTIONS,
             tone_options=_PROJECT_TONE_OPTIONS,
             audience_options=_PROJECT_AUDIENCE_OPTIONS,
@@ -2484,6 +2575,12 @@ def _get_generator() -> TextGenerator:
 
         _generator = TextGenerator(model_path)
     return _generator
+
+
+def _ideation_session_key(project_id: int) -> str:
+    """Return the session key used for the idea catalyst conversation."""
+
+    return f"ideation_chat_history_{project_id}"
 
 
 def _act_session_key(project_id: int) -> str:
@@ -3302,6 +3399,49 @@ def _generate_single_act_chapters(
     return formatted_text, last_entries, debug_messages, False
 
 
+def _build_idea_catalyst_prompt(
+    project: Project,
+    history: Iterable[Dict[str, Any]],
+    *,
+    context_window_tokens: int | None = None,
+) -> str:
+    """Construct the prompt for the idea catalyst chat."""
+
+    prompt_lines: List[str] = []
+    prompt_config = SYSTEM_PROMPTS.get("idea_catalyst")
+    system_prompt: Optional[str] = None
+    if isinstance(prompt_config, dict):
+        system_prompt = prompt_config.get("system_prompt") or prompt_config.get("prompt")
+    elif prompt_config:
+        system_prompt = str(prompt_config)
+
+    if system_prompt:
+        prompt_lines.append(f"System: {system_prompt}")
+
+    overview_text = _project_overview_context(project).strip()
+    if overview_text:
+        prompt_lines.append(
+            "System: Current project overview (if available). Use it for continuity, but prioritise the user's latest notes.\n"
+            f"{overview_text}"
+        )
+
+    character_context = _build_character_roster(project).strip()
+    if character_context and not character_context.startswith("No character"):
+        prompt_lines.append(
+            "System: Existing character notes provided by the author. Treat these as canon and reference them in your questions.\n"
+            f"{character_context}"
+        )
+
+    trimmed_history = _truncate_history_for_context(history, context_window_tokens)
+    for message in trimmed_history:
+        role = message.get("role")
+        prefix = "User" if role == "user" else "Assistant"
+        prompt_lines.append(f"{prefix}: {message.get('content', '')}")
+
+    prompt_lines.append("Assistant:")
+    return "\n".join(prompt_lines)
+
+
 def _build_outline_prompt(
     project: Project,
     history: Iterable[Dict[str, str]],
@@ -3357,6 +3497,36 @@ def _build_outline_prompt(
 
     prompt_lines.append("Assistant:")
     return "\n".join(prompt_lines)
+
+
+def _truncate_history_for_context(
+    history: Iterable[Dict[str, Any]],
+    max_tokens: int | None,
+) -> List[Dict[str, Any]]:
+    """Return chat history trimmed to fit the configured context window."""
+
+    messages = list(history)
+    if not max_tokens or max_tokens <= 0:
+        return messages
+
+    kept: List[Dict[str, Any]] = []
+    tokens_used = 0
+    for message in reversed(messages):
+        content = str(message.get("content", "") or "")
+        token_estimate = max(1, _estimate_token_count(content))
+        if kept and tokens_used + token_estimate > max_tokens:
+            break
+        tokens_used += token_estimate
+        kept.append(message)
+
+    return list(reversed(kept))
+
+
+def _estimate_token_count(text: str) -> int:
+    """Very rough heuristic to keep history within the context window."""
+
+    tokens = re.findall(r"\S+", text or "")
+    return max(1, len(tokens))
 
 
 def _generate_three_act_outline(
