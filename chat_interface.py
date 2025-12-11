@@ -563,7 +563,7 @@ def _build_project_overview_prompt(
 ) -> str:
     """Construct the prompt sent to the model to generate the seed prompt."""
 
-    config = SYSTEM_PROMPTS.get("project_overview", {})
+    config = SYSTEM_PROMPTS.get("seed_prompt", {})
     base_prompt = config.get(
         "base",
         (
@@ -1139,7 +1139,7 @@ def create_app() -> Flask:
                             )
                             prompt = _build_project_overview_prompt(form_state, project)
                             max_tokens = get_prompt_max_new_tokens(
-                                "project_overview", fallback=512
+                                "seed_prompt", fallback=512
                             )
                             response = generator.generate_response(
                                 prompt,
@@ -1668,7 +1668,7 @@ def create_app() -> Flask:
                     generator = None
                     try:
                         generator = _resolve_text_generator(use_api_requested)
-                        max_tokens = get_prompt_max_new_tokens("outline_assistant")
+                        max_tokens = get_prompt_max_new_tokens("outline")
                         draft_prompt = _build_outline_prompt(
                             project, history, stage="draft"
                         )
@@ -3452,12 +3452,12 @@ def _build_outline_prompt(
     """Construct a prompt for the outline assistant that includes characters."""
 
     prompt_lines: List[str] = []
-    prompt_config = SYSTEM_PROMPTS.get("outline_assistant")
+    prompt_config = SYSTEM_PROMPTS.get("outline")
     system_prompt = None
     refinement_prompt = None
     if isinstance(prompt_config, dict):
         system_prompt = prompt_config.get("prompt")
-        refinement_prompt = prompt_config.get("refinement_prompt")
+        refinement_prompt = prompt_config.get("outline_refinement")
     else:
         system_prompt = prompt_config
 
