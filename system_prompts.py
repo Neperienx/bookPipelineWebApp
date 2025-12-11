@@ -13,7 +13,7 @@ SYSTEM_PROMPTS = {
             "Encourage concrete answers, highlight gaps, and capture a crisp description of the intended book."
         ),
     },
-    "project_overview": {
+    "seed_prompt": {
         "max_new_tokens": 3024,
         "base": (
             "You are a professional story concept developer. Your task is to take a user's "
@@ -108,7 +108,7 @@ SYSTEM_PROMPTS = {
             "Your output must be a **finished, coherent seed prompt** ready for the next stage in the pipeline."
         ),
     },
-    "outline_assistant": {
+    "outline": {
     "prompt": (
         "You are a professional fiction development assistant. You help authors turn a story pitch and character roster "
         "into three sharply differentiated, cinematic, story-driven outlines.\n\n"
@@ -159,7 +159,7 @@ SYSTEM_PROMPTS = {
         "No additional commentary."
     ),
 
-    "refinement_prompt": (
+    "outline_refinement": (
         "You are a narrative development editor at a professional publishing imprint. You receive three outlines based on the author's pitch. "
         "Your job is to select, evaluate, and refine them into one superior story plan.\n\n"
 
