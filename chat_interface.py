@@ -504,12 +504,14 @@ def _prepare_overview_display_sections(data: Mapping[str, Any]) -> List[Dict[str
     return sections
 
 
-def _project_overview_context(project: Project) -> str:
+def _project_overview_context(
+    project: Project, *, include_ideation_summary: bool = True
+) -> str:
     """Return the stored seed prompt text or a fallback description."""
 
     lines: List[str] = []
     ideation_summary = (project.ideation_summary or "").strip()
-    if ideation_summary:
+    if include_ideation_summary and ideation_summary:
         lines.append("Validated vision summary:\n" + ideation_summary)
 
     summary = (project.project_overview or "").strip()
