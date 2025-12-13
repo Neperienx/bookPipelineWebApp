@@ -1917,6 +1917,9 @@
       const panels = Array.from(document.querySelectorAll(".tile-detail"));
       const chatPanels = Array.from(document.querySelectorAll(".chat-panel"));
       const chatForms = Array.from(document.querySelectorAll("[data-chat-form]"));
+      const chatMessageContainers = Array.from(
+        document.querySelectorAll(".chat-messages")
+      );
       const stakesSlider = document.querySelector('[data-stakes-slider]');
       const stakesDisplay = document.querySelector('[data-stakes-display]');
 
@@ -1928,6 +1931,19 @@
         stakesSlider.addEventListener("change", updateStakesLabel);
         updateStakesLabel();
       }
+
+      const scrollToBottom = function (container) {
+        if (!container) {
+          return;
+        }
+        container.scrollTop = container.scrollHeight;
+      };
+
+      chatMessageContainers.forEach(function (container) {
+        requestAnimationFrame(function () {
+          scrollToBottom(container);
+        });
+      });
 
       chatForms.forEach(function (form) {
         const loadingTargetId = form.getAttribute("data-loading-target");
@@ -1973,6 +1989,15 @@
           if (chatTargetId) {
             chatPanels.forEach(function (panel) {
               panel.classList.toggle("active", panel.id === chatTargetId);
+            });
+            const activeChatPanel = chatPanels.find(function (panel) {
+              return panel.id === chatTargetId;
+            });
+            const messages = activeChatPanel
+              ? activeChatPanel.querySelector(".chat-messages")
+              : null;
+            requestAnimationFrame(function () {
+              scrollToBottom(messages);
             });
           }
         });
