@@ -507,15 +507,20 @@ def _prepare_overview_display_sections(data: Mapping[str, Any]) -> List[Dict[str
 def _project_overview_context(project: Project) -> str:
     """Return the stored seed prompt text or a fallback description."""
 
+    lines: List[str] = []
+    ideation_summary = (project.ideation_summary or "").strip()
+    if ideation_summary:
+        lines.append("Validated vision summary:\n" + ideation_summary)
+
     summary = (project.project_overview or "").strip()
     if summary:
-        return summary
+        lines.append("Seed prompt:\n" + summary)
+        return "\n\n".join(lines).strip()
 
     data = _load_project_overview_data(project)
     if not data:
-        return ""
+        return "\n\n".join(lines).strip()
 
-    lines: List[str] = []
     pitch = str(data.get("pitch", "")).strip()
     if pitch:
         lines.append(f"User pitch: {pitch}")
@@ -612,11 +617,17 @@ def _build_project_overview_prompt(
         },
     }
 
-    character_payload = (
-        _collect_project_overview_characters(project) if project is not None else {}
-    )
+    vision_summary = ""
+    character_payload = {}
+    if project is not None:
+        vision_summary = (project.ideation_summary or "").strip()
+        character_payload = _collect_project_overview_characters(project)
+
     if character_payload:
         payload["characters"] = character_payload
+
+    if vision_summary:
+        payload["idea_catalyst_summary"] = vision_summary
 
     if project is not None:
         roster_summary = _build_character_roster(project).strip()
@@ -788,6 +799,7 @@ class Project(db.Model):
     name = db.Column(db.String(120), nullable=False)
     project_overview = db.Column(db.Text, nullable=True)
     project_overview_data = db.Column(db.Text, nullable=True)
+    ideation_summary = db.Column(db.Text, nullable=True)
     outline = db.Column(db.Text, nullable=True)
     act1_outline = db.Column(db.Text, nullable=True)
     act2_outline = db.Column(db.Text, nullable=True)
@@ -967,6 +979,7 @@ def _ensure_project_columns() -> None:
     column_specs = {
         "project_overview": "ALTER TABLE project ADD COLUMN project_overview TEXT",
         "project_overview_data": "ALTER TABLE project ADD COLUMN project_overview_data TEXT",
+        "ideation_summary": "ALTER TABLE project ADD COLUMN ideation_summary TEXT",
         "act1_outline": "ALTER TABLE project ADD COLUMN act1_outline TEXT",
         "act2_outline": "ALTER TABLE project ADD COLUMN act2_outline TEXT",
         "act3_outline": "ALTER TABLE project ADD COLUMN act3_outline TEXT",
@@ -1086,6 +1099,9 @@ def create_app() -> Flask:
         ideation_force_active = False
         ideation_context_window = get_prompt_context_window(
             "idea_catalyst", fallback=5000
+        )
+        ideation_validation_context_window = get_prompt_context_window(
+            "idea_catalyst_validation", fallback=50000
         )
 
         if request.method == "POST":
@@ -1233,6 +1249,53 @@ def create_app() -> Flask:
                         )
                         ideation_success = (
                             "Conversation updated with the idea catalyst."
+                            f"{_device_usage_sentence(device_type)}"
+                        )
+                    session.modified = True
+            elif chat_type == "ideation_validate":
+                ideation_force_active = True
+                if not ideation_history:
+                    ideation_error = (
+                        "Start a conversation with the idea catalyst before validating the vision."
+                    )
+                else:
+                    generator = None
+                    try:
+                        generator = _resolve_text_generator(use_api_requested)
+                        prompt = _build_idea_validation_prompt(
+                            project,
+                            ideation_history,
+                            context_window_tokens=ideation_validation_context_window,
+                        )
+                        max_tokens = get_prompt_max_new_tokens(
+                            "idea_catalyst_validation", fallback=3000
+                        )
+                        response_raw = generator.generate_response(
+                            prompt,
+                            max_new_tokens=max_tokens,
+                        ) or ""
+                        vision_summary = response_raw.strip()
+                        if not vision_summary:
+                            raise ValueError(
+                                "The idea catalyst validation returned an empty summary."
+                            )
+                        project.ideation_summary = vision_summary
+                        db.session.commit()
+                    except OpenAIAPIRateLimitError as exc:
+                        ideation_error = str(exc)
+                    except RuntimeError as exc:
+                        ideation_error = str(exc)
+                    except ValueError as exc:
+                        ideation_error = str(exc)
+                    except Exception as exc:  # pragma: no cover - defensive
+                        ideation_error = (
+                            "The text generation backend could not validate the vision: "
+                            f"{exc}"
+                        )
+                    else:
+                        device_type = generator.get_compute_device() if generator else None
+                        ideation_success = (
+                            "Validated the idea catalyst conversation into a concise pitch."
                             f"{_device_usage_sentence(device_type)}"
                         )
                     session.modified = True
@@ -1808,6 +1871,7 @@ def create_app() -> Flask:
         overview_sections = _prepare_overview_display_sections(
             _load_project_overview_data(project)
         )
+        ideation_summary = (project.ideation_summary or "").strip()
         project_overview_summary = (project.project_overview or "").strip()
         overview_pending = not project_overview_summary
 
@@ -1836,6 +1900,8 @@ def create_app() -> Flask:
             ideation_error=ideation_error,
             ideation_success=ideation_success,
             ideation_context_window=ideation_context_window,
+            ideation_validation_context_window=ideation_validation_context_window,
+            ideation_summary=ideation_summary,
             ideation_active=ideation_active,
             overview_active=overview_active,
             outline_active=outline_active,
@@ -3431,6 +3497,46 @@ def _build_idea_catalyst_prompt(
             "System: Existing character notes provided by the author. Treat these as canon and reference them in your questions.\n"
             f"{character_context}"
         )
+
+    trimmed_history = _truncate_history_for_context(history, context_window_tokens)
+    for message in trimmed_history:
+        role = message.get("role")
+        prefix = "User" if role == "user" else "Assistant"
+        prompt_lines.append(f"{prefix}: {message.get('content', '')}")
+
+    prompt_lines.append("Assistant:")
+    return "\n".join(prompt_lines)
+
+
+def _build_idea_validation_prompt(
+    project: Project,
+    history: Iterable[Dict[str, Any]],
+    *,
+    context_window_tokens: int | None = None,
+) -> str:
+    """Construct the prompt for summarising the idea catalyst conversation."""
+
+    prompt_lines: List[str] = []
+    prompt_config = SYSTEM_PROMPTS.get("idea_catalyst_validation")
+    system_prompt: Optional[str] = None
+    if isinstance(prompt_config, dict):
+        system_prompt = prompt_config.get("system_prompt") or prompt_config.get("prompt")
+    elif prompt_config:
+        system_prompt = str(prompt_config)
+
+    if system_prompt:
+        prompt_lines.append(f"System: {system_prompt}")
+
+    overview_text = _project_overview_context(project).strip()
+    if overview_text:
+        prompt_lines.append(
+            "System: Project context to reflect in the validated pitch. Respect these details while keeping the summary concise.\n"
+            f"{overview_text}"
+        )
+
+    prompt_lines.append(
+        "System: Here is the full idea catalyst conversation. Summarize it into one cohesive short story pitch."
+    )
 
     trimmed_history = _truncate_history_for_context(history, context_window_tokens)
     for message in trimmed_history:

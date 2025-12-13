@@ -13,6 +13,16 @@ SYSTEM_PROMPTS = {
             "Encourage concrete answers, highlight gaps, and capture a crisp description of the intended book."
         ),
     },
+    "idea_catalyst_validation": {
+        "max_new_tokens": 3000,
+        "context_window_tokens": 50000,
+        "system_prompt": (
+            "You are validating the idea catalyst conversation. Review the full chat history and condense the author's vision "
+            "into a concise, marketable short story pitch. Capture genre, tone, realism level, core conflict, protagonists, "
+            "stakes, themes, and any specific constraints the user emphasized. Remove redundancies, resolve contradictions by "
+            "favoring the most recent guidance, and avoid speculative additions beyond the conversation."
+        ),
+    },
     "seed_prompt": {
         "max_new_tokens": 3024,
         "base": (
