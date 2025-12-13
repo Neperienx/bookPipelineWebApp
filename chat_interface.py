@@ -1124,6 +1124,12 @@ def create_app() -> Flask:
                     session.pop(session_key, None)
                 return redirect(url_for("project_detail", project_id=project_id))
 
+            if "delete_ideation_history" in request.form and chat_type == "ideation":
+                session.pop(ideation_session_key, None)
+                session.modified = True
+                ideation_history = []
+                return redirect(url_for("project_detail", project_id=project_id))
+
             use_api_requested = _is_api_requested(request.form)
             user_message = request.form.get("message", "").strip()
             if chat_type == "overview":
