@@ -144,10 +144,17 @@
     </div>
     <script>
       (function () {
+        const chatMessages = document.querySelector(".chat-messages");
         const form = document.getElementById("chatForm");
         const loadingIndicator = document.getElementById("loadingIndicator");
         if (!form || !loadingIndicator) {
           return;
+        }
+
+        if (chatMessages) {
+          requestAnimationFrame(() => {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+          });
         }
 
         form.addEventListener("submit", function () {
