@@ -1214,23 +1214,26 @@ def create_app() -> Flask:
                     generator = None
                     try:
                         generator = _resolve_text_generator(use_api_requested)
-                        prompt = _build_idea_catalyst_prompt(
+                        validation_prompt = _build_idea_validation_prompt(
                             project,
                             ideation_history,
-                            context_window_tokens=ideation_context_window,
+                            pitch=project.ideation_summary,
+                            context_window_tokens=ideation_validation_context_window,
                         )
-                        max_tokens = get_prompt_max_new_tokens(
-                            "idea_catalyst", fallback=768
+                        validation_tokens = get_prompt_max_new_tokens(
+                            "idea_catalyst_validation", fallback=3000
                         )
-                        response_raw = generator.generate_response(
-                            prompt,
-                            max_new_tokens=max_tokens,
+                        validation_raw = generator.generate_response(
+                            validation_prompt,
+                            max_new_tokens=validation_tokens,
                         ) or ""
-                        assistant_reply = response_raw.strip()
-                        if not assistant_reply:
+                        vision_summary = validation_raw.strip()
+                        if not vision_summary:
                             raise ValueError(
-                                "The idea catalyst assistant returned an empty reply."
+                                "The idea catalyst validation returned an empty summary."
                             )
+                        project.ideation_summary = vision_summary
+                        db.session.commit()
                     except OpenAIAPIRateLimitError as exc:
                         ideation_error = str(exc)
                         ideation_history.pop()
@@ -1247,18 +1250,49 @@ def create_app() -> Flask:
                         )
                         ideation_history.pop()
                     else:
-                        device_type = generator.get_compute_device()
-                        ideation_history.append(
-                            {
-                                "role": "assistant",
-                                "content": assistant_reply,
-                                "device_type": _normalise_device_label(device_type),
-                            }
-                        )
-                        ideation_success = (
-                            "Conversation updated with the idea catalyst."
-                            f"{_device_usage_sentence(device_type)}"
-                        )
+                        try:
+                            prompt = _build_idea_catalyst_prompt(
+                                project,
+                                ideation_history,
+                                pitch=vision_summary,
+                                context_window_tokens=ideation_context_window,
+                            )
+                            max_tokens = get_prompt_max_new_tokens(
+                                "idea_catalyst", fallback=768
+                            )
+                            response_raw = generator.generate_response(
+                                prompt,
+                                max_new_tokens=max_tokens,
+                            ) or ""
+                            assistant_reply = response_raw.strip()
+                            if not assistant_reply:
+                                raise ValueError(
+                                    "The idea catalyst assistant returned an empty reply."
+                                )
+                        except OpenAIAPIRateLimitError as exc:
+                            ideation_error = str(exc)
+                        except RuntimeError as exc:
+                            ideation_error = str(exc)
+                        except ValueError as exc:
+                            ideation_error = str(exc)
+                        except Exception as exc:  # pragma: no cover - defensive
+                            ideation_error = (
+                                "The text generation backend could not generate a reply: "
+                                f"{exc}"
+                            )
+                        else:
+                            device_type = generator.get_compute_device()
+                            ideation_history.append(
+                                {
+                                    "role": "assistant",
+                                    "content": assistant_reply,
+                                    "device_type": _normalise_device_label(device_type),
+                                }
+                            )
+                            ideation_success = (
+                                "Conversation updated with the idea catalyst."
+                                f"{_device_usage_sentence(device_type)}"
+                            )
                     session.modified = True
             elif chat_type == "ideation_validate":
                 ideation_force_active = True
@@ -1273,6 +1307,7 @@ def create_app() -> Flask:
                         prompt = _build_idea_validation_prompt(
                             project,
                             ideation_history,
+                            pitch=project.ideation_summary,
                             context_window_tokens=ideation_validation_context_window,
                         )
                         max_tokens = get_prompt_max_new_tokens(
@@ -3477,6 +3512,7 @@ def _build_idea_catalyst_prompt(
     project: Project,
     history: Iterable[Dict[str, Any]],
     *,
+    pitch: str | None = None,
     context_window_tokens: int | None = None,
 ) -> str:
     """Construct the prompt for the idea catalyst chat."""
@@ -3506,6 +3542,12 @@ def _build_idea_catalyst_prompt(
             f"{character_context}"
         )
 
+    if pitch:
+        prompt_lines.append(
+            "System: Current pitch to anchor the conversation. Use it to avoid repeating questions and to probe for deeper specificity.\n"
+            f"{pitch.strip()}"
+        )
+
     trimmed_history = _truncate_history_for_context(history, context_window_tokens)
     for message in trimmed_history:
         role = message.get("role")
@@ -3520,6 +3562,7 @@ def _build_idea_validation_prompt(
     project: Project,
     history: Iterable[Dict[str, Any]],
     *,
+    pitch: str | None = None,
     context_window_tokens: int | None = None,
 ) -> str:
     """Construct the prompt for summarising the idea catalyst conversation."""
@@ -3540,6 +3583,19 @@ def _build_idea_validation_prompt(
         prompt_lines.append(
             "System: Project context to reflect in the validated pitch. Respect these details while keeping the summary concise.\n"
             f"{overview_text}"
+        )
+
+    character_context = _build_character_roster(project).strip()
+    if character_context and not character_context.startswith("No character"):
+        prompt_lines.append(
+            "System: Character records created for this story so far. Treat these as authoritative.\n"
+            f"{character_context}"
+        )
+
+    if pitch:
+        prompt_lines.append(
+            "System: Latest pitch to refine. Adjust and improve it based on the conversation updates.\n"
+            f"{pitch.strip()}"
         )
 
     prompt_lines.append(

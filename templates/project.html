@@ -1130,16 +1130,12 @@
                         <input type="hidden" name="chat_type" value="ideation" />
                         <button type="submit" name="reset" value="1" class="btn btn-outline-light btn-sm">Clear chat</button>
                       </form>
-                      <form method="post">
-                        <input type="hidden" name="chat_type" value="ideation_validate" />
-                        <button type="submit" class="btn btn-success btn-sm">Validate vision</button>
-                      </form>
                     </div>
                   </div>
-                  <p class="text-secondary small mb-3">The assistant remembers roughly {{ ideation_context_window or 5000 }} tokens of context from this chat. When the discussion gets long, older messages are trimmed first. Validation uses up to {{ ideation_validation_context_window or 50000 }} tokens of the conversation history to capture the full vision.</p>
+                  <p class="text-secondary small mb-3">The assistant remembers roughly {{ ideation_context_window or 5000 }} tokens of context from this chat. When the discussion gets long, older messages are trimmed first. The pitch below refreshes after every message using up to {{ ideation_validation_context_window or 50000 }} tokens of history.</p>
                   {% if ideation_summary %}
                     <div class="alert alert-info" role="status">
-                      <div class="fw-semibold mb-1">Validated pitch from idea catalyst</div>
+                      <div class="fw-semibold mb-1">Pitch</div>
                       <div class="mb-0">{{ ideation_summary }}</div>
                     </div>
                   {% endif %}
