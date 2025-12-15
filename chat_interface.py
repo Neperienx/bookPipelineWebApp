@@ -981,6 +981,7 @@ class Project(db.Model):
     pitch_versions = db.relationship(
         "IdeaPitchVersion",
         back_populates="project",
+        foreign_keys="IdeaPitchVersion.project_id",
         order_by="IdeaPitchVersion.created_at.desc()",
         cascade="all, delete-orphan",
     )
@@ -1003,7 +1004,9 @@ class IdeaPitchVersion(db.Model):
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
-    project = db.relationship("Project", back_populates="pitch_versions")
+    project = db.relationship(
+        "Project", back_populates="pitch_versions", foreign_keys=[project_id]
+    )
 
     def __repr__(self) -> str:  # pragma: no cover - debug helper
         return f"<IdeaPitchVersion {self.id} project={self.project_id} v{self.version_index}>"
