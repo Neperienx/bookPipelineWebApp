@@ -166,6 +166,9 @@ _PROJECT_REALISM_OPTIONS = [
     "Mythic or surreal",
 ]
 
+# Number of validated idea catalyst pitches to keep per project.
+_DEFAULT_PITCH_HISTORY_LIMIT = 3
+
 # Pattern used to split optional free-text lists (e.g., subgenres, comparable titles).
 _OVERVIEW_LIST_SPLIT_PATTERN = re.compile(r"[\n,;]+")
 
@@ -565,6 +568,146 @@ def _project_overview_context(
     return "\n".join(lines).strip()
 
 
+def _get_pitch_history(project: Project) -> List[IdeaPitchVersion]:
+    """Return the stored pitch versions for a project in newest-first order."""
+
+    return (
+        IdeaPitchVersion.query.filter_by(project_id=project.id)
+        .order_by(IdeaPitchVersion.created_at.desc())
+        .all()
+    )
+
+
+def _latest_pitch_version(project: Project) -> IdeaPitchVersion | None:
+    """Return the newest pitch version by version index."""
+
+    return (
+        IdeaPitchVersion.query.filter_by(project_id=project.id)
+        .order_by(IdeaPitchVersion.version_index.desc())
+        .first()
+    )
+
+
+def _active_pitch_version(
+    project: Project, history: Optional[Sequence[IdeaPitchVersion]] = None
+) -> IdeaPitchVersion | None:
+    """Return the selected pitch version or fall back to the newest one."""
+
+    versions = list(history) if history is not None else _get_pitch_history(project)
+    if project.selected_pitch_id:
+        for pitch in versions:
+            if pitch.id == project.selected_pitch_id:
+                return pitch
+    return versions[0] if versions else None
+
+
+def _prune_pitch_history(project: Project, history_limit: int) -> None:
+    """Remove older pitch versions beyond the retention limit."""
+
+    if history_limit <= 0:
+        return
+
+    history = _get_pitch_history(project)
+    if len(history) <= history_limit:
+        return
+
+    for pitch in history[history_limit:]:
+        if project.selected_pitch_id == pitch.id:
+            project.selected_pitch_id = None
+        db.session.delete(pitch)
+    db.session.commit()
+
+    if project.selected_pitch_id is None and history:
+        project.selected_pitch_id = history[0].id
+        project.ideation_summary = history[0].content
+        db.session.commit()
+
+
+def _record_pitch_version(
+    project: Project, content: str, *, history_limit: int = _DEFAULT_PITCH_HISTORY_LIMIT
+) -> IdeaPitchVersion | None:
+    """Persist a new pitch version and enforce retention."""
+
+    cleaned = (content or "").strip()
+    if not cleaned:
+        return None
+
+    latest_version = _latest_pitch_version(project)
+    next_index = 1 if latest_version is None else latest_version.version_index + 1
+    pitch_version = IdeaPitchVersion(
+        project_id=project.id,
+        content=cleaned,
+        version_index=next_index,
+    )
+    db.session.add(pitch_version)
+    db.session.flush()
+    project.selected_pitch_id = pitch_version.id
+    project.ideation_summary = cleaned
+    db.session.commit()
+
+    _prune_pitch_history(project, history_limit)
+    return pitch_version
+
+
+def _set_active_pitch_version(project: Project, pitch_id: Any) -> bool:
+    """Mark the chosen pitch version as the active one."""
+
+    try:
+        pitch_int = int(pitch_id)
+    except (TypeError, ValueError):
+        return False
+
+    pitch = (
+        IdeaPitchVersion.query.filter_by(project_id=project.id, id=pitch_int).first()
+    )
+    if pitch is None:
+        return False
+
+    project.selected_pitch_id = pitch.id
+    project.ideation_summary = pitch.content
+    db.session.commit()
+    return True
+
+
+def _clear_pitch_history(project: Project) -> None:
+    """Remove all stored pitch versions for a project."""
+
+    IdeaPitchVersion.query.filter_by(project_id=project.id).delete()
+    project.selected_pitch_id = None
+    project.ideation_summary = None
+    db.session.commit()
+
+
+def _bootstrap_pitch_history(
+    project: Project, history_limit: int = _DEFAULT_PITCH_HISTORY_LIMIT
+) -> List[IdeaPitchVersion]:
+    """Ensure legacy projects with a pitch have at least one version entry."""
+
+    history = _get_pitch_history(project)
+    if history:
+        return history
+
+    existing_pitch = (project.ideation_summary or "").strip()
+    if existing_pitch:
+        _record_pitch_version(project, existing_pitch, history_limit=history_limit)
+        return _get_pitch_history(project)
+    return history
+
+
+def _current_pitch_text(
+    project: Project, history: Optional[Sequence[IdeaPitchVersion]] = None
+) -> str:
+    """Return the active pitch text for use in prompts."""
+
+    active_version = _active_pitch_version(project, history=history)
+    if active_version:
+        if project.ideation_summary != active_version.content:
+            project.ideation_summary = active_version.content
+            db.session.commit()
+        return active_version.content.strip()
+    return (project.ideation_summary or "").strip()
+
+
 def _build_project_overview_prompt(
     form_data: Mapping[str, Any], project: "Project" | None = None
 ) -> str:
@@ -622,7 +765,7 @@ def _build_project_overview_prompt(
     vision_summary = ""
     character_payload = {}
     if project is not None:
-        vision_summary = (project.ideation_summary or "").strip()
+        vision_summary = _current_pitch_text(project)
         character_payload = _collect_project_overview_characters(project)
 
     if character_payload:
@@ -802,6 +945,7 @@ class Project(db.Model):
     project_overview = db.Column(db.Text, nullable=True)
     project_overview_data = db.Column(db.Text, nullable=True)
     ideation_summary = db.Column(db.Text, nullable=True)
+    selected_pitch_id = db.Column(db.Integer, db.ForeignKey("idea_pitch_version.id"))
     outline = db.Column(db.Text, nullable=True)
     act1_outline = db.Column(db.Text, nullable=True)
     act2_outline = db.Column(db.Text, nullable=True)
@@ -834,9 +978,35 @@ class Project(db.Model):
         order_by="(ChapterDraft.act_number, ChapterDraft.chapter_number)",
         cascade="all, delete-orphan",
     )
+    pitch_versions = db.relationship(
+        "IdeaPitchVersion",
+        back_populates="project",
+        order_by="IdeaPitchVersion.created_at.desc()",
+        cascade="all, delete-orphan",
+    )
+    selected_pitch = db.relationship(
+        "IdeaPitchVersion",
+        foreign_keys=[selected_pitch_id],
+        post_update=True,
+    )
 
     def __repr__(self) -> str:  # pragma: no cover - debug helper
         return f"<Project {self.id} {self.name!r}>"
+
+
+class IdeaPitchVersion(db.Model):
+    """Versioned idea catalyst pitch for a project."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=False)
+    version_index = db.Column(db.Integer, nullable=False, default=1)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    project = db.relationship("Project", back_populates="pitch_versions")
+
+    def __repr__(self) -> str:  # pragma: no cover - debug helper
+        return f"<IdeaPitchVersion {self.id} project={self.project_id} v{self.version_index}>"
 
 
 class Character(db.Model):
@@ -982,6 +1152,7 @@ def _ensure_project_columns() -> None:
         "project_overview": "ALTER TABLE project ADD COLUMN project_overview TEXT",
         "project_overview_data": "ALTER TABLE project ADD COLUMN project_overview_data TEXT",
         "ideation_summary": "ALTER TABLE project ADD COLUMN ideation_summary TEXT",
+        "selected_pitch_id": "ALTER TABLE project ADD COLUMN selected_pitch_id INTEGER",
         "act1_outline": "ALTER TABLE project ADD COLUMN act1_outline TEXT",
         "act2_outline": "ALTER TABLE project ADD COLUMN act2_outline TEXT",
         "act3_outline": "ALTER TABLE project ADD COLUMN act3_outline TEXT",
@@ -1105,6 +1276,15 @@ def create_app() -> Flask:
         ideation_validation_context_window = get_prompt_context_window(
             "idea_catalyst_validation", fallback=50000
         )
+        pitch_history = _bootstrap_pitch_history(
+            project, history_limit=_DEFAULT_PITCH_HISTORY_LIMIT
+        )
+        active_pitch_version = _active_pitch_version(
+            project, history=pitch_history
+        )
+        current_pitch_text = _current_pitch_text(
+            project, history=pitch_history
+        )
 
         if request.method == "POST":
             chat_type = request.form.get("chat_type", "outline")
@@ -1204,6 +1384,26 @@ def create_app() -> Flask:
                             overview_field_errors = {}
             elif chat_type == "ideation":
                 ideation_force_active = True
+                if "delete_pitch_history" in request.form:
+                    _clear_pitch_history(project)
+                    pitch_history = []
+                    active_pitch_version = None
+                    current_pitch_text = ""
+                    ideation_success = "Pitch history deleted. Start fresh with a new pitch."
+                    return redirect(url_for("project_detail", project_id=project_id))
+
+                if "set_pitch_version" in request.form:
+                    version_id = request.form.get("pitch_version_id")
+                    if _set_active_pitch_version(project, version_id):
+                        selected_pitch = db.session.get(IdeaPitchVersion, int(version_id))
+                        version_label = f"v{selected_pitch.version_index}" if selected_pitch else ""
+                        ideation_success = (
+                            f"Using pitch {version_label or 'selection'} for future prompts."
+                        )
+                    else:
+                        ideation_error = "Selected pitch version could not be found."
+                    return redirect(url_for("project_detail", project_id=project_id))
+
                 message_content = user_message
                 if not message_content:
                     ideation_error = (
@@ -1217,7 +1417,7 @@ def create_app() -> Flask:
                         validation_prompt = _build_idea_validation_prompt(
                             project,
                             ideation_history,
-                            pitch=project.ideation_summary,
+                            pitch=current_pitch_text,
                             context_window_tokens=ideation_validation_context_window,
                         )
                         validation_tokens = get_prompt_max_new_tokens(
@@ -1232,8 +1432,17 @@ def create_app() -> Flask:
                             raise ValueError(
                                 "The idea catalyst validation returned an empty summary."
                             )
-                        project.ideation_summary = vision_summary
-                        db.session.commit()
+                        pitch_version = _record_pitch_version(
+                            project,
+                            vision_summary,
+                            history_limit=_DEFAULT_PITCH_HISTORY_LIMIT,
+                        )
+                        if pitch_version:
+                            current_pitch_text = pitch_version.content
+                            pitch_history = _get_pitch_history(project)
+                            active_pitch_version = _active_pitch_version(
+                                project, history=pitch_history
+                            )
                     except OpenAIAPIRateLimitError as exc:
                         ideation_error = str(exc)
                         ideation_history.pop()
@@ -1307,7 +1516,7 @@ def create_app() -> Flask:
                         prompt = _build_idea_validation_prompt(
                             project,
                             ideation_history,
-                            pitch=project.ideation_summary,
+                            pitch=current_pitch_text,
                             context_window_tokens=ideation_validation_context_window,
                         )
                         max_tokens = get_prompt_max_new_tokens(
@@ -1322,8 +1531,17 @@ def create_app() -> Flask:
                             raise ValueError(
                                 "The idea catalyst validation returned an empty summary."
                             )
-                        project.ideation_summary = vision_summary
-                        db.session.commit()
+                        pitch_version = _record_pitch_version(
+                            project,
+                            vision_summary,
+                            history_limit=_DEFAULT_PITCH_HISTORY_LIMIT,
+                        )
+                        if pitch_version:
+                            current_pitch_text = pitch_version.content
+                            pitch_history = _get_pitch_history(project)
+                            active_pitch_version = _active_pitch_version(
+                                project, history=pitch_history
+                            )
                     except OpenAIAPIRateLimitError as exc:
                         ideation_error = str(exc)
                     except RuntimeError as exc:
@@ -1911,10 +2129,18 @@ def create_app() -> Flask:
         if draft_export_message is not None or draft_export_error is not None:
             session.modified = True
 
+        pitch_history = _get_pitch_history(project)
+        active_pitch_version = _active_pitch_version(
+            project, history=pitch_history
+        )
+        current_pitch_text = _current_pitch_text(
+            project, history=pitch_history
+        )
+
         overview_sections = _prepare_overview_display_sections(
             _load_project_overview_data(project)
         )
-        ideation_summary = (project.ideation_summary or "").strip()
+        ideation_summary = current_pitch_text
         project_overview_summary = (project.project_overview or "").strip()
         overview_pending = not project_overview_summary
 
@@ -1945,6 +2171,9 @@ def create_app() -> Flask:
             ideation_context_window=ideation_context_window,
             ideation_validation_context_window=ideation_validation_context_window,
             ideation_summary=ideation_summary,
+            pitch_history=pitch_history,
+            active_pitch_version=active_pitch_version,
+            pitch_history_limit=_DEFAULT_PITCH_HISTORY_LIMIT,
             ideation_active=ideation_active,
             overview_active=overview_active,
             outline_active=outline_active,
