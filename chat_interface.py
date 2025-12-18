@@ -839,6 +839,93 @@ def _parse_overview_form_submission(
     return state, errors, field_errors
 
 
+def _generate_seed_prompt_from_state(
+    generator: TextGenerator | OpenAIUnifiedGenerator,
+    project: Project,
+    form_state: Mapping[str, Any],
+    ideation_history: Iterable[Dict[str, Any]],
+    pitch_text: str,
+) -> Tuple[str, Dict[str, Any], Optional[str], Optional[str]]:
+    """Generate the seed prompt and optional author notes."""
+
+    state: Dict[str, Any] = dict(form_state or {})
+    state["pitch"] = pitch_text or state.get("pitch", "")
+
+    author_notes_text: Optional[str] = None
+    author_notes_notice: Optional[str] = None
+
+    if ideation_history:
+        try:
+            author_notes_text = _generate_author_notes(
+                generator, project, ideation_history, pitch_text
+            )
+            state["author_notes"] = author_notes_text
+        except OpenAIAPIRateLimitError as exc:
+            author_notes_notice = str(exc)
+        except RuntimeError as exc:
+            author_notes_notice = str(exc)
+        except ValueError as exc:
+            author_notes_notice = str(exc)
+        except Exception as exc:  # pragma: no cover - defensive
+            author_notes_notice = (
+                "Author notes could not be generated: "
+                f"{exc}"
+            )
+    elif project.author_notes:
+        state["author_notes"] = project.author_notes
+
+    prompt = _build_project_overview_prompt(state, project)
+    max_tokens = get_prompt_max_new_tokens("seed_prompt", fallback=512)
+    response = generator.generate_response(
+        prompt,
+        max_new_tokens=max_tokens,
+    ) or ""
+    summary = response.strip()
+    if not summary:
+        raise ValueError(
+            "The text generation backend returned an empty response."
+        )
+
+    summary_clean = _normalise_whitespace(summary)
+    return summary_clean, state, author_notes_text, author_notes_notice
+
+
+def _generate_outline_exchange(
+    generator: TextGenerator | OpenAIUnifiedGenerator,
+    project: Project,
+    history: List[Dict[str, str]],
+) -> str:
+    """Generate and refine an outline using the current context and history."""
+
+    max_tokens = get_prompt_max_new_tokens("outline")
+    draft_prompt = _build_outline_prompt(project, history, stage="draft")
+    draft_tokens = max_tokens * 3 if isinstance(max_tokens, int) else None
+    draft_response_raw = generator.generate_response(
+        draft_prompt,
+        max_new_tokens=draft_tokens,
+    ) or ""
+    draft_response = draft_response_raw.strip()
+    if not draft_response:
+        raise ValueError(
+            "The outline assistant returned an empty set of candidates."
+        )
+
+    refinement_prompt = _build_outline_prompt(
+        project,
+        history,
+        stage="refine",
+        outline_candidates=draft_response,
+    )
+    assistant_reply_raw = generator.generate_response(
+        refinement_prompt,
+        max_new_tokens=max_tokens,
+    ) or ""
+    assistant_reply = assistant_reply_raw.strip()
+    if not assistant_reply:
+        raise ValueError("The outline assistant returned an empty refinement.")
+    return assistant_reply
+
+
 _CHAPTER_HEADER_PATTERN = re.compile(
     r"^\s*Chapter\s*:\s*Chapter\s+(\d+)\s*[—–-]\s*(.*)$",
     re.IGNORECASE,
@@ -1266,45 +1353,23 @@ def create_app() -> Flask:
                         fallback_notice: Optional[str] = None
                         author_notes_text: Optional[str] = None
                         author_notes_notice: Optional[str] = None
+                        updated_form_state: Dict[str, Any] = form_state
                         try:
                             generator, fallback_notice = _resolve_text_generator_with_fallback(
                                 use_api_requested
                             )
-                            if ideation_history:
-                                try:
-                                    author_notes_text = _generate_author_notes(
-                                        generator,
-                                        project,
-                                        ideation_history,
-                                        current_pitch_text,
-                                    )
-                                    form_state["author_notes"] = author_notes_text
-                                except OpenAIAPIRateLimitError as exc:
-                                    author_notes_notice = str(exc)
-                                except RuntimeError as exc:
-                                    author_notes_notice = str(exc)
-                                except ValueError as exc:
-                                    author_notes_notice = str(exc)
-                                except Exception as exc:  # pragma: no cover - defensive
-                                    author_notes_notice = (
-                                        "Author notes could not be generated: "
-                                        f"{exc}"
-                                    )
-                            elif project.author_notes:
-                                form_state["author_notes"] = project.author_notes
-                            prompt = _build_project_overview_prompt(form_state, project)
-                            max_tokens = get_prompt_max_new_tokens(
-                                "seed_prompt", fallback=512
+                            (
+                                summary_clean,
+                                updated_form_state,
+                                author_notes_text,
+                                author_notes_notice,
+                            ) = _generate_seed_prompt_from_state(
+                                generator,
+                                project,
+                                form_state,
+                                ideation_history,
+                                current_pitch_text,
                             )
-                            response = generator.generate_response(
-                                prompt,
-                                max_new_tokens=max_tokens,
-                            ) or ""
-                            summary = response.strip()
-                            if not summary:
-                                raise ValueError(
-                                    "The text generation backend returned an empty response."
-                                )
                         except OpenAIAPIRateLimitError as exc:
                             overview_error = str(exc)
                         except RuntimeError as exc:
@@ -1319,10 +1384,9 @@ def create_app() -> Flask:
                         else:
                             device_type = generator.get_compute_device() if generator else None
                             device_sentence = _device_usage_sentence(device_type).strip()
-                            summary_clean = _normalise_whitespace(summary)
                             project.project_overview = summary_clean
                             project.project_overview_data = json.dumps(
-                                form_state, ensure_ascii=False
+                                updated_form_state, ensure_ascii=False
                             )
                             if author_notes_text is not None:
                                 project.author_notes = author_notes_text
@@ -1518,6 +1582,198 @@ def create_app() -> Flask:
                             "Validated the idea catalyst conversation into a concise pitch."
                             f"{_device_usage_sentence(device_type)}"
                         )
+                    session.modified = True
+            elif chat_type == "ideation_simulate":
+                ideation_force_active = True
+                if not current_pitch_text:
+                    ideation_error = (
+                        "Validate a pitch with the idea catalyst before simulating the pipeline."
+                    )
+                else:
+                    generator: TextGenerator | OpenAIUnifiedGenerator | None = None
+                    fallback_notice: Optional[str] = None
+                    author_notes_notice: Optional[str] = None
+                    stage_notes: List[str] = []
+                    device_type = None
+                    try:
+                        generator, fallback_notice = _resolve_text_generator_with_fallback(
+                            use_api_requested
+                        )
+                        device_type = generator.get_compute_device()
+                    except OpenAIAPIRateLimitError as exc:
+                        ideation_error = str(exc)
+                    except RuntimeError as exc:
+                        ideation_error = str(exc)
+                    else:
+                        overview_state = _load_project_overview_form(project)
+                        overview_state["pitch"] = current_pitch_text
+                        try:
+                            (
+                                seed_summary,
+                                updated_overview_state,
+                                author_notes_text,
+                                author_notes_notice,
+                            ) = _generate_seed_prompt_from_state(
+                                generator,
+                                project,
+                                overview_state,
+                                ideation_history,
+                                current_pitch_text,
+                            )
+                        except Exception as exc:  # pragma: no cover - defensive
+                            ideation_error = f"Seed prompt generation failed: {exc}"
+                        else:
+                            project.project_overview = seed_summary
+                            project.project_overview_data = json.dumps(
+                                updated_overview_state, ensure_ascii=False
+                            )
+                            if author_notes_text is not None:
+                                project.author_notes = author_notes_text
+                            db.session.commit()
+                            overview_form_state = _load_project_overview_form(project)
+                            stage_notes.append("Seed prompt generated.")
+
+                            outline_prompt = (
+                                "Automatically generate the outline from the validated pitch and seed prompt."
+                            )
+                            history.append({"role": "user", "content": outline_prompt})
+                            try:
+                                outline_reply = _generate_outline_exchange(
+                                    generator, project, history
+                                )
+                            except OpenAIAPIRateLimitError as exc:
+                                ideation_error = str(exc)
+                                if stage_notes:
+                                    ideation_error = (
+                                        f"{ideation_error} {' '.join(stage_notes)}"
+                                    )
+                                history.pop()
+                            except RuntimeError as exc:
+                                ideation_error = str(exc)
+                                if stage_notes:
+                                    ideation_error = (
+                                        f"{ideation_error} {' '.join(stage_notes)}"
+                                    )
+                                history.pop()
+                            except ValueError as exc:
+                                ideation_error = str(exc)
+                                if stage_notes:
+                                    ideation_error = (
+                                        f"{ideation_error} {' '.join(stage_notes)}"
+                                    )
+                                history.pop()
+                            except Exception as exc:  # pragma: no cover - defensive
+                                ideation_error = (
+                                    "The text generation backend could not generate the outline: "
+                                    f"{exc}"
+                                )
+                                if stage_notes:
+                                    ideation_error = (
+                                        f"{ideation_error} {' '.join(stage_notes)}"
+                                    )
+                                history.pop()
+                            else:
+                                device_label = _normalise_device_label(device_type)
+                                history.append(
+                                    {
+                                        "role": "assistant",
+                                        "content": outline_reply,
+                                        "device_type": device_label,
+                                    }
+                                )
+                                project.outline = outline_reply
+                                db.session.commit()
+                                stage_notes.append("Outline generated.")
+
+                                act_prompt = (
+                                    "Automatically convert the outline into a detailed three-act structure."
+                                )
+                                act_history.append(
+                                    {"role": "user", "content": act_prompt}
+                                )
+                                try:
+                                    (
+                                        act1_result,
+                                        act2_result,
+                                        act3_result,
+                                        acts_detected,
+                                    ) = _generate_three_act_outline(
+                                        generator,
+                                        project,
+                                        act_prompt,
+                                    )
+                                except OpenAIAPIRateLimitError as exc:
+                                    ideation_error = str(exc)
+                                    if stage_notes:
+                                        ideation_error = (
+                                            f"{ideation_error} {' '.join(stage_notes)}"
+                                        )
+                                    act_history.pop()
+                                except RuntimeError as exc:
+                                    ideation_error = str(exc)
+                                    if stage_notes:
+                                        ideation_error = (
+                                            f"{ideation_error} {' '.join(stage_notes)}"
+                                        )
+                                    act_history.pop()
+                                except Exception as exc:  # pragma: no cover - defensive
+                                    ideation_error = (
+                                        "The text generation backend could not generate the act outline: "
+                                        f"{exc}"
+                                    )
+                                    if stage_notes:
+                                        ideation_error = (
+                                            f"{ideation_error} {' '.join(stage_notes)}"
+                                        )
+                                    act_history.pop()
+                                else:
+                                    device_label = _normalise_device_label(
+                                        device_type
+                                    )
+                                    device_sentence = _device_usage_sentence(
+                                        device_type
+                                    )
+                                    acts = [
+                                        act1_result.strip(),
+                                        act2_result.strip(),
+                                        act3_result.strip(),
+                                    ]
+                                    labels = ["Act I", "Act II", "Act III"]
+                                    for label, content in zip(labels, acts):
+                                        response_text = (
+                                            f"{label} outline:\n{content or '(no reply)'}"
+                                        )
+                                        act_history.append(
+                                            {
+                                                "role": "assistant",
+                                                "content": response_text,
+                                                "device_type": device_label,
+                                            }
+                                        )
+                                    project.act_final_notes = act_prompt
+                                    project.act1_outline = acts[0] if acts else ""
+                                    project.act2_outline = (
+                                        acts[1] if len(acts) > 1 else ""
+                                    )
+                                    project.act3_outline = (
+                                        acts[2] if len(acts) > 2 else ""
+                                    )
+                                    db.session.commit()
+                                    if acts_detected >= 3:
+                                        stage_notes.append("Act-by-act outline generated.")
+                                    else:
+                                        stage_notes.append(
+                                            "Act outline generated, but fewer than three sections were detected."
+                                        )
+                                    notices = ["Simulation complete."]
+                                    notices.extend(stage_notes)
+                                    if author_notes_notice:
+                                        notices.append(author_notes_notice)
+                                    if fallback_notice:
+                                        notices.append(fallback_notice.strip())
+                                    if device_sentence:
+                                        notices.append(device_sentence)
+                                    ideation_success = " ".join(notices)
                     session.modified = True
             elif chat_type == "acts":
                 if user_message:
@@ -1951,38 +2207,9 @@ def create_app() -> Flask:
                     generator = None
                     try:
                         generator = _resolve_text_generator(use_api_requested)
-                        max_tokens = get_prompt_max_new_tokens("outline")
-                        draft_prompt = _build_outline_prompt(
-                            project, history, stage="draft"
+                        assistant_reply = _generate_outline_exchange(
+                            generator, project, history
                         )
-                        draft_tokens = (
-                            max_tokens * 3 if isinstance(max_tokens, int) else None
-                        )
-                        draft_response_raw = generator.generate_response(
-                            draft_prompt,
-                            max_new_tokens=draft_tokens,
-                        ) or ""
-                        draft_response = draft_response_raw.strip()
-                        if not draft_response:
-                            raise ValueError(
-                                "The outline assistant returned an empty set of candidates."
-                            )
-
-                        refinement_prompt = _build_outline_prompt(
-                            project,
-                            history,
-                            stage="refine",
-                            outline_candidates=draft_response,
-                        )
-                        assistant_reply_raw = generator.generate_response(
-                            refinement_prompt,
-                            max_new_tokens=max_tokens,
-                        ) or ""
-                        assistant_reply = assistant_reply_raw.strip()
-                        if not assistant_reply:
-                            raise ValueError(
-                                "The outline assistant returned an empty refinement."
-                            )
                     except OpenAIAPIRateLimitError as exc:
                         error = str(exc)
                         history.pop()
