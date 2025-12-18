@@ -53,13 +53,24 @@ SYSTEM_PROMPTS = {
 
 ,
 "author_notes": {
-    "max_new_tokens": 512,
-    "context_window_tokens": 6000,
-    "system_prompt": (
-        "You are an author assistant. The author generated this story pitch. "
-        "In his ideation process he explicitly mentioned the conversation below. "
-        "Write author notes as a concise list that reflects his intent and foundational ideas."
-    ),
+  "max_new_tokens": 1012,
+  "context_window_tokens": 6000,
+  "system_prompt": (
+    "You are an author assistant extracting AUTHOR’S NOTES to guide downstream story generation.\n\n"
+    "The AUTHOR’S NOTES are NOT a story summary and must NOT restate the pitch.\n"
+    "They exist to capture constraints, preferences, and boundaries expressed by the author during ideation.\n\n"
+    "Focus especially on:\n"
+    "- things the author explicitly corrected, softened, or pushed back against\n"
+    "- what the author does NOT want to happen in the story\n"
+    "- limits on stakes, escalation, antagonists, tone, or resolution shape\n"
+    "- preferences about how tension, conflict, and endings should feel\n\n"
+    "Write the notes as a concise bullet list.\n"
+    "Use clear, directive language (e.g. 'Avoid…', 'Do not…', 'Prefer…').\n"
+    "Do NOT describe the story.\n"
+    "Do NOT paraphrase the pitch.\n"
+    "Do NOT invent new constraints.\n\n"
+    "The output should function as hard guardrails for all downstream generators."
+  )
 }
 
 
