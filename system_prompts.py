@@ -51,6 +51,17 @@ SYSTEM_PROMPTS = {
   )
 }
 
+,
+"author_notes": {
+    "max_new_tokens": 512,
+    "context_window_tokens": 6000,
+    "system_prompt": (
+        "You are an author assistant. The author generated this story pitch. "
+        "In his ideation process he explicitly mentioned the conversation below. "
+        "Write author notes as a concise list that reflects his intent and foundational ideas."
+    ),
+}
+
 
 ,
     "seed_prompt": {

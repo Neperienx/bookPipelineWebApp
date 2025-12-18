@@ -376,20 +376,24 @@ def _load_project_overview_data(project: Project) -> Dict[str, Any]:
     """Deserialize stored seed prompt metadata."""
 
     raw_payload = (project.project_overview_data or "").strip()
-    if not raw_payload:
-        return {}
-    try:
-        payload = json.loads(raw_payload)
-    except json.JSONDecodeError:
-        return {}
-    if not isinstance(payload, dict):
-        return {}
+    payload: Dict[str, Any] = {}
+    if raw_payload:
+        try:
+            payload = json.loads(raw_payload)
+        except json.JSONDecodeError:
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
 
     data: Dict[str, Any] = {}
 
     pitch_text = str(payload.get("pitch", "")).strip()
     if pitch_text:
         data["pitch"] = pitch_text
+
+    author_notes = (project.author_notes or "").strip()
+    if author_notes:
+        data["author_notes"] = author_notes
 
     return data
 
@@ -426,12 +430,23 @@ def _prepare_overview_display_sections(data: Mapping[str, Any]) -> List[Dict[str
         return {"title": title, "items": list(items)}
 
     pitch_text = _text(data.get("pitch"))
-    if not pitch_text:
+    author_notes = _text(data.get("author_notes"))
+    if not pitch_text and not author_notes:
         return []
 
-    must_have_items = [
-        {"label": "Idea catalyst pitch", "type": "text", "value": pitch_text},
-    ]
+    must_have_items: List[Dict[str, Any]] = []
+    if pitch_text:
+        must_have_items.append(
+            {"label": "Idea catalyst pitch", "type": "text", "value": pitch_text}
+        )
+    if author_notes:
+        must_have_items.append(
+            {
+                "label": "Author notes from ideation chat",
+                "type": "text",
+                "value": author_notes,
+            }
+        )
 
     return [_section("Seed prompt inputs", must_have_items)]
 
@@ -443,23 +458,29 @@ def _project_overview_context(
 
     lines: List[str] = []
     ideation_summary = (project.ideation_summary or "").strip()
+    author_notes = (project.author_notes or "").strip()
     if include_ideation_summary and ideation_summary:
         lines.append("Validated vision summary:\n" + ideation_summary)
 
     summary = (project.project_overview or "").strip()
     if summary:
         lines.append("Seed prompt:\n" + summary)
-        return "\n\n".join(lines).strip()
 
     data = _load_project_overview_data(project)
-    if not data:
-        return "\n\n".join(lines).strip()
 
     pitch = str(data.get("pitch", "")).strip()
     if pitch:
         lines.append(f"Idea catalyst pitch: {pitch}")
+    if author_notes:
+        lines.append("Author notes from ideation chat:\n" + author_notes)
 
-    return "\n".join(lines).strip()
+    if summary:
+        return "\n\n".join(lines).strip()
+
+    if not lines:
+        return ""
+
+    return "\n\n".join(lines).strip()
 
 
 def _get_pitch_history(project: Project) -> List[IdeaPitchVersion]:
@@ -626,6 +647,9 @@ def _build_project_overview_prompt(
     if project is not None:
         vision_summary = _current_pitch_text(project)
         character_payload = _collect_project_overview_characters(project)
+    author_notes_text = str(form_data.get("author_notes", "")).strip()
+    if project is not None and not author_notes_text:
+        author_notes_text = (project.author_notes or "").strip()
 
     pitch_text = str(form_data.get("pitch", "")).strip()
     if vision_summary:
@@ -644,6 +668,8 @@ def _build_project_overview_prompt(
         roster_summary = _build_character_roster(project).strip()
         if roster_summary and not roster_summary.startswith("No character"):
             payload["character_roster_summary"] = roster_summary
+        if author_notes_text:
+            payload["author_notes"] = author_notes_text
 
     input_block = json.dumps(payload, ensure_ascii=False, indent=2)
 
@@ -664,6 +690,75 @@ def _build_project_overview_prompt(
     prompt_parts.append(user_body.strip())
     prompt_parts.append("Assistant:")
     return "\n".join(prompt_parts)
+
+
+def _build_author_notes_prompt(
+    project: Project,
+    ideation_history: Iterable[Dict[str, Any]],
+    *,
+    pitch: str,
+    context_window_tokens: int | None = None,
+) -> str:
+    """Construct the prompt used to summarise ideation notes into author notes."""
+
+    prompt_lines: List[str] = []
+    prompt_config = SYSTEM_PROMPTS.get("author_notes")
+    system_prompt: Optional[str] = None
+    if isinstance(prompt_config, dict):
+        system_prompt = prompt_config.get("system_prompt") or prompt_config.get("prompt")
+    elif prompt_config:
+        system_prompt = str(prompt_config)
+
+    if system_prompt:
+        prompt_lines.append(f"System: {system_prompt}")
+
+    cleaned_pitch = pitch.strip()
+    if cleaned_pitch:
+        prompt_lines.append(
+            "System: Current validated pitch to keep in mind while summarising the author's notes.\n"
+            f"{cleaned_pitch}"
+        )
+
+    trimmed_history = _truncate_history_for_context(
+        ideation_history, context_window_tokens
+    )
+    if trimmed_history:
+        prompt_lines.append(
+            "System: Ideation chat transcript to convert into succinct author notes."
+        )
+        for message in trimmed_history:
+            role = message.get("role")
+            prefix = "User" if role == "user" else "Assistant"
+            prompt_lines.append(f"{prefix}: {message.get('content', '')}")
+
+    prompt_lines.append("Assistant:")
+    return "\n".join(prompt_lines)
+
+
+def _generate_author_notes(
+    generator: TextGenerator | OpenAIUnifiedGenerator,
+    project: Project,
+    ideation_history: Iterable[Dict[str, Any]],
+    pitch: str,
+) -> str:
+    """Return author notes distilled from the idea catalyst chat history."""
+
+    context_window = get_prompt_context_window("author_notes", fallback=6000)
+    prompt = _build_author_notes_prompt(
+        project,
+        ideation_history,
+        pitch=pitch,
+        context_window_tokens=context_window,
+    )
+    max_tokens = get_prompt_max_new_tokens("author_notes", fallback=512)
+    response = generator.generate_response(
+        prompt,
+        max_new_tokens=max_tokens,
+    ) or ""
+    notes = response.strip()
+    if not notes:
+        raise ValueError("The author notes generator returned an empty response.")
+    return notes
 
 
 def _collect_project_overview_characters(project: "Project") -> Dict[str, List[Dict[str, str]]]:
@@ -769,6 +864,7 @@ class Project(db.Model):
     project_overview = db.Column(db.Text, nullable=True)
     project_overview_data = db.Column(db.Text, nullable=True)
     ideation_summary = db.Column(db.Text, nullable=True)
+    author_notes = db.Column(db.Text, nullable=True)
     selected_pitch_id = db.Column(db.Integer, db.ForeignKey("idea_pitch_version.id"))
     outline = db.Column(db.Text, nullable=True)
     act1_outline = db.Column(db.Text, nullable=True)
@@ -979,6 +1075,7 @@ def _ensure_project_columns() -> None:
         "project_overview": "ALTER TABLE project ADD COLUMN project_overview TEXT",
         "project_overview_data": "ALTER TABLE project ADD COLUMN project_overview_data TEXT",
         "ideation_summary": "ALTER TABLE project ADD COLUMN ideation_summary TEXT",
+        "author_notes": "ALTER TABLE project ADD COLUMN author_notes TEXT",
         "selected_pitch_id": "ALTER TABLE project ADD COLUMN selected_pitch_id INTEGER",
         "act1_outline": "ALTER TABLE project ADD COLUMN act1_outline TEXT",
         "act2_outline": "ALTER TABLE project ADD COLUMN act2_outline TEXT",
@@ -1167,10 +1264,34 @@ def create_app() -> Flask:
                     else:
                         generator: TextGenerator | OpenAIUnifiedGenerator | None = None
                         fallback_notice: Optional[str] = None
+                        author_notes_text: Optional[str] = None
+                        author_notes_notice: Optional[str] = None
                         try:
                             generator, fallback_notice = _resolve_text_generator_with_fallback(
                                 use_api_requested
                             )
+                            if ideation_history:
+                                try:
+                                    author_notes_text = _generate_author_notes(
+                                        generator,
+                                        project,
+                                        ideation_history,
+                                        current_pitch_text,
+                                    )
+                                    form_state["author_notes"] = author_notes_text
+                                except OpenAIAPIRateLimitError as exc:
+                                    author_notes_notice = str(exc)
+                                except RuntimeError as exc:
+                                    author_notes_notice = str(exc)
+                                except ValueError as exc:
+                                    author_notes_notice = str(exc)
+                                except Exception as exc:  # pragma: no cover - defensive
+                                    author_notes_notice = (
+                                        "Author notes could not be generated: "
+                                        f"{exc}"
+                                    )
+                            elif project.author_notes:
+                                form_state["author_notes"] = project.author_notes
                             prompt = _build_project_overview_prompt(form_state, project)
                             max_tokens = get_prompt_max_new_tokens(
                                 "seed_prompt", fallback=512
@@ -1203,10 +1324,18 @@ def create_app() -> Flask:
                             project.project_overview_data = json.dumps(
                                 form_state, ensure_ascii=False
                             )
+                            if author_notes_text is not None:
+                                project.author_notes = author_notes_text
                             db.session.commit()
                             success_parts = ["Seed prompt updated."]
+                            if author_notes_text is not None:
+                                success_parts.append(
+                                    "Author notes refreshed from the idea catalyst chat."
+                                )
                             if device_sentence:
                                 success_parts.append(device_sentence)
+                            if author_notes_notice:
+                                success_parts.append(author_notes_notice)
                             if fallback_notice:
                                 success_parts.append(fallback_notice.strip())
                             overview_success = " ".join(success_parts)
@@ -2001,6 +2130,7 @@ def create_app() -> Flask:
             ideation_context_window=ideation_context_window,
             ideation_validation_context_window=ideation_validation_context_window,
             ideation_summary=ideation_summary,
+            author_notes=project.author_notes,
             pitch_history=pitch_history,
             active_pitch_version=active_pitch_version,
             pitch_history_limit=_DEFAULT_PITCH_HISTORY_LIMIT,
@@ -3695,6 +3825,13 @@ def _build_outline_prompt(
             f"{overview_text}"
         )
 
+    author_notes = (project.author_notes or "").strip()
+    if author_notes:
+        prompt_lines.append(
+            "System: Author notes distilled from the idea catalyst conversation. Align the outline with these intentions.\n"
+            f"{author_notes}"
+        )
+
     character_context = _build_character_roster(project)
     if character_context and not character_context.strip().startswith(
         "No character descriptions available."
@@ -3762,12 +3899,14 @@ def _generate_three_act_outline(
     character_context = _build_character_roster(project)
     notes_text = final_notes.strip() or "No final notes provided."
     project_overview = _project_overview_context(project)
+    author_notes = (project.author_notes or "").strip()
 
     prompt = _build_full_act_prompt(
         outline_text,
         character_context,
         notes_text,
         project_overview,
+        author_notes,
     )
     max_tokens = get_prompt_max_new_tokens("act_outline")
     response = generator.generate_response(
@@ -4180,6 +4319,7 @@ def _build_full_act_prompt(
     character_context: str,
     final_notes: str,
     project_overview: str,
+    author_notes: str | None = None,
 ) -> str:
     """Construct a prompt requesting the complete three-act outline."""
 
@@ -4219,9 +4359,20 @@ def _build_full_act_prompt(
         "",
         "Author final notes:",
         final_notes or "No final notes provided.",
-        "",
-        "Act-specific guidance:",
     ]
+
+    author_notes_text = (author_notes or "").strip()
+    if author_notes_text:
+        user_sections.extend(
+            [
+                "",
+                "Author notes captured during the idea catalyst stage:",
+                author_notes_text,
+            ]
+        )
+
+    user_sections.append("")
+    user_sections.append("Act-specific guidance:")
 
     for act_number in (1, 2, 3):
         label = act_labels.get(act_number, f"Act {act_number}")
