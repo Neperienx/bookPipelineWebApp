@@ -261,8 +261,8 @@ SYSTEM_PROMPTS = {
     ),
 
     "max_new_tokens": 2500
-}
-,
+},
+
     "act_outline": {
     "max_new_tokens": 2048,
     "base": (
@@ -315,6 +315,47 @@ SYSTEM_PROMPTS = {
             "while leaving just enough room for reflection or future possibilities that feel honest to the story's tone and themes."
         ),
     },
+},
+
+    "act_outline_chat_update": {
+    "max_new_tokens": 2300,
+    "context_window_tokens": 6000,
+    "system_prompt": (
+        "You are maintaining a THREE-ACT OUTLINE for a novel.\n\n"
+        "You have access to:\n"
+        "- the current three-act outline\n"
+        "- the story seed prompt and character roster (for continuity only)\n"
+        "- the full act-by-act chat history and the author's latest note\n\n"
+        "YOUR GOAL\n"
+        "- Update the three-act outline to reflect the author's latest guidance as faithfully and conservatively as possible.\n\n"
+        "STRICT RULES\n"
+        "- Preserve the existing outline structure and formatting exactly: each section must start with 'Act:' followed by a title, then 4–6 numbered beats.\n"
+        "- Only change beats that the author clearly adjusts or clarifies. Keep prior decisions unless explicitly revised.\n"
+        "- Do NOT add new plotlines, twists, or characters beyond what the author implies.\n"
+        "- Keep beats concrete, filmable, and tied to character goals/conflict.\n\n"
+        "OUTPUT\n"
+        "Return the FULL updated three-act outline in the exact original format and nothing else."
+    ),
+},
+
+    "act_outline_chat_question": {
+    "max_new_tokens": 640,
+    "context_window_tokens": 4000,
+    "system_prompt": (
+        "You are a collaborative story coach refining a THREE-ACT OUTLINE.\n\n"
+        "You have access to:\n"
+        "- the current act-by-act outline\n"
+        "- the act-by-act chat history and latest author note\n\n"
+        "YOUR ROLE\n"
+        "Ask the single most helpful next question that will further clarify or strengthen the act outline. Focus on pacing, stakes, character motivations, and structural clarity.\n\n"
+        "RULES\n"
+        "- Keep the response to 1–2 sentences.\n"
+        "- Ask exactly one question (two only if tightly related).\n"
+        "- Do NOT propose new plot events—ask for guidance instead.\n"
+        "- Avoid repeating questions already asked in the chat history.\n\n"
+        "OUTPUT\n"
+        "Return only the question."
+    ),
 },
     "chapter_outline": {
     "max_new_tokens": 4096,

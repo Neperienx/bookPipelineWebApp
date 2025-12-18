@@ -1779,56 +1779,58 @@ def create_app() -> Flask:
                 if user_message:
                     act_history.append({"role": "user", "content": user_message})
                     generator = None
+                    device_type = None
+                    device_label = None
                     try:
                         generator = _resolve_text_generator(use_api_requested)
-                        (
-                            act1_result,
-                            act2_result,
-                            act3_result,
-                            acts_detected,
-                        ) = _generate_three_act_outline(
-                            generator,
-                            project,
-                            user_message,
-                        )
-                    except OpenAIAPIRateLimitError as exc:
-                        act_error = str(exc)
-                        act_history.pop()
-                    except RuntimeError as exc:
-                        act_error = str(exc)
-                        act_history.pop()
-                    except Exception as exc:  # pragma: no cover - defensive
-                        act_error = (
-                            "The text generation backend could not generate the act outline: "
-                            f"{exc}"
-                        )
-                        act_history.pop()
-                    else:
                         device_type = generator.get_compute_device()
                         device_label = _normalise_device_label(device_type)
-                        device_sentence = _device_usage_sentence(device_type)
-                        acts = [
-                            act1_result.strip(),
-                            act2_result.strip(),
-                            act3_result.strip(),
-                        ]
-                        labels = ["Act I", "Act II", "Act III"]
-                        for label, content in zip(labels, acts):
-                            response_text = (
-                                f"{label} outline:\n{content or '(no reply)'}"
+
+                        update_prompt = _build_act_outline_update_prompt(
+                            project,
+                            act_history,
+                            current_outline=_collect_act_outline_text(project),
+                            context_window_tokens=get_prompt_context_window(
+                                "act_outline_chat_update", fallback=6000
+                            ),
+                        )
+                        update_tokens = get_prompt_max_new_tokens(
+                            "act_outline_chat_update", fallback=2048
+                        )
+                        update_raw = generator.generate_response(
+                            update_prompt, max_new_tokens=update_tokens
+                        )
+                        updated_outline = (update_raw or "").strip()
+                        if not updated_outline:
+                            raise ValueError(
+                                "The act outline chat returned an empty outline."
                             )
-                            act_history.append(
-                                {
-                                    "role": "assistant",
-                                    "content": response_text,
-                                    "device_type": device_label,
-                                }
-                            )
+
+                        act_sections = _split_act_sections(updated_outline)
+                        acts_detected = len(act_sections)
+                        if acts_detected >= 3:
+                            acts = act_sections[:3]
+                        elif updated_outline:
+                            acts = [updated_outline, "", ""]
+                        else:
+                            acts = ["", "", ""]
+                        while len(acts) < 3:
+                            acts.append("")
+
                         project.act_final_notes = user_message
-                        project.act1_outline = acts[0] if acts else ""
-                        project.act2_outline = acts[1] if len(acts) > 1 else ""
-                        project.act3_outline = acts[2] if len(acts) > 2 else ""
+                        project.act1_outline = acts[0]
+                        project.act2_outline = acts[1]
+                        project.act3_outline = acts[2]
                         db.session.commit()
+
+                        act_history.append(
+                            {
+                                "role": "assistant",
+                                "content": updated_outline,
+                                "device_type": device_label,
+                            }
+                        )
+                        device_sentence = _device_usage_sentence(device_type)
                         if acts_detected >= 3:
                             act_success = (
                                 "Act-by-act outline updated from assistant."
@@ -1842,6 +1844,67 @@ def create_app() -> Flask:
                                 "Detected sections were saved; regenerate to fill the remaining acts. "
                                 f"{device_sentence}"
                             )
+
+                        question_error: Optional[str] = None
+                        try:
+                            question_prompt = _build_act_outline_question_prompt(
+                                project,
+                                act_history,
+                                updated_outline=updated_outline,
+                                context_window_tokens=get_prompt_context_window(
+                                    "act_outline_chat_question", fallback=4000
+                                ),
+                            )
+                            question_tokens = get_prompt_max_new_tokens(
+                                "act_outline_chat_question", fallback=640
+                            )
+                            question_raw = generator.generate_response(
+                                question_prompt, max_new_tokens=question_tokens
+                            )
+                            question_text = (question_raw or "").strip()
+                            if not question_text:
+                                raise ValueError(
+                                    "The act outline question generator returned an empty reply."
+                                )
+                        except OpenAIAPIRateLimitError as exc:
+                            question_error = str(exc)
+                        except RuntimeError as exc:
+                            question_error = str(exc)
+                        except ValueError as exc:
+                            question_error = str(exc)
+                        except Exception as exc:  # pragma: no cover - defensive
+                            question_error = (
+                                "The text generation backend could not generate a follow-up question: "
+                                f"{exc}"
+                            )
+                        else:
+                            act_history.append(
+                                {
+                                    "role": "assistant",
+                                    "content": question_text,
+                                    "device_type": device_label,
+                                }
+                            )
+                            act_success = (
+                                (act_success or "Act outline updated.")
+                                + " Follow-up question added."
+                            )
+
+                        if question_error:
+                            act_error = question_error
+
+                    except OpenAIAPIRateLimitError as exc:
+                        act_error = str(exc)
+                        act_history.pop()
+                    except RuntimeError as exc:
+                        act_error = str(exc)
+                        act_history.pop()
+                    except Exception as exc:  # pragma: no cover - defensive
+                        act_error = (
+                            "The text generation backend could not generate the act outline: "
+                            f"{exc}"
+                        )
+                        act_history.pop()
                     session.modified = True
                 else:
                     act_error = "Please enter a message before sending."
@@ -4010,6 +4073,111 @@ def _build_idea_validation_prompt(
     prompt_lines.append(
         "System: Here is the full idea catalyst conversation. Summarize it into one cohesive short story pitch."
     )
+
+    trimmed_history = _truncate_history_for_context(history, context_window_tokens)
+    for message in trimmed_history:
+        role = message.get("role")
+        prefix = "User" if role == "user" else "Assistant"
+        prompt_lines.append(f"{prefix}: {message.get('content', '')}")
+
+    prompt_lines.append("Assistant:")
+    return "\n".join(prompt_lines)
+
+
+def _build_act_outline_update_prompt(
+    project: Project,
+    history: Iterable[Dict[str, Any]],
+    *,
+    current_outline: str,
+    context_window_tokens: int | None = None,
+) -> str:
+    """Construct the prompt for updating the act outline during chat."""
+
+    prompt_lines: List[str] = []
+    prompt_config = SYSTEM_PROMPTS.get("act_outline_chat_update")
+    system_prompt: Optional[str] = None
+    if isinstance(prompt_config, dict):
+        system_prompt = prompt_config.get("system_prompt") or prompt_config.get("prompt")
+    elif prompt_config:
+        system_prompt = str(prompt_config)
+
+    if system_prompt:
+        prompt_lines.append(f"System: {system_prompt}")
+
+    overview_text = _project_overview_context(project).strip()
+    if overview_text:
+        prompt_lines.append(
+            "System: Seed prompt / overview to maintain continuity.\n"
+            f"{overview_text}"
+        )
+
+    character_context = _build_character_roster(project).strip()
+    if character_context and not character_context.startswith("No character"):
+        prompt_lines.append(
+            "System: Author-created character roster. Respect these details.\n"
+            f"{character_context}"
+        )
+
+    author_notes_text = (project.author_notes or "").strip()
+    if author_notes_text:
+        prompt_lines.append(
+            "System: Author notes captured during ideation. Preserve these constraints.\n"
+            f"{author_notes_text}"
+        )
+
+    prompt_lines.append(
+        "System: Current act-by-act outline to update. Maintain the exact formatting.\n"
+        f"{current_outline.strip() or '(no act outline available)'}"
+    )
+
+    trimmed_history = _truncate_history_for_context(history, context_window_tokens)
+    for message in trimmed_history:
+        role = message.get("role")
+        prefix = "User" if role == "user" else "Assistant"
+        prompt_lines.append(f"{prefix}: {message.get('content', '')}")
+
+    prompt_lines.append("Assistant:")
+    return "\n".join(prompt_lines)
+
+
+def _build_act_outline_question_prompt(
+    project: Project,
+    history: Iterable[Dict[str, Any]],
+    *,
+    updated_outline: str,
+    context_window_tokens: int | None = None,
+) -> str:
+    """Construct the prompt that asks a follow-up act-outline question."""
+
+    prompt_lines: List[str] = []
+    prompt_config = SYSTEM_PROMPTS.get("act_outline_chat_question")
+    system_prompt: Optional[str] = None
+    if isinstance(prompt_config, dict):
+        system_prompt = prompt_config.get("system_prompt") or prompt_config.get("prompt")
+    elif prompt_config:
+        system_prompt = str(prompt_config)
+
+    if system_prompt:
+        prompt_lines.append(f"System: {system_prompt}")
+
+    prompt_lines.append(
+        "System: Latest act-by-act outline to keep in mind while you ask the next question.\n"
+        f"{updated_outline.strip() or '(no act outline available)'}"
+    )
+
+    overview_text = _project_overview_context(project).strip()
+    if overview_text:
+        prompt_lines.append(
+            "System: Seed prompt / overview for context. Do not repeat it; only use it to guide your question.\n"
+            f"{overview_text}"
+        )
+
+    character_context = _build_character_roster(project).strip()
+    if character_context and not character_context.startswith("No character"):
+        prompt_lines.append(
+            "System: Character roster for context. Ask questions consistent with these details.\n"
+            f"{character_context}"
+        )
 
     trimmed_history = _truncate_history_for_context(history, context_window_tokens)
     for message in trimmed_history:
