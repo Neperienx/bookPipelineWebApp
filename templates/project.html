@@ -1244,6 +1244,12 @@
                       <div class="mb-0">{{ ideation_summary }}</div>
                     </div>
                   {% endif %}
+                  {% if author_notes %}
+                    <div class="alert alert-secondary" role="status">
+                      <div class="fw-semibold mb-1">Author notes from ideation</div>
+                      <div class="mb-0">{{ author_notes }}</div>
+                    </div>
+                  {% endif %}
                   {% if overview_error %}
                     <div class="alert alert-danger" role="alert">{{ overview_error }}</div>
                   {% endif %}
