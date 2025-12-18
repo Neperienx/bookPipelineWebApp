@@ -269,7 +269,7 @@
                 {% if ideation_history %}
                   Continue the conversation that will ultimately feed your seed prompt.
                 {% else %}
-                  Brainstorm genre, scope, and themes with the assistant before filling out the metadata.
+                  Brainstorm genre, scope, and themes with the assistant until the pitch feels solid.
                 {% endif %}
               </p>
             </button>
@@ -286,7 +286,7 @@
                 {% if project_overview_summary %}
                   Review and refine the concept brief powering the workflow.
                 {% else %}
-                  Capture the story's intent and metadata before outlining.
+                  Turn the validated pitch into the seed prompt without extra questionnaires.
                 {% endif %}
               </p>
             </button>
@@ -494,7 +494,7 @@
                     <div class="act-outline-box">
                       <div class="fw-semibold text-info mb-2 text-uppercase small">How this stage works</div>
                       <p class="mb-2 small">Use the chat on the right to explore genre, fantasy or realism level, narrative ambitions, and core themes. The assistant remembers the latest {{ ideation_context_window or 5000 }}-token slice of the conversation, so keep the exchange focused on the canon you want to carry forward.</p>
-                      <p class="mb-0 small">When the idea feels crisp, switch to the seed prompt step to formalise the metadata questionnaire.</p>
+                      <p class="mb-0 small">When the idea feels crisp, switch to the seed prompt step to expand it—no extra metadata questions required.</p>
                     </div>
                     <div class="act-outline-box">
                       <div class="fw-semibold text-info mb-2 text-uppercase small">Characters shared with the assistant</div>
@@ -537,12 +537,12 @@
                       <div
                         class="outline-content"
                         data-edit-display
-                        data-empty-html="{{ '<div class=\'text-secondary\'>No seed prompt generated yet. Complete the metadata questionnaire to create one.</div>' | tojson | safe }}"
+                        data-empty-html="{{ '<div class=\'text-secondary\'>No seed prompt generated yet. Generate it from the validated pitch when you are ready.</div>' | tojson | safe }}"
                       >
                         {% if project_overview_summary %}
                           {{ project_overview_summary }}
                         {% else %}
-                          <div class="text-secondary">No seed prompt generated yet. Complete the metadata questionnaire to create one.</div>
+                          <div class="text-secondary">No seed prompt generated yet. Generate it from the validated pitch when you are ready.</div>
                         {% endif %}
                       </div>
                       <form class="d-none mt-3" data-edit-form>
@@ -559,8 +559,8 @@
                       <div class="alert alert-success mt-2 d-none" data-edit-success></div>
                     </div>
                     <div>
-                      <h3 class="h6 mb-1">Story metadata summary</h3>
-                      <p class="text-secondary mb-0 small">These details are stitched into the generated seed prompt.</p>
+                      <h3 class="h6 mb-1">Seed prompt inputs</h3>
+                      <p class="text-secondary mb-0 small">The generator only uses the idea catalyst pitch and any character details you have saved.</p>
                     </div>
                     {% if overview_sections %}
                       <div class="d-flex flex-column gap-3">
@@ -596,7 +596,7 @@
                       </div>
                     {% else %}
                       <div class="text-secondary text-center py-4">
-                        Complete the questionnaire to capture your project's foundational data.
+                        Regenerate the seed prompt once you have a validated pitch in the idea catalyst.
                       </div>
                     {% endif %}
                   </div>
@@ -1229,12 +1229,12 @@
                   <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
                     <div>
                       <h2 class="h5 mb-1">Seed prompt builder</h2>
-                      <p class="text-secondary mb-0">Capture the essential metadata so the assistant can craft a professional seed prompt.</p>
+                      <p class="text-secondary mb-0">Generate the seed prompt directly from the validated pitch and your characters.</p>
                     </div>
                     {% if project_overview_summary or overview_sections %}
                       <form method="post">
                         <input type="hidden" name="chat_type" value="overview" />
-                        <button type="submit" name="clear_overview" value="1" class="btn btn-outline-light btn-sm">Clear seed prompt &amp; metadata</button>
+                        <button type="submit" name="clear_overview" value="1" class="btn btn-outline-light btn-sm">Clear seed prompt</button>
                       </form>
                     {% endif %}
                   </div>
@@ -1249,191 +1249,11 @@
                   {% endif %}
                   <form method="post" class="d-flex flex-column gap-4">
                     <input type="hidden" name="chat_type" value="overview" />
-                    <div class="d-flex flex-column gap-3">
-                      <h3 class="h6 text-uppercase text-secondary mb-0">Must have</h3>
-                      <div>
-                        <label for="overviewPitch" class="form-label">User pitch</label>
-                        <textarea
-                          class="form-control{% if overview_field_errors.get('pitch') %} is-invalid{% endif %}"
-                          id="overviewPitch"
-                          name="pitch"
-                          rows="4"
-                          placeholder="Describe the core idea, character, or situation in your own words."
-                        >{{ overview_form.pitch }}</textarea>
-                        {% if overview_field_errors.get('pitch') %}
-                          <div class="invalid-feedback">{{ overview_field_errors.get('pitch') }}</div>
-                        {% endif %}
-                      </div>
-                      <div>
-                        <label for="overviewGenre" class="form-label">Genre</label>
-                        <select
-                          class="form-select{% if overview_field_errors.get('genre') %} is-invalid{% endif %}"
-                          id="overviewGenre"
-                          name="genre"
-                        >
-                          <option value="">Select a genre</option>
-                          {% for option in genre_options %}
-                            <option value="{{ option }}" {% if overview_form.genre == option %}selected{% endif %}>{{ option }}</option>
-                          {% endfor %}
-                        </select>
-                        {% if overview_field_errors.get('genre') %}
-                          <div class="invalid-feedback">{{ overview_field_errors.get('genre') }}</div>
-                        {% endif %}
-                      </div>
-                      <div>
-                        <span class="form-label d-block mb-2">Tone &amp; mood</span>
-                        <div class="d-flex flex-column gap-2">
-                          {% for option in tone_options %}
-                            <div class="form-check">
-                              <input
-                                class="form-check-input{% if overview_field_errors.get('tone') %} is-invalid{% endif %}"
-                                type="checkbox"
-                                id="overviewTone{{ loop.index }}"
-                                name="tone"
-                                value="{{ option }}"
-                                {% if option in overview_form.tone %}checked{% endif %}
-                              />
-                              <label class="form-check-label" for="overviewTone{{ loop.index }}">{{ option }}</label>
-                            </div>
-                          {% endfor %}
-                          {% if overview_field_errors.get('tone') %}
-                            <div class="invalid-feedback d-block">{{ overview_field_errors.get('tone') }}</div>
-                          {% endif %}
-                        </div>
-                      </div>
-                    </div>
-                    <div class="d-flex flex-column gap-3">
-                      <h3 class="h6 text-uppercase text-secondary mb-0">Very useful</h3>
-                      <div>
-                        <label for="overviewThemes" class="form-label">Themes</label>
-                        <textarea
-                          class="form-control"
-                          id="overviewThemes"
-                          name="themes"
-                          rows="3"
-                          placeholder="Identity and legacy&#10;Found family&#10;Power versus responsibility"
-                        >{{ overview_form.themes | join('\n') }}</textarea>
-                        <div class="form-text">Separate themes with commas or new lines.</div>
-                      </div>
-                      <div>
-                        <label for="overviewStakes" class="form-label">Stakes level</label>
-                        <div class="d-flex align-items-center gap-3">
-                          <input
-                            type="range"
-                            class="form-range"
-                            id="overviewStakes"
-                            name="stakes_level"
-                            min="1"
-                            max="10"
-                            value="{{ overview_form.stakes_level or 5 }}"
-                            data-stakes-slider
-                          />
-                          <span class="badge bg-info-subtle text-info" data-stakes-display>{{ overview_form.stakes_level or 5 }}/10</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="d-flex flex-column gap-3">
-                      <h3 class="h6 text-uppercase text-secondary mb-0">Optional / advanced</h3>
-                      <div>
-                        <span class="form-label d-block mb-2">Audience</span>
-                        <div class="d-flex flex-column gap-2">
-                          {% for option in audience_options %}
-                            <div class="form-check">
-                              <input
-                                class="form-check-input"
-                                type="checkbox"
-                                id="overviewAudience{{ loop.index }}"
-                                name="audience"
-                                value="{{ option }}"
-                                {% if option in overview_form.audience %}checked{% endif %}
-                              />
-                              <label class="form-check-label" for="overviewAudience{{ loop.index }}">{{ option }}</label>
-                            </div>
-                          {% endfor %}
-                        </div>
-                      </div>
-                      <div>
-                        <span class="form-label d-block mb-2">Narrative pace</span>
-                        <div class="d-flex flex-column gap-2">
-                          {% for option in pace_options %}
-                            <div class="form-check">
-                              <input
-                                class="form-check-input"
-                                type="radio"
-                                id="overviewPace{{ loop.index }}"
-                                name="narrative_pace"
-                                value="{{ option }}"
-                                {% if overview_form.narrative_pace == option %}checked{% endif %}
-                              />
-                              <label class="form-check-label" for="overviewPace{{ loop.index }}">{{ option }}</label>
-                            </div>
-                          {% endfor %}
-                        </div>
-                      </div>
-                      <div>
-                        <span class="form-label d-block mb-2">POV style</span>
-                        <div class="d-flex flex-column gap-2">
-                          {% for option in pov_options %}
-                            <div class="form-check">
-                              <input
-                                class="form-check-input"
-                                type="radio"
-                                id="overviewPov{{ loop.index }}"
-                                name="pov_style"
-                                value="{{ option }}"
-                                {% if overview_form.pov_style == option %}checked{% endif %}
-                              />
-                              <label class="form-check-label" for="overviewPov{{ loop.index }}">{{ option }}</label>
-                            </div>
-                          {% endfor %}
-                        </div>
-                      </div>
-                      <div>
-                        <span class="form-label d-block mb-2">Time structure</span>
-                        <div class="d-flex flex-column gap-2">
-                          {% for option in time_structure_options %}
-                            <div class="form-check">
-                              <input
-                                class="form-check-input"
-                                type="radio"
-                                id="overviewStructure{{ loop.index }}"
-                                name="time_structure"
-                                value="{{ option }}"
-                                {% if overview_form.time_structure == option %}checked{% endif %}
-                              />
-                              <label class="form-check-label" for="overviewStructure{{ loop.index }}">{{ option }}</label>
-                            </div>
-                          {% endfor %}
-                        </div>
-                      </div>
-                      <div>
-                        <label for="overviewSetting" class="form-label">Setting</label>
-                        <textarea
-                          class="form-control"
-                          id="overviewSetting"
-                          name="setting"
-                          rows="3"
-                          placeholder="E.g., Near-future Lagos divided into corporate wards and reclaimed wetlands."
-                        >{{ overview_form.setting }}</textarea>
-                      </div>
-                      <div>
-                        <span class="form-label d-block mb-2">World realism / fantasy level</span>
-                        <div class="d-flex flex-column gap-2">
-                          {% for option in world_realism_options %}
-                            <div class="form-check">
-                              <input
-                                class="form-check-input"
-                                type="radio"
-                                id="overviewRealism{{ loop.index }}"
-                                name="world_realism"
-                                value="{{ option }}"
-                                {% if overview_form.world_realism == option %}checked{% endif %}
-                              />
-                              <label class="form-check-label" for="overviewRealism{{ loop.index }}">{{ option }}</label>
-                            </div>
-                          {% endfor %}
-                        </div>
-                      </div>
+                    <input type="hidden" name="pitch" value="{{ ideation_summary or overview_form.pitch or '' }}" />
+                    <div class="act-outline-box">
+                      <div class="fw-semibold text-info mb-2 text-uppercase small">How this stage works</div>
+                      <p class="mb-2 small">Generate the seed prompt without filling out any genre, audience, or metadata fields. The assistant will use the latest validated pitch from the idea catalyst and any characters you've created.</p>
+                      <p class="mb-0 small">If you want to change the pitch, update it in the idea catalyst chat before regenerating the seed prompt.</p>
                     </div>
                     <div class="d-flex align-items-center justify-content-end gap-3">
                       <div class="form-check mb-0">

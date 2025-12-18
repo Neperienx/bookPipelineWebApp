@@ -97,6 +97,7 @@ _OPENAI_CONFIG_PATH = Path(__file__).resolve().parent / "openai_config.json"
 # Default number of previous chapters to reference when drafting new prose.
 _DEFAULT_DRAFT_CONTEXT_COUNT = 2
 
+# Legacy questionnaire options retained for backward compatibility with stored data.
 _PROJECT_GENRE_OPTIONS = [
     "Fantasy",
     "Science Fiction",
@@ -127,7 +128,7 @@ _PROJECT_TONE_OPTIONS = [
     "Atmospheric",
 ]
 
-# Questionnaire options for the seed prompt metadata workflow.
+# Additional legacy questionnaire options retained for compatibility with stored data.
 _PROJECT_AUDIENCE_OPTIONS = [
     "Adults",
     "Young Adults",
@@ -355,17 +356,7 @@ def _default_overview_form_state() -> Dict[str, Any]:
     """Return the default form state for the seed prompt questionnaire."""
 
     return {
-        "genre": "",
         "pitch": "",
-        "themes": [],
-        "stakes_level": 5,
-        "audience": [],
-        "narrative_pace": "",
-        "pov_style": "",
-        "time_structure": "",
-        "setting": "",
-        "world_realism": "",
-        "tone": [],
     }
 
 
@@ -394,27 +385,12 @@ def _load_project_overview_data(project: Project) -> Dict[str, Any]:
     if not isinstance(payload, dict):
         return {}
 
-    data: Dict[str, Any] = {
-        "genre": _clean_single_choice(payload.get("genre"), _PROJECT_GENRE_OPTIONS),
-        "tone": _clean_multi_choice(payload.get("tone", []), _PROJECT_TONE_OPTIONS),
-        "pitch": str(payload.get("pitch", "")).strip(),
-        "themes": _split_overview_list(payload.get("themes")),
-        "stakes_level": _clean_stakes_level(payload.get("stakes_level")),
-        "audience": _clean_multi_choice(
-            payload.get("audience", []), _PROJECT_AUDIENCE_OPTIONS
-        ),
-        "narrative_pace": _clean_single_choice(
-            payload.get("narrative_pace"), _PROJECT_PACE_OPTIONS
-        ),
-        "pov_style": _clean_single_choice(payload.get("pov_style"), _PROJECT_POV_OPTIONS),
-        "time_structure": _clean_single_choice(
-            payload.get("time_structure"), _PROJECT_TIME_STRUCTURE_OPTIONS
-        ),
-        "setting": str(payload.get("setting", "")).strip(),
-        "world_realism": _clean_single_choice(
-            payload.get("world_realism"), _PROJECT_REALISM_OPTIONS
-        ),
-    }
+    data: Dict[str, Any] = {}
+
+    pitch_text = str(payload.get("pitch", "")).strip()
+    if pitch_text:
+        data["pitch"] = pitch_text
+
     return data
 
 
@@ -422,29 +398,20 @@ def _load_project_overview_form(project: Project) -> Dict[str, Any]:
     """Return form defaults populated from the stored seed prompt metadata."""
 
     state = _default_overview_form_state()
+    state["pitch"] = (project.ideation_summary or "").strip()
     stored = _load_project_overview_data(project)
     if not stored:
         return state
     state.update(
         {
-            "genre": stored.get("genre", ""),
-            "tone": list(stored.get("tone", [])),
             "pitch": stored.get("pitch", ""),
-            "themes": list(stored.get("themes", [])),
-            "stakes_level": stored.get("stakes_level", 5),
-            "audience": list(stored.get("audience", [])),
-            "narrative_pace": stored.get("narrative_pace", ""),
-            "pov_style": stored.get("pov_style", ""),
-            "time_structure": stored.get("time_structure", ""),
-            "setting": stored.get("setting", ""),
-            "world_realism": stored.get("world_realism", ""),
         }
     )
     return state
 
 
 def _prepare_overview_display_sections(data: Mapping[str, Any]) -> List[Dict[str, Any]]:
-    """Return labelled sections for rendering the seed prompt questionnaire responses."""
+    """Return labelled sections for rendering the seed prompt inputs."""
 
     if not data:
         return []
@@ -458,53 +425,15 @@ def _prepare_overview_display_sections(data: Mapping[str, Any]) -> List[Dict[str
     def _section(title: str, items: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
         return {"title": title, "items": list(items)}
 
+    pitch_text = _text(data.get("pitch"))
+    if not pitch_text:
+        return []
+
     must_have_items = [
-        {"label": "User pitch", "type": "text", "value": _text(data.get("pitch"))},
-        {"label": "Genre", "type": "text", "value": _text(data.get("genre"))},
-        {"label": "Tone & mood", "type": "list", "value": _list(data.get("tone", []))},
+        {"label": "Idea catalyst pitch", "type": "text", "value": pitch_text},
     ]
 
-    very_useful_items = [
-        {"label": "Themes", "type": "list", "value": _list(data.get("themes", []))},
-        {
-            "label": "Stakes level",
-            "type": "text",
-            "value": f"{_clean_stakes_level(data.get('stakes_level', 5))} / 10",
-        },
-    ]
-
-    optional_items = [
-        {"label": "Audience", "type": "list", "value": _list(data.get("audience", []))},
-        {
-            "label": "Narrative pace",
-            "type": "text",
-            "value": _text(data.get("narrative_pace")),
-        },
-        {
-            "label": "POV style",
-            "type": "text",
-            "value": _text(data.get("pov_style")),
-        },
-        {
-            "label": "Time structure",
-            "type": "text",
-            "value": _text(data.get("time_structure")),
-        },
-        {"label": "Setting", "type": "text", "value": _text(data.get("setting"))},
-        {
-            "label": "World realism / fantasy level",
-            "type": "text",
-            "value": _text(data.get("world_realism")),
-        },
-    ]
-
-    sections: List[Dict[str, Any]] = [
-        _section("Must have", must_have_items),
-        _section("Very useful", very_useful_items),
-        _section("Optional / advanced", optional_items),
-    ]
-
-    return sections
+    return [_section("Seed prompt inputs", must_have_items)]
 
 
 def _project_overview_context(
@@ -528,42 +457,7 @@ def _project_overview_context(
 
     pitch = str(data.get("pitch", "")).strip()
     if pitch:
-        lines.append(f"User pitch: {pitch}")
-    genre = str(data.get("genre", "")).strip()
-    if genre:
-        lines.append(f"Genre: {genre}")
-    tone_values = [
-        str(item).strip() for item in data.get("tone", []) if str(item).strip()
-    ]
-    if tone_values:
-        lines.append("Tone & mood: " + ", ".join(tone_values))
-    theme_values = [
-        str(item).strip() for item in data.get("themes", []) if str(item).strip()
-    ]
-    if theme_values:
-        lines.append("Themes: " + ", ".join(theme_values))
-    stakes_level = _clean_stakes_level(data.get("stakes_level", 5))
-    lines.append(f"Stakes level: {stakes_level} / 10")
-    audience_values = [
-        str(item).strip() for item in data.get("audience", []) if str(item).strip()
-    ]
-    if audience_values:
-        lines.append("Audience: " + ", ".join(audience_values))
-    narrative_pace = str(data.get("narrative_pace", "")).strip()
-    if narrative_pace:
-        lines.append(f"Narrative pace: {narrative_pace}")
-    pov_style = str(data.get("pov_style", "")).strip()
-    if pov_style:
-        lines.append(f"POV style: {pov_style}")
-    time_structure = str(data.get("time_structure", "")).strip()
-    if time_structure:
-        lines.append(f"Time structure: {time_structure}")
-    setting = str(data.get("setting", "")).strip()
-    if setting:
-        lines.append(f"Setting: {setting}")
-    world_realism = str(data.get("world_realism", "")).strip()
-    if world_realism:
-        lines.append(f"World realism: {world_realism}")
+        lines.append(f"Idea catalyst pitch: {pitch}")
 
     return "\n".join(lines).strip()
 
@@ -717,50 +611,15 @@ def _build_project_overview_prompt(
     base_prompt = config.get(
         "base",
         (
-            "You are a professional story concept developer. Your task is to take a user's "
-            "story idea metadata and expand it into a seed prompt for downstream outlining."
+            "You are a professional story concept developer. Your task is to take the validated "
+            "idea catalyst pitch plus the project characters and expand them into a seed prompt "
+            "for downstream outlining."
         ),
     )
     response_instructions = config.get("response_instructions", "")
     instruction_template = config.get("instructions", "")
 
-    genre = _clean_single_choice(form_data.get("genre"), _PROJECT_GENRE_OPTIONS)
-    tone = _clean_multi_choice(form_data.get("tone", []), _PROJECT_TONE_OPTIONS)
-    pitch = str(form_data.get("pitch", "")).strip()
-    themes = _split_overview_list(form_data.get("themes"))
-    stakes_level = _clean_stakes_level(form_data.get("stakes_level"))
-    audience_values = _clean_multi_choice(
-        form_data.get("audience", []), _PROJECT_AUDIENCE_OPTIONS
-    )
-    narrative_pace = _clean_single_choice(
-        form_data.get("narrative_pace"), _PROJECT_PACE_OPTIONS
-    )
-    pov_style = _clean_single_choice(form_data.get("pov_style"), _PROJECT_POV_OPTIONS)
-    time_structure = _clean_single_choice(
-        form_data.get("time_structure"), _PROJECT_TIME_STRUCTURE_OPTIONS
-    )
-    setting = str(form_data.get("setting", "")).strip()
-    world_realism = _clean_single_choice(
-        form_data.get("world_realism"), _PROJECT_REALISM_OPTIONS
-    )
-
-    audience_text = ", ".join(audience_values).strip()
-
-    payload = {
-        "genre": genre or "",
-        "tone": tone,
-        "themes": themes,
-        "audience": audience_text or None,
-        "stakes_level": stakes_level,
-        "pitch": pitch,
-        "preferences": {
-            "pacing": narrative_pace or None,
-            "pov": pov_style or None,
-            "time_structure": time_structure or None,
-            "setting": setting or None,
-            "realism": world_realism or None,
-        },
-    }
+    payload: Dict[str, Any] = {}
 
     vision_summary = ""
     character_payload = {}
@@ -768,10 +627,17 @@ def _build_project_overview_prompt(
         vision_summary = _current_pitch_text(project)
         character_payload = _collect_project_overview_characters(project)
 
+    pitch_text = str(form_data.get("pitch", "")).strip()
+    if vision_summary:
+        pitch_text = vision_summary
+
+    if pitch_text:
+        payload["pitch"] = pitch_text
+
     if character_payload:
         payload["characters"] = character_payload
 
-    if vision_summary:
+    if vision_summary and vision_summary != pitch_text:
         payload["idea_catalyst_summary"] = vision_summary
 
     if project is not None:
@@ -861,7 +727,7 @@ def _collect_project_overview_characters(project: "Project") -> Dict[str, List[D
 
 
 def _parse_overview_form_submission(
-    form: Mapping[str, Any]
+    form: Mapping[str, Any], *, pitch_text: str = ""
 ) -> Tuple[Dict[str, Any], List[str], Dict[str, str]]:
     """Parse and validate the submitted seed prompt form."""
 
@@ -869,53 +735,11 @@ def _parse_overview_form_submission(
     errors: List[str] = []
     field_errors: Dict[str, str] = {}
 
-    def _get_list(field: str) -> List[str]:
-        getter = getattr(form, "getlist", None)
-        if callable(getter):
-            return [str(item) for item in getter(field)]
-        value = form.get(field)
-        if value is None:
-            return []
-        if isinstance(value, (list, tuple)):
-            return [str(item) for item in value]
-        return [str(value)]
-
-    state["genre"] = _clean_single_choice(form.get("genre"), _PROJECT_GENRE_OPTIONS)
-    if not state["genre"]:
-        message = "Please choose a primary genre."
-        errors.append(message)
-        field_errors["genre"] = message
-
-    state["pitch"] = str(form.get("pitch", "")).strip()
+    state["pitch"] = pitch_text or str(form.get("pitch", "")).strip()
     if not state["pitch"]:
-        message = "Please provide a short user pitch."
+        message = "Generate a validated pitch with the idea catalyst before creating the seed prompt."
         errors.append(message)
         field_errors["pitch"] = message
-
-    state["tone"] = _clean_multi_choice(_get_list("tone"), _PROJECT_TONE_OPTIONS)
-    if not state["tone"]:
-        message = "Select at least one tone or mood."
-        errors.append(message)
-        field_errors["tone"] = message
-
-    state["themes"] = _split_overview_list(form.get("themes"))
-    state["stakes_level"] = _clean_stakes_level(form.get("stakes_level"))
-    state["audience"] = _clean_multi_choice(
-        _get_list("audience"), _PROJECT_AUDIENCE_OPTIONS
-    )
-    state["narrative_pace"] = _clean_single_choice(
-        form.get("narrative_pace"), _PROJECT_PACE_OPTIONS
-    )
-    state["pov_style"] = _clean_single_choice(
-        form.get("pov_style"), _PROJECT_POV_OPTIONS
-    )
-    state["time_structure"] = _clean_single_choice(
-        form.get("time_structure"), _PROJECT_TIME_STRUCTURE_OPTIONS
-    )
-    state["setting"] = str(form.get("setting", "")).strip()
-    state["world_realism"] = _clean_single_choice(
-        form.get("world_realism"), _PROJECT_REALISM_OPTIONS
-    )
 
     return state, errors, field_errors
 
@@ -1288,6 +1112,7 @@ def create_app() -> Flask:
         current_pitch_text = _current_pitch_text(
             project, history=pitch_history
         )
+        overview_form_state["pitch"] = current_pitch_text
 
         if request.method == "POST":
             chat_type = request.form.get("chat_type", "outline")
@@ -1325,14 +1150,16 @@ def create_app() -> Flask:
                     project.project_overview_data = None
                     db.session.commit()
                     overview_success = "Seed prompt cleared."
-                    overview_form_state = _default_overview_form_state()
+                    overview_form_state = _load_project_overview_form(project)
                     overview_field_errors = {}
                 else:
                     (
                         form_state,
                         errors,
                         field_errors,
-                    ) = _parse_overview_form_submission(request.form)
+                    ) = _parse_overview_form_submission(
+                        request.form, pitch_text=current_pitch_text
+                    )
                     overview_form_state = form_state
                     overview_field_errors = field_errors
                     if errors:
@@ -2186,13 +2013,6 @@ def create_app() -> Flask:
             overview_sections=overview_sections,
             project_overview_summary=project_overview_summary,
             overview_field_errors=overview_field_errors,
-            genre_options=_PROJECT_GENRE_OPTIONS,
-            tone_options=_PROJECT_TONE_OPTIONS,
-            audience_options=_PROJECT_AUDIENCE_OPTIONS,
-            pace_options=_PROJECT_PACE_OPTIONS,
-            pov_options=_PROJECT_POV_OPTIONS,
-            time_structure_options=_PROJECT_TIME_STRUCTURE_OPTIONS,
-            world_realism_options=_PROJECT_REALISM_OPTIONS,
             act_history=act_history,
             act_error=act_error,
             act_success=act_success,
