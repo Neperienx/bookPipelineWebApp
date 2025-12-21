@@ -260,6 +260,38 @@
       background: rgba(255, 248, 240, 0.7);
       padding: 1.5rem;
     }
+    .character-tile-grid {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+    .character-tile {
+      border-radius: 1rem;
+      border: 1px solid rgba(165, 115, 82, 0.2);
+      background: #fff;
+      padding: 1rem;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      cursor: pointer;
+    }
+    .character-tile:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 24px rgba(54, 36, 22, 0.08);
+    }
+    .character-tile.add-character-tile {
+      border-style: dashed;
+      background: rgba(255, 248, 240, 0.7);
+      text-align: center;
+      font-weight: 600;
+      color: #5b463a;
+    }
+    .character-tile.add-character-tile:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 24px rgba(54, 36, 22, 0.08);
+    }
+    .character-tile-meta {
+      font-size: 0.75rem;
+      color: rgba(100, 73, 55, 0.75);
+    }
     .pitch-placeholder {
       color: rgba(100, 73, 55, 0.8);
       font-style: italic;
@@ -363,45 +395,61 @@
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                   <div>
                     <h3 class="h6 mb-1">Characters</h3>
-                    <p class="text-secondary mb-0 small">Select a character to edit inline or open their full profile.</p>
+                    <p class="text-secondary mb-0 small">Pick a tile to edit character details or open the full profile.</p>
                   </div>
-                  <form method="post" action="{{ url_for('character_create', project_id=project.id) }}">
-                    <input type="hidden" name="return_to_project" value="1" />
-                    <button type="submit" class="btn btn-sm btn-outline-dark">Add new character</button>
-                  </form>
                 </div>
-                {% if main_characters %}
-                  <div class="list-group list-group-flush">
+                <div class="character-tile-grid">
+                  <button
+                    type="button"
+                    class="character-tile add-character-tile"
+                    data-character-create-trigger
+                  >
+                    <div class="d-flex flex-column align-items-center justify-content-center gap-2">
+                      <span class="badge rounded-pill text-bg-light border">+</span>
+                      <span>Add new character</span>
+                      <span class="small text-secondary">Open the creation form</span>
+                    </div>
+                  </button>
+                  {% if main_characters %}
                     {% for character in main_characters %}
                       <div
-                        class="list-group-item list-group-item-action editable-block"
+                        class="character-tile editable-block"
                         data-edit-type="character"
                         data-endpoint="{{ url_for('project_update_character', project_id=project.id, character_id=character.id) }}"
                         data-method="PATCH"
                         data-click-to-edit="true"
                       >
-                        <div class="d-flex justify-content-between align-items-start gap-3" data-edit-display>
-                          <div>
-                            <div class="fw-semibold" data-display-name>{{ character.name or 'Untitled character' }}</div>
-                            <div
-                              class="text-secondary small"
-                              data-display-role
-                              data-empty-text="Role not set yet"
-                            >
-                              {{ character.role_in_story or 'Role not set yet' }}
+                        <div data-edit-display>
+                          <div class="d-flex justify-content-between align-items-start gap-3">
+                            <div>
+                              <div class="fw-semibold" data-display-name>{{ character.name or 'Untitled character' }}</div>
+                              <div
+                                class="text-secondary small"
+                                data-display-role
+                                data-empty-text="Role not set yet"
+                              >
+                                {{ character.role_in_story or 'Role not set yet' }}
+                              </div>
                             </div>
+                            <span class="character-tile-meta">
+                              {% if character.updated_at %}
+                                Updated {{ character.updated_at.strftime('%b %d, %Y') }}
+                              {% else %}
+                                Created {{ character.created_at.strftime('%b %d, %Y') }}
+                              {% endif %}
+                            </span>
                           </div>
-                          <span class="text-secondary small ms-3">
-                            {% if character.updated_at %}
-                              Updated {{ character.updated_at.strftime('%b %d, %Y') }}
-                            {% else %}
-                              Created {{ character.created_at.strftime('%b %d, %Y') }}
-                            {% endif %}
-                          </span>
+                          <p
+                            class="small text-secondary mb-0 mt-2"
+                            data-display-description
+                            data-empty-text="Add a short description."
+                          >
+                            {{ character.character_description or 'Add a short description.' }}
+                          </p>
                         </div>
-                        <form class="d-none mt-2" data-edit-form>
+                        <form class="d-none mt-3" data-edit-form>
                           <div class="row g-2">
-                            <div class="col-md-6">
+                            <div class="col-12">
                               <label class="form-label small text-uppercase fw-semibold" for="mainName{{ character.id }}">Name</label>
                               <input
                                 type="text"
@@ -411,7 +459,7 @@
                                 value="{{ character.name or '' }}"
                               />
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-12">
                               <label class="form-label small text-uppercase fw-semibold" for="mainRole{{ character.id }}">Role in story</label>
                               <input
                                 type="text"
@@ -421,13 +469,22 @@
                                 value="{{ character.role_in_story or '' }}"
                               />
                             </div>
+                            <div class="col-12">
+                              <label class="form-label small text-uppercase fw-semibold" for="mainDescription{{ character.id }}">Quick description</label>
+                              <textarea
+                                class="form-control form-control-sm"
+                                id="mainDescription{{ character.id }}"
+                                name="character_description"
+                                rows="3"
+                              >{{ character.character_description or '' }}</textarea>
+                            </div>
                           </div>
                           <div class="edit-inline-actions mt-3">
                             <button type="button" class="btn btn-outline-secondary btn-sm" data-edit-cancel>Cancel</button>
                             <button type="submit" class="btn btn-primary btn-sm">Save</button>
                           </div>
                         </form>
-                        <div class="d-flex justify-content-between align-items-center mt-2" data-edit-actions>
+                        <div class="d-flex justify-content-between align-items-center mt-3" data-edit-actions>
                           <a
                             href="{{ url_for('character_detail', project_id=project.id, character_id=character.id) }}"
                             class="btn btn-link btn-sm ps-0"
@@ -440,13 +497,13 @@
                         <div class="alert alert-success mt-2 d-none" data-edit-success></div>
                       </div>
                     {% endfor %}
-                  </div>
-                {% else %}
-                  <div class="text-secondary text-center py-4">
-                    <p class="mb-1">No characters yet.</p>
-                    <p class="mb-0">Use the form on the right to create the first profile.</p>
-                  </div>
-                {% endif %}
+                  {% else %}
+                    <div class="text-secondary text-center py-4 border rounded-4 bg-white">
+                      <p class="mb-1">No characters yet.</p>
+                      <p class="mb-0">Use the add tile to start the first profile.</p>
+                    </div>
+                  {% endif %}
+                </div>
               </div>
             </div>
             <div class="tile-detail{% if initial_step == 'ideation' %} active{% endif %}" id="ideationPanel" role="tabpanel">
@@ -1061,6 +1118,11 @@
       const chatMessageContainers = Array.from(
         document.querySelectorAll(".chat-messages")
       );
+      const characterCreateTriggers = Array.from(
+        document.querySelectorAll("[data-character-create-trigger]")
+      );
+      const characterFormPanel = document.getElementById("characterFormPanel");
+      const characterNameInput = document.getElementById("characterNameInput");
       const workflowProgressBar = document.getElementById("workflowProgressBar");
 
       const scrollToBottom = function (container) {
@@ -1081,6 +1143,18 @@
           : 100;
         workflowProgressBar.style.width = progress + "%";
         workflowProgressBar.setAttribute("aria-valuenow", String(Math.round(progress)));
+      };
+
+      const openCharacterForm = function () {
+        if (characterFormPanel) {
+          chatPanels.forEach(function (panel) {
+            panel.classList.toggle("active", panel === characterFormPanel);
+          });
+          characterFormPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        if (characterNameInput) {
+          characterNameInput.focus();
+        }
       };
 
       chatMessageContainers.forEach(function (container) {
@@ -1145,6 +1219,12 @@
             });
           }
           updateWorkflowProgress(tile);
+        });
+      });
+
+      characterCreateTriggers.forEach(function (trigger) {
+        trigger.addEventListener("click", function () {
+          openCharacterForm();
         });
       });
 
