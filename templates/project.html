@@ -10,38 +10,82 @@
       margin-bottom: 2rem;
       flex-wrap: wrap;
     }
-    .section-nav {
+    .workflow-card {
+      border-radius: 1.75rem;
+      overflow: hidden;
+      position: relative;
+    }
+    .workflow-card::after {
+      content: "";
+      position: absolute;
+      inset: -40% 45% auto -35%;
+      height: 320px;
+      background: radial-gradient(circle, rgba(246, 198, 151, 0.35), transparent 70%);
+      opacity: 0.9;
+      pointer-events: none;
+    }
+    .workflow-progress {
+      position: relative;
+      z-index: 1;
       display: flex;
       flex-direction: column;
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .workflow-progress .progress {
+      height: 0.5rem;
+      background-color: rgba(239, 214, 187, 0.6);
+      border-radius: 999px;
+    }
+    .workflow-progress .progress-bar {
+      background: linear-gradient(90deg, #d97c4a, #e7a062);
+      border-radius: 999px;
+      transition: width 0.3s ease;
+    }
+    .step-buttons {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: 0.75rem;
     }
-    .overview-tile {
+    .step-button {
       position: relative;
-      padding: 1.25rem;
-      border-radius: 1rem;
-      border: 1px solid rgba(148, 163, 184, 0.25);
-      background: rgba(15, 23, 42, 0.65);
-      color: #e2e8f0;
+      padding: 1rem 1.1rem;
+      border-radius: 1.1rem;
+      border: 1px solid rgba(165, 115, 82, 0.2);
+      background: rgba(255, 250, 244, 0.85);
+      color: #3c2a1f;
       text-align: left;
-      transition: border-color 0.2s ease, transform 0.2s ease;
+      transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
       cursor: pointer;
     }
-    .overview-tile:hover {
+    .step-button:hover {
       transform: translateY(-2px);
-      border-color: rgba(96, 165, 250, 0.8);
+      border-color: rgba(217, 124, 74, 0.7);
+      box-shadow: 0 10px 24px rgba(171, 110, 69, 0.15);
     }
-    .overview-tile.active {
-      border-color: rgba(59, 130, 246, 1);
-      box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.4);
+    .step-button.active {
+      border-color: rgba(217, 124, 74, 0.95);
+      box-shadow: 0 0 0 2px rgba(217, 124, 74, 0.2);
     }
-    .overview-tile h2 {
-      font-size: 1.1rem;
-      margin-bottom: 0.5rem;
+    .step-button span {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.9rem;
+      height: 1.9rem;
+      border-radius: 0.8rem;
+      background: rgba(217, 124, 74, 0.15);
+      font-weight: 600;
+      margin-right: 0.5rem;
     }
-    .overview-tile p {
+    .step-button h2 {
+      font-size: 1rem;
+      margin-bottom: 0.35rem;
+    }
+    .step-button p {
       margin: 0;
-      color: rgba(226, 232, 240, 0.8);
-      font-size: 0.9rem;
+      font-size: 0.85rem;
+      color: rgba(60, 42, 31, 0.7);
     }
     .tile-detail {
       display: none;
@@ -67,49 +111,39 @@
     .chat-panel.active {
       display: flex;
     }
-    @media (max-width: 991.98px) {
-      .section-nav {
-        flex-direction: row;
-        flex-wrap: wrap;
-        gap: 0.75rem;
-      }
-      .section-nav .overview-tile {
-        flex: 1 1 calc(50% - 0.75rem);
-      }
-    }
     .outline-content {
-      border-radius: 1rem;
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      background: rgba(15, 23, 42, 0.6);
+      border-radius: 1.2rem;
+      border: 1px solid rgba(165, 115, 82, 0.2);
+      background: rgba(255, 248, 240, 0.92);
       padding: 1.5rem;
       white-space: pre-wrap;
       min-height: 200px;
-      color: #f8fafc;
+      color: #3c2a1f;
     }
     .act-outline-box {
-      border-radius: 0.9rem;
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      background: rgba(15, 23, 42, 0.7);
+      border-radius: 1rem;
+      border: 1px solid rgba(165, 115, 82, 0.2);
+      background: rgba(255, 245, 235, 0.92);
       padding: 1rem;
       white-space: pre-wrap;
-      color: #f8fafc;
+      color: #3c2a1f;
     }
     .act-empty-textarea {
-      background: rgba(15, 23, 42, 0.4);
-      border-color: rgba(148, 163, 184, 0.2);
-      color: rgba(226, 232, 240, 0.7);
+      background: rgba(255, 245, 235, 0.8);
+      border-color: rgba(165, 115, 82, 0.2);
+      color: rgba(60, 42, 31, 0.65);
     }
     .chapter-list {
       display: grid;
       gap: 1rem;
     }
     .chapter-card {
-      border-radius: 0.9rem;
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      background: rgba(15, 23, 42, 0.75);
+      border-radius: 1rem;
+      border: 1px solid rgba(165, 115, 82, 0.2);
+      background: rgba(255, 248, 240, 0.95);
       padding: 1rem 1.25rem;
       white-space: pre-wrap;
-      color: #f8fafc;
+      color: #3c2a1f;
     }
     .chapter-card-title {
       font-weight: 600;
@@ -117,7 +151,7 @@
     }
     .chapter-card-summary {
       margin: 0;
-      color: #f8fafc;
+      color: #3c2a1f;
       white-space: pre-wrap;
     }
     .chat-messages {
@@ -127,27 +161,27 @@
       display: flex;
       flex-direction: column;
       gap: 1rem;
-      background: rgba(15, 23, 42, 0.7);
-      border-radius: 1rem;
-      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: rgba(255, 246, 235, 0.92);
+      border-radius: 1.1rem;
+      border: 1px solid rgba(165, 115, 82, 0.2);
     }
     .message {
       padding: 0.85rem 1.1rem;
-      border-radius: 0.9rem;
+      border-radius: 1rem;
       max-width: 85%;
       white-space: pre-wrap;
       font-size: 0.95rem;
     }
     .message.user {
       align-self: flex-end;
-      background: linear-gradient(135deg, #2563eb, #38bdf8);
+      background: linear-gradient(135deg, #d97c4a, #e7a062);
       color: #fff;
     }
     .message.assistant {
       align-self: flex-start;
-      background: rgba(15, 23, 42, 0.9);
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      color: #f8fafc;
+      background: rgba(255, 251, 246, 0.98);
+      border: 1px solid rgba(165, 115, 82, 0.2);
+      color: #3c2a1f;
     }
     .message-device {
       margin-top: 0.5rem;
@@ -155,7 +189,7 @@
       font-weight: 600;
       letter-spacing: 0.05em;
       text-transform: uppercase;
-      color: rgba(148, 163, 184, 0.85);
+      color: rgba(100, 73, 55, 0.75);
     }
     .loading-indicator {
       display: none;
@@ -163,39 +197,39 @@
       gap: 0.75rem;
       padding: 0.75rem 1rem;
       margin-bottom: 0.75rem;
-      border-radius: 0.75rem;
-      background: rgba(30, 41, 59, 0.8);
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      color: #e2e8f0;
+      border-radius: 0.85rem;
+      background: rgba(255, 243, 230, 0.95);
+      border: 1px solid rgba(165, 115, 82, 0.2);
+      color: #3c2a1f;
     }
     .loading-indicator.visible {
       display: flex;
     }
     .chapter-preview-box {
-      border-radius: 0.75rem;
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      background: rgba(15, 23, 42, 0.6);
+      border-radius: 0.9rem;
+      border: 1px solid rgba(165, 115, 82, 0.2);
+      background: rgba(255, 245, 235, 0.92);
       padding: 1rem;
       min-height: 140px;
       white-space: pre-wrap;
-      color: #f8fafc;
+      color: #3c2a1f;
     }
     .chapter-preview-box.empty {
-      color: rgba(226, 232, 240, 0.9);
+      color: rgba(100, 73, 55, 0.8);
       font-style: italic;
     }
     .chapter-draft-entry {
-      border-radius: 0.75rem;
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      background: rgba(15, 23, 42, 0.55);
+      border-radius: 0.9rem;
+      border: 1px solid rgba(165, 115, 82, 0.2);
+      background: rgba(255, 245, 235, 0.9);
       padding: 1rem 1.25rem;
-      color: #f8fafc;
+      color: #3c2a1f;
     }
     .chapter-draft-entry + .chapter-draft-entry {
       margin-top: 0.75rem;
     }
     .draft-metadata {
-      color: rgba(226, 232, 240, 0.65);
+      color: rgba(100, 73, 55, 0.8);
       font-size: 0.85rem;
     }
     .editable-block {
@@ -205,9 +239,9 @@
       display: none !important;
     }
     .editable-block textarea.form-control {
-      background: rgba(15, 23, 42, 0.85);
-      color: #e2e8f0;
-      border-color: rgba(148, 163, 184, 0.25);
+      background: rgba(255, 246, 236, 0.95);
+      color: #3c2a1f;
+      border-color: rgba(165, 115, 82, 0.25);
     }
     .editable-block .edit-inline-actions {
       display: flex;
@@ -220,1578 +254,797 @@
     .editable-block .alert {
       padding: 0.5rem 0.75rem;
     }
+    .character-form-card {
+      border-radius: 1.2rem;
+      border: 1px dashed rgba(165, 115, 82, 0.3);
+      background: rgba(255, 248, 240, 0.7);
+      padding: 1.5rem;
+    }
+    .pitch-placeholder {
+      color: rgba(100, 73, 55, 0.8);
+      font-style: italic;
+    }
+    .validation-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
   </style>
 {% endblock %}
 {% block content %}
+  {% set requested_step_value = requested_step or '' %}
+  {% set initial_step = requested_step_value %}
+  {% if not initial_step %}
+    {% if saved_chapter_count or project.act1_chapters or project.act2_chapters or project.act3_chapters %}
+      {% set initial_step = 'draft' %}
+    {% elif project.act1_outline or project.act2_outline or project.act3_outline or act_history %}
+      {% set initial_step = 'acts' %}
+    {% elif ideation_history or ideation_summary %}
+      {% set initial_step = 'ideation' %}
+    {% else %}
+      {% set initial_step = 'characters' %}
+    {% endif %}
+  {% endif %}
   <div class="project-header">
     <div>
       <h1 class="h3 mb-1">{{ project.name }}</h1>
-      <p class="text-secondary mb-0">Organise your story resources.</p>
+      <p class="text-secondary mb-0">Move through the writing flow, step by step.</p>
     </div>
-    <a href="{{ url_for('dashboard') }}" class="btn btn-outline-light btn-sm">Back to dashboard</a>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-outline-dark btn-sm">Back to dashboard</a>
   </div>
-  <div class="row g-4 align-items-start">
-    <div class="col-xl-3">
-      <div class="card h-100">
-        <div class="card-body d-flex flex-column gap-4">
-          <div>
-            <h2 class="h6 text-uppercase text-secondary mb-1">Story workflow</h2>
-            <p class="text-secondary small mb-0">Follow each step to take your project from idea to chapters.</p>
-          </div>
-          <nav class="section-nav" role="tablist" aria-label="Project sections">
-            <button
-              class="overview-tile"
-              type="button"
-              data-target="charactersPanel"
-              data-chat-target="characterChatPanel"
-              aria-controls="charactersPanel"
-              aria-selected="false"
-            >
-              <h2 class="h6 mb-1">Character creation</h2>
-              <p>
-                {% if main_characters %}
-                  Manage {{ main_characters|length }} primary character{{ main_characters|length != 1 and 's' or '' }} and generate new profiles.
-                {% else %}
-                  Craft the protagonists and supporting cast for your story.
-                {% endif %}
-              </p>
-            </button>
-            <button
-              class="overview-tile{% if ideation_active %} active{% endif %}"
-              type="button"
-              data-target="ideationPanel"
-              data-chat-target="ideationChatPanel"
-              aria-controls="ideationPanel"
-              aria-selected="{{ 'true' if ideation_active else 'false' }}"
-            >
-              <h2 class="h6 mb-1">Idea catalyst</h2>
-              <p>
-                {% if ideation_history %}
-                  Continue the conversation that will ultimately feed your seed prompt.
-                {% else %}
-                  Brainstorm genre, scope, and themes with the assistant until the pitch feels solid.
-                {% endif %}
-              </p>
-            </button>
-            <button
-              class="overview-tile{% if overview_active %} active{% endif %}"
-              type="button"
-              data-target="overviewPanel"
-              data-chat-target="overviewChatPanel"
-              aria-controls="overviewPanel"
-              aria-selected="{{ 'true' if overview_active else 'false' }}"
-            >
-              <h2 class="h6 mb-1">Seed prompt</h2>
-              <p>
-                {% if project_overview_summary %}
-                  Review and refine the concept brief powering the workflow.
-                {% else %}
-                  Turn the validated pitch into the seed prompt without extra questionnaires.
-                {% endif %}
-              </p>
-            </button>
-            <button
-              class="overview-tile{% if outline_active %} active{% endif %}"
-              type="button"
-              data-target="outlinePanel"
-              data-chat-target="outlineChatPanel"
-              aria-controls="outlinePanel"
-              aria-selected="{{ 'true' if outline_active else 'false' }}"
-            >
-              <h2 class="h6 mb-1">Outline</h2>
-              <p>{% if project.outline %}View the latest story outline.{% else %}Create a story outline with the assistant.{% endif %}</p>
-            </button>
-            <button
-              class="overview-tile"
-              type="button"
-              data-target="conceptsPanel"
-              data-chat-target="conceptChatPanel"
-              aria-controls="conceptsPanel"
-              aria-selected="false"
-            >
-              <h2 class="h6 mb-1">Concepts</h2>
-              <p>
-                {% if project.concepts %}
-                  Review clarified concepts pulled from your outline.
-                {% else %}
-                  Identify and define fuzzy ideas hiding in the outline.
-                {% endif %}
-              </p>
-            </button>
-            <button
-              class="overview-tile"
-              type="button"
-              data-target="actsPanel"
-              data-chat-target="actChatPanel"
-              aria-controls="actsPanel"
-              aria-selected="false"
-            >
-              <h2 class="h6 mb-1">Act by act</h2>
-              <p>
-                {% if project.act1_outline or project.act2_outline or project.act3_outline %}
-                  Review and refine the generated three-act structure.
-                {% else %}
-                  Generate a detailed outline for each act of your story.
-                {% endif %}
-              </p>
-            </button>
-            <button
-              class="overview-tile"
-              type="button"
-              data-target="supportingPanel"
-              data-chat-target="supportingChatPanel"
-              aria-controls="supportingPanel"
-              aria-selected="false"
-            >
-              <h2 class="h6 mb-1">Supporting characters</h2>
-              <p>
-                {% if supporting_characters %}
-                  Review quick references for {{ supporting_characters|length }} supporting character{{ supporting_characters|length != 1 and 's' or '' }}.
-                {% else %}
-                  Identify and describe secondary characters that fill out each act.
-                {% endif %}
-              </p>
-            </button>
-            <button
-              class="overview-tile"
-              type="button"
-              data-target="chaptersPanel"
-              data-chat-target="chapterChatPanel"
-              aria-controls="chaptersPanel"
-              aria-selected="false"
-            >
-              <h2 class="h6 mb-1">Chapter by chapter</h2>
-              <p>
-                {% if project.act1_chapters or project.act2_chapters or project.act3_chapters %}
-                  Review the generated chapter plans for each act.
-                {% else %}
-                  Break down every act into detailed chapters.
-                {% endif %}
-              </p>
-            </button>
-            <button
-              class="overview-tile"
-              type="button"
-              data-target="draftPanel"
-              data-chat-target="draftChatPanel"
-              aria-controls="draftPanel"
-              aria-selected="false"
-            >
-              <h2 class="h6 mb-1">Chapter drafting</h2>
-              <p>
-                {% if saved_chapter_count %}
-                  Continue refining {{ saved_chapter_count }} saved chapter draft{{ saved_chapter_count != 1 and 's' or '' }}.
-                {% else %}
-                  Expand your outlines into full chapter prose with continuity support.
-                {% endif %}
-              </p>
-            </button>
-          </nav>
+  <div class="card workflow-card">
+    <div class="card-body">
+      <div class="workflow-progress">
+        <div class="progress" role="progressbar" aria-label="Project workflow progress">
+          <div class="progress-bar" id="workflowProgressBar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
         </div>
+        <nav class="step-buttons" role="tablist" aria-label="Project workflow steps">
+          <button
+            class="step-button overview-tile{% if initial_step == 'characters' %} active{% endif %}"
+            type="button"
+            data-target="charactersPanel"
+            data-chat-target="characterFormPanel"
+            data-step-index="1"
+            aria-controls="charactersPanel"
+            aria-selected="{{ 'true' if initial_step == 'characters' else 'false' }}"
+          >
+            <span>1</span>
+            <h2 class="h6 mb-1">Character creation</h2>
+            <p>Review your cast and craft new profiles.</p>
+          </button>
+          <button
+            class="step-button overview-tile{% if initial_step == 'ideation' %} active{% endif %}"
+            type="button"
+            data-target="ideationPanel"
+            data-chat-target="ideationChatPanel"
+            data-step-index="2"
+            aria-controls="ideationPanel"
+            aria-selected="{{ 'true' if initial_step == 'ideation' else 'false' }}"
+          >
+            <span>2</span>
+            <h2 class="h6 mb-1">Ideation catalyst</h2>
+            <p>Shape the pitch and validate the story spark.</p>
+          </button>
+          <button
+            class="step-button overview-tile{% if initial_step == 'acts' %} active{% endif %}"
+            type="button"
+            data-target="actsPanel"
+            data-chat-target="actChatPanel"
+            data-step-index="3"
+            aria-controls="actsPanel"
+            aria-selected="{{ 'true' if initial_step == 'acts' else 'false' }}"
+          >
+            <span>3</span>
+            <h2 class="h6 mb-1">Act by act outline</h2>
+            <p>Refine the three-act structure with the assistant.</p>
+          </button>
+          <button
+            class="step-button overview-tile{% if initial_step == 'draft' %} active{% endif %}"
+            type="button"
+            data-target="draftPanel"
+            data-chat-target="draftChatPanel"
+            data-step-index="4"
+            aria-controls="draftPanel"
+            aria-selected="{{ 'true' if initial_step == 'draft' else 'false' }}"
+          >
+            <span>4</span>
+            <h2 class="h6 mb-1">Chapter drafting</h2>
+            <p>Expand each chapter into full prose.</p>
+          </button>
+        </nav>
       </div>
-    </div>
-    <div class="col-xl-9">
-      <div class="card h-100">
-        <div class="card-body">
-          <div class="row g-4 align-items-stretch">
-            <div class="col-12 col-lg-6">
-              <div class="section-panel">
-                <div class="tile-detail" id="charactersPanel" role="tabpanel">
-                  <div class="outline-content d-flex flex-column gap-3">
-                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                      <div>
-                        <h3 class="h6 mb-1">Characters</h3>
-                        <p class="text-secondary mb-0 small">Select a character to open their workspace or add a new one.</p>
-                      </div>
-                      <form method="post" action="{{ url_for('character_create', project_id=project.id) }}">
-                        <button type="submit" class="btn btn-sm btn-outline-light">Add new character</button>
-                      </form>
-                    </div>
-                    {% if main_characters %}
-                      <div class="list-group list-group-flush">
-                        {% for character in main_characters %}
-                          <div
-                            class="list-group-item list-group-item-action editable-block"
-                            data-edit-type="character"
-                            data-endpoint="{{ url_for('project_update_character', project_id=project.id, character_id=character.id) }}"
-                            data-method="PATCH"
-                          >
-                            <div class="d-flex justify-content-between align-items-start gap-3" data-edit-display>
-                              <div>
-                                <div class="fw-semibold" data-display-name>{{ character.name or 'Untitled character' }}</div>
-                                <div
-                                  class="text-secondary small"
-                                  data-display-role
-                                  data-empty-text="Role not set yet"
-                                >
-                                  {{ character.role_in_story or 'Role not set yet' }}
-                                </div>
-                              </div>
-                              <span class="text-secondary small ms-3">
-                                {% if character.updated_at %}
-                                  Updated {{ character.updated_at.strftime('%b %d, %Y') }}
-                                {% else %}
-                                  Created {{ character.created_at.strftime('%b %d, %Y') }}
-                                {% endif %}
-                              </span>
+      <div class="row g-4 align-items-stretch">
+        <div class="col-12 col-lg-6">
+          <div class="section-panel">
+            <div class="tile-detail{% if initial_step == 'characters' %} active{% endif %}" id="charactersPanel" role="tabpanel">
+              <div class="outline-content d-flex flex-column gap-3">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                  <div>
+                    <h3 class="h6 mb-1">Characters</h3>
+                    <p class="text-secondary mb-0 small">Select a character to edit inline or open their full profile.</p>
+                  </div>
+                  <form method="post" action="{{ url_for('character_create', project_id=project.id) }}">
+                    <input type="hidden" name="return_to_project" value="1" />
+                    <button type="submit" class="btn btn-sm btn-outline-dark">Add new character</button>
+                  </form>
+                </div>
+                {% if main_characters %}
+                  <div class="list-group list-group-flush">
+                    {% for character in main_characters %}
+                      <div
+                        class="list-group-item list-group-item-action editable-block"
+                        data-edit-type="character"
+                        data-endpoint="{{ url_for('project_update_character', project_id=project.id, character_id=character.id) }}"
+                        data-method="PATCH"
+                        data-click-to-edit="true"
+                      >
+                        <div class="d-flex justify-content-between align-items-start gap-3" data-edit-display>
+                          <div>
+                            <div class="fw-semibold" data-display-name>{{ character.name or 'Untitled character' }}</div>
+                            <div
+                              class="text-secondary small"
+                              data-display-role
+                              data-empty-text="Role not set yet"
+                            >
+                              {{ character.role_in_story or 'Role not set yet' }}
                             </div>
-                            <form class="d-none mt-2" data-edit-form>
-                              <div class="row g-2">
-                                <div class="col-md-6">
-                                  <label class="form-label small text-uppercase fw-semibold" for="mainName{{ character.id }}">Name</label>
-                                  <input
-                                    type="text"
-                                    class="form-control form-control-sm"
-                                    id="mainName{{ character.id }}"
-                                    name="name"
-                                    value="{{ character.name or '' }}"
-                                  />
-                                </div>
-                                <div class="col-md-6">
-                                  <label class="form-label small text-uppercase fw-semibold" for="mainRole{{ character.id }}">Role in story</label>
-                                  <input
-                                    type="text"
-                                    class="form-control form-control-sm"
-                                    id="mainRole{{ character.id }}"
-                                    name="role_in_story"
-                                    value="{{ character.role_in_story or '' }}"
-                                  />
-                                </div>
-                              </div>
-                              <div class="edit-inline-actions mt-3">
-                                <button type="button" class="btn btn-outline-secondary btn-sm" data-edit-cancel>Cancel</button>
-                                <button type="submit" class="btn btn-primary btn-sm">Save</button>
-                              </div>
-                            </form>
-                            <div class="d-flex justify-content-between align-items-center mt-2" data-edit-actions>
-                              <a
-                                href="{{ url_for('character_detail', project_id=project.id, character_id=character.id) }}"
-                                class="btn btn-link btn-sm ps-0"
-                              >
-                                Open profile
-                              </a>
-                              <button type="button" class="btn btn-outline-info btn-sm" data-edit-trigger>Edit character</button>
-                            </div>
-                            <div class="alert alert-danger mt-2 d-none" data-edit-error></div>
-                            <div class="alert alert-success mt-2 d-none" data-edit-success></div>
                           </div>
-                        {% endfor %}
-                      </div>
-                    {% else %}
-                      <div class="text-secondary text-center py-4">
-                        <p class="mb-1">No characters yet.</p>
-                        <p class="mb-0">Use the button above to generate your first character profile.</p>
-                      </div>
-                    {% endif %}
-                  </div>
-                </div>
-                <div class="tile-detail{% if ideation_active %} active{% endif %}" id="ideationPanel" role="tabpanel">
-                  <div class="outline-content d-flex flex-column gap-3">
-                    <div>
-                      <h3 class="h6 mb-1">Idea catalyst</h3>
-                      <p class="text-secondary mb-0 small">Capture the author's intent in plain language before committing to the formal seed prompt.</p>
-                    </div>
-                    <div class="act-outline-box">
-                      <div class="fw-semibold text-info mb-2 text-uppercase small">How this stage works</div>
-                      <p class="mb-2 small">Use the chat on the right to explore genre, fantasy or realism level, narrative ambitions, and core themes. The assistant remembers the latest {{ ideation_context_window or 5000 }}-token slice of the conversation, so keep the exchange focused on the canon you want to carry forward.</p>
-                      <p class="mb-0 small">When the idea feels crisp, switch to the seed prompt step to expand it—no extra metadata questions required.</p>
-                    </div>
-                    <div class="act-outline-box">
-                      <div class="fw-semibold text-info mb-2 text-uppercase small">Characters shared with the assistant</div>
-                      {% if main_characters or supporting_characters %}
-                        <div class="d-flex flex-column gap-3">
-                          {% for character in main_characters %}
-                            <div>
-                              <div class="fw-semibold small text-light">{{ character.name or 'Untitled character' }}</div>
-                              <p class="text-secondary small mb-0">{{ character.role_in_story or 'Role not provided yet.' }}</p>
-                            </div>
-                          {% endfor %}
-                          {% for character in supporting_characters %}
-                            <div>
-                              <div class="fw-semibold small text-light">{{ character.name or 'Untitled character' }} <span class="badge bg-secondary-subtle text-secondary ms-1">Supporting</span></div>
-                              <p class="text-secondary small mb-0">{{ character.role_in_story or 'Role not provided yet.' }}</p>
-                            </div>
-                          {% endfor %}
+                          <span class="text-secondary small ms-3">
+                            {% if character.updated_at %}
+                              Updated {{ character.updated_at.strftime('%b %d, %Y') }}
+                            {% else %}
+                              Created {{ character.created_at.strftime('%b %d, %Y') }}
+                            {% endif %}
+                          </span>
                         </div>
-                      {% else %}
-                        <p class="text-secondary small mb-0">No characters created yet. Generate a character profile to feed more canon into the idea catalyst.</p>
-                      {% endif %}
-                    </div>
+                        <form class="d-none mt-2" data-edit-form>
+                          <div class="row g-2">
+                            <div class="col-md-6">
+                              <label class="form-label small text-uppercase fw-semibold" for="mainName{{ character.id }}">Name</label>
+                              <input
+                                type="text"
+                                class="form-control form-control-sm"
+                                id="mainName{{ character.id }}"
+                                name="name"
+                                value="{{ character.name or '' }}"
+                              />
+                            </div>
+                            <div class="col-md-6">
+                              <label class="form-label small text-uppercase fw-semibold" for="mainRole{{ character.id }}">Role in story</label>
+                              <input
+                                type="text"
+                                class="form-control form-control-sm"
+                                id="mainRole{{ character.id }}"
+                                name="role_in_story"
+                                value="{{ character.role_in_story or '' }}"
+                              />
+                            </div>
+                          </div>
+                          <div class="edit-inline-actions mt-3">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" data-edit-cancel>Cancel</button>
+                            <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                          </div>
+                        </form>
+                        <div class="d-flex justify-content-between align-items-center mt-2" data-edit-actions>
+                          <a
+                            href="{{ url_for('character_detail', project_id=project.id, character_id=character.id) }}"
+                            class="btn btn-link btn-sm ps-0"
+                          >
+                            Open profile
+                          </a>
+                          <button type="button" class="btn btn-outline-info btn-sm" data-edit-trigger>Edit character</button>
+                        </div>
+                        <div class="alert alert-danger mt-2 d-none" data-edit-error></div>
+                        <div class="alert alert-success mt-2 d-none" data-edit-success></div>
+                      </div>
+                    {% endfor %}
                   </div>
+                {% else %}
+                  <div class="text-secondary text-center py-4">
+                    <p class="mb-1">No characters yet.</p>
+                    <p class="mb-0">Use the form on the right to create the first profile.</p>
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+            <div class="tile-detail{% if initial_step == 'ideation' %} active{% endif %}" id="ideationPanel" role="tabpanel">
+              <div class="outline-content d-flex flex-column gap-3">
+                <div>
+                  <h3 class="h6 mb-1">Current pitch</h3>
+                  <p class="text-secondary mb-0 small">The latest validated snapshot from the ideation catalyst.</p>
                 </div>
-                <div class="tile-detail{% if overview_active %} active{% endif %}" id="overviewPanel" role="tabpanel">
-                  {% if overview_success %}
-                    <div class="alert alert-success" role="alert">{{ overview_success }}</div>
+                <div class="act-outline-box">
+                  {% if ideation_summary %}
+                    {{ ideation_summary }}
+                  {% else %}
+                    <div class="pitch-placeholder">No pitch yet. Use the chat on the right to explore the idea, then validate it to lock the pitch.</div>
                   {% endif %}
-                  <div class="outline-content d-flex flex-column gap-3">
-                    <div>
-                      <h3 class="h6 mb-1">Expanded seed prompt</h3>
-                      <p class="text-secondary mb-0 small">The polished concept brief guiding every downstream generator.</p>
+                </div>
+                <div class="validation-controls">
+                  <form
+                    method="post"
+                    data-chat-form
+                    data-loading-target="ideationLoadingIndicator"
+                    class="d-flex align-items-center gap-2 flex-wrap"
+                  >
+                    <input type="hidden" name="chat_type" value="ideation_simulate" />
+                    <div class="form-check mb-0">
+                      <input class="form-check-input" type="checkbox" value="1" id="ideationSimulateUseApi" name="use_api" />
+                      <label class="form-check-label small" for="ideationSimulateUseApi">API</label>
                     </div>
+                    <button type="submit" class="btn btn-primary">Validate pitch</button>
+                  </form>
+                  <span class="text-secondary small">Runs the same pipeline as “Simulate until act by act.”</span>
+                </div>
+              </div>
+            </div>
+            <div class="tile-detail{% if initial_step == 'acts' %} active{% endif %}" id="actsPanel" role="tabpanel">
+              <div class="outline-content d-flex flex-column gap-3">
+                <div>
+                  <h3 class="h6 mb-1">Act by act outline</h3>
+                  <p class="text-secondary mb-0 small">Review the three-act structure and validate when ready.</p>
+                </div>
+                {% if project.act1_outline or project.act2_outline or project.act3_outline %}
+                  <div class="d-flex flex-column gap-3">
                     <div
                       class="editable-block"
                       data-edit-type="project-text"
                       data-endpoint="{{ url_for('project_update_text', project_id=project.id) }}"
-                      data-field="project_overview"
+                      data-field="act1_outline"
                     >
+                      <h4 class="h6 mb-1 text-info">Act I</h4>
                       <div
-                        class="outline-content"
+                        class="act-outline-box"
                         data-edit-display
-                        data-empty-html="{{ '<div class=\'text-secondary\'>No seed prompt generated yet. Generate it from the validated pitch when you are ready.</div>' | tojson | safe }}"
+                        data-empty-html="{{ 'No outline generated yet.' | tojson | safe }}"
                       >
-                        {% if project_overview_summary %}
-                          {{ project_overview_summary }}
+                        {% if project.act1_outline %}
+                          {{ project.act1_outline }}
                         {% else %}
-                          <div class="text-secondary">No seed prompt generated yet. Generate it from the validated pitch when you are ready.</div>
+                          No outline generated yet.
                         {% endif %}
                       </div>
                       <form class="d-none mt-3" data-edit-form>
-                        <textarea class="form-control" name="value" rows="8">{{ project_overview_summary or '' }}</textarea>
+                        <textarea class="form-control" name="value" rows="6">{{ project.act1_outline or '' }}</textarea>
                         <div class="edit-inline-actions mt-2">
                           <button type="button" class="btn btn-outline-secondary btn-sm" data-edit-cancel>Cancel</button>
                           <button type="submit" class="btn btn-primary btn-sm">Save</button>
                         </div>
                       </form>
                       <div class="text-end mt-2" data-edit-actions>
-                        <button type="button" class="btn btn-outline-info btn-sm" data-edit-trigger>Edit seed prompt</button>
+                        <button type="button" class="btn btn-outline-info btn-sm" data-edit-trigger>Edit act</button>
                       </div>
                       <div class="alert alert-danger mt-2 d-none" data-edit-error></div>
                       <div class="alert alert-success mt-2 d-none" data-edit-success></div>
                     </div>
-                    <div>
-                      <h3 class="h6 mb-1">Seed prompt inputs</h3>
-                      <p class="text-secondary mb-0 small">The generator only uses the idea catalyst pitch and any character details you have saved.</p>
+                    <div
+                      class="editable-block"
+                      data-edit-type="project-text"
+                      data-endpoint="{{ url_for('project_update_text', project_id=project.id) }}"
+                      data-field="act2_outline"
+                    >
+                      <h4 class="h6 mb-1 text-info">Act II</h4>
+                      <div
+                        class="act-outline-box"
+                        data-edit-display
+                        data-empty-html="{{ 'No outline generated yet.' | tojson | safe }}"
+                      >
+                        {% if project.act2_outline %}
+                          {{ project.act2_outline }}
+                        {% else %}
+                          No outline generated yet.
+                        {% endif %}
+                      </div>
+                      <form class="d-none mt-3" data-edit-form>
+                        <textarea class="form-control" name="value" rows="6">{{ project.act2_outline or '' }}</textarea>
+                        <div class="edit-inline-actions mt-2">
+                          <button type="button" class="btn btn-outline-secondary btn-sm" data-edit-cancel>Cancel</button>
+                          <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                        </div>
+                      </form>
+                      <div class="text-end mt-2" data-edit-actions>
+                        <button type="button" class="btn btn-outline-info btn-sm" data-edit-trigger>Edit act</button>
+                      </div>
+                      <div class="alert alert-danger mt-2 d-none" data-edit-error></div>
+                      <div class="alert alert-success mt-2 d-none" data-edit-success></div>
                     </div>
-                    {% if overview_sections %}
-                      <div class="d-flex flex-column gap-3">
-                        {% for section in overview_sections %}
-                          <div class="act-outline-box">
-                            <div class="fw-semibold text-info mb-2 text-uppercase small">{{ section.title }}</div>
-                            <div class="d-flex flex-column gap-2">
-                              {% for item in section["items"] %}
-                                <div>
-                                  <div class="fw-semibold small text-light">{{ item.label }}</div>
-                                  {% if item.type == 'list' %}
-                                    {% if item.value %}
-                                      <ul class="mb-0 small ps-3">
-                                        {% for entry in item.value %}
-                                          <li>{{ entry }}</li>
-                                        {% endfor %}
-                                      </ul>
-                                    {% else %}
-                                      <p class="text-secondary small mb-0">Not provided yet.</p>
+                    <div
+                      class="editable-block"
+                      data-edit-type="project-text"
+                      data-endpoint="{{ url_for('project_update_text', project_id=project.id) }}"
+                      data-field="act3_outline"
+                    >
+                      <h4 class="h6 mb-1 text-info">Act III</h4>
+                      <div
+                        class="act-outline-box"
+                        data-edit-display
+                        data-empty-html="{{ 'No outline generated yet.' | tojson | safe }}"
+                      >
+                        {% if project.act3_outline %}
+                          {{ project.act3_outline }}
+                        {% else %}
+                          No outline generated yet.
+                        {% endif %}
+                      </div>
+                      <form class="d-none mt-3" data-edit-form>
+                        <textarea class="form-control" name="value" rows="6">{{ project.act3_outline or '' }}</textarea>
+                        <div class="edit-inline-actions mt-2">
+                          <button type="button" class="btn btn-outline-secondary btn-sm" data-edit-cancel>Cancel</button>
+                          <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                        </div>
+                      </form>
+                      <div class="text-end mt-2" data-edit-actions>
+                        <button type="button" class="btn btn-outline-info btn-sm" data-edit-trigger>Edit act</button>
+                      </div>
+                      <div class="alert alert-danger mt-2 d-none" data-edit-error></div>
+                      <div class="alert alert-success mt-2 d-none" data-edit-success></div>
+                    </div>
+                  </div>
+                {% else %}
+                  <div class="d-flex flex-column gap-3">
+                    <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act I outline will appear here." readonly></textarea>
+                    <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act II outline will appear here." readonly></textarea>
+                    <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act III outline will appear here." readonly></textarea>
+                  </div>
+                {% endif %}
+                <div class="act-outline-box">
+                  <div class="fw-semibold text-info mb-2 text-uppercase small">Validate this outline</div>
+                  <p class="small text-secondary mb-3">Validation will generate supporting characters and a chapter-by-chapter outline, then take you to the drafting step.</p>
+                  <form method="post" class="d-flex flex-column gap-3">
+                    <input type="hidden" name="chat_type" value="acts_validate" />
+                    <div class="row g-3 align-items-end">
+                      <div class="col-md-6">
+                        <label for="validateChaptersCount" class="form-label">Chapters per act</label>
+                        <input
+                          type="number"
+                          class="form-control"
+                          id="validateChaptersCount"
+                          name="chapters_count"
+                          min="1"
+                          value="{{ chapter_count_value }}"
+                          required
+                        />
+                      </div>
+                      <div class="col-md-6">
+                        <div class="form-check mb-0">
+                          <input class="form-check-input" type="checkbox" value="1" id="actValidateUseApi" name="use_api" />
+                          <label class="form-check-label small" for="actValidateUseApi">API</label>
+                        </div>
+                      </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Validate and generate chapters</button>
+                  </form>
+                </div>
+              </div>
+            </div>
+            <div class="tile-detail{% if initial_step == 'draft' %} active{% endif %}" id="draftPanel" role="tabpanel">
+              <div class="outline-content d-flex flex-column gap-3">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                  <div>
+                    <h3 class="h6 mb-1">Chapter drafting workspace</h3>
+                    <p class="text-secondary mb-0 small">
+                      Draft polished chapters using your character roster, outline, and recent scenes for continuity.
+                    </p>
+                  </div>
+                  <div class="d-flex flex-column align-items-end gap-2">
+                    <form
+                      method="post"
+                      action="{{ url_for('chapter_export_pdf', project_id=project.id) }}"
+                      class="d-flex flex-column align-items-end gap-1"
+                    >
+                      <button
+                        type="submit"
+                        class="btn btn-outline-dark btn-sm"
+                        {% if not saved_chapter_count %}disabled{% endif %}
+                      >
+                        Export chapters to PDF
+                      </button>
+                      <span class="text-secondary small">Creates <code>temp.pdf</code> in the project folder.</span>
+                    </form>
+                    <form
+                      method="post"
+                      action="{{ url_for('chapter_export_txt', project_id=project.id) }}"
+                      class="d-flex flex-column align-items-end gap-1"
+                    >
+                      <button
+                        type="submit"
+                        class="btn btn-outline-dark btn-sm"
+                        {% if not saved_chapter_count %}disabled{% endif %}
+                      >
+                        Export chapters to TXT
+                      </button>
+                      <span class="text-secondary small">Creates <code>temp.txt</code> in the project folder.</span>
+                    </form>
+                  </div>
+                </div>
+                {% if draft_export_error %}
+                  <div class="alert alert-danger" role="alert">{{ draft_export_error }}</div>
+                {% endif %}
+                {% if draft_export_message %}
+                  <div class="alert alert-success" role="alert">{{ draft_export_message }}</div>
+                {% endif %}
+                <div>
+                  <h4 class="h6 mb-1 text-info">Selected act outline</h4>
+                  {% set selected_plan = act_chapter_lists.get(draft_selected_act) %}
+                  {% if selected_plan %}
+                    <div class="chapter-list">
+                      {% for chapter in selected_plan %}
+                        <div class="chapter-card">
+                          <div class="chapter-card-title">Chapter {{ chapter.number }}: {{ chapter.title or 'Untitled Chapter' }}</div>
+                          {% if chapter.summary %}
+                            <p class="chapter-card-summary">{{ chapter.summary }}</p>
+                          {% endif %}
+                        </div>
+                      {% endfor %}
+                    </div>
+                  {% else %}
+                    <div class="chapter-preview-box empty">
+                      Generate the chapter-by-chapter outline for Act {{ draft_selected_act }} to start drafting prose.
+                    </div>
+                  {% endif %}
+                </div>
+                <div>
+                  <h4 class="h6 mb-1 text-info">Saved chapter drafts</h4>
+                  {% if saved_chapter_count %}
+                    <div class="d-flex flex-column gap-3">
+                      {% for act_number in [1, 2, 3] %}
+                        {% set entries = chapter_draft_groups.get(act_number, []) %}
+                        {% if entries %}
+                          <div>
+                            <div class="text-uppercase text-secondary small fw-semibold mb-2">Act {{ act_number }}</div>
+                            <div class="d-flex flex-column">
+                              {% for entry in entries %}
+                                <div class="chapter-draft-entry">
+                                  <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                                    <div class="fw-semibold">
+                                      Chapter {{ entry.chapter_number }}: {{ entry.title or 'Untitled Chapter' }}
+                                    </div>
+                                    {% if entry.updated_display %}
+                                      <div class="draft-metadata">Updated {{ entry.updated_display }}</div>
                                     {% endif %}
+                                  </div>
+                                  {% if entry.outline_summary %}
+                                    <p class="draft-metadata mb-2">Outline: {{ entry.outline_summary }}</p>
+                                  {% endif %}
+                                  {% if entry.content %}
+                                    <p class="text-secondary small mb-0">{{ entry.content|truncate(220, True, '…') }}</p>
                                   {% else %}
-                                    {% if item.value %}
-                                      <p class="mb-0 small">{{ item.value }}</p>
-                                    {% else %}
-                                      <p class="text-secondary small mb-0">Not provided yet.</p>
-                                    {% endif %}
+                                    <p class="draft-metadata mb-0">No prose saved yet.</p>
                                   {% endif %}
                                 </div>
                               {% endfor %}
                             </div>
                           </div>
-                        {% endfor %}
-                      </div>
-                    {% else %}
-                      <div class="text-secondary text-center py-4">
-                        Regenerate the seed prompt once you have a validated pitch in the idea catalyst.
-                      </div>
-                    {% endif %}
-                  </div>
-                </div>
-                <div class="tile-detail{% if outline_active %} active{% endif %}" id="outlinePanel" role="tabpanel">
-                  {% if success %}
-                    <div class="alert alert-success" role="alert">{{ success }}</div>
-                  {% endif %}
-                  <div
-                    class="editable-block"
-                    data-edit-type="project-text"
-                    data-endpoint="{{ url_for('project_update_text', project_id=project.id) }}"
-                    data-field="outline"
-                  >
-                    <div
-                      class="outline-content"
-                      data-edit-display
-                      data-empty-html="{{ '<div class=\'text-secondary\'>No outline saved yet. Use the chat to tell the assistant about the story you want to write.</div>' | tojson | safe }}"
-                    >
-                      {% if project.outline %}
-                        {{ project.outline }}
-                      {% else %}
-                        <div class="text-secondary">No outline saved yet. Use the chat to tell the assistant about the story you want to write.</div>
-                      {% endif %}
-                    </div>
-                    <form class="d-none mt-3" data-edit-form>
-                      <textarea class="form-control" name="value" rows="10">{{ project.outline or '' }}</textarea>
-                      <div class="edit-inline-actions mt-2">
-                        <button type="button" class="btn btn-outline-secondary btn-sm" data-edit-cancel>Cancel</button>
-                        <button type="submit" class="btn btn-primary btn-sm">Save</button>
-                      </div>
-                    </form>
-                    <div class="text-end mt-2" data-edit-actions>
-                      <button type="button" class="btn btn-outline-info btn-sm" data-edit-trigger>Edit outline</button>
-                    </div>
-                    <div class="alert alert-danger mt-2 d-none" data-edit-error></div>
-                    <div class="alert alert-success mt-2 d-none" data-edit-success></div>
-                  </div>
-                </div>
-                <div class="tile-detail" id="conceptsPanel" role="tabpanel">
-                  <div class="outline-content d-flex flex-column gap-3">
-                    <div>
-                      <h3 class="h6 mb-1">Concept definitions</h3>
-                      <p class="text-secondary mb-0 small">Clarified terminology and worldbuilding notes derived from your outline.</p>
-                    </div>
-                    {% if project.concepts %}
-                      <div class="d-flex flex-column gap-4">
-                        {% for concept in project.concepts %}
-                          <div
-                            class="act-outline-box editable-block"
-                            data-edit-type="concept"
-                            data-endpoint="{{ url_for('project_update_concept', project_id=project.id, concept_id=concept.id) }}"
-                            data-method="PATCH"
-                          >
-                            <div data-edit-display>
-                              <h4 class="h6 mb-2 text-info" data-display-name>{{ concept.name }}</h4>
-                              {% if concept.issue %}
-                                <p class="text-secondary small mb-2" data-display-issue>Why it needed clarification: {{ concept.issue }}</p>
-                              {% else %}
-                                <p class="text-secondary small mb-2 d-none" data-display-issue></p>
-                              {% endif %}
-                              <p class="mb-2" data-display-definition>{{ concept.definition }}</p>
-                              {% set example_candidates = concept.examples.split('\n') if concept.examples else [] %}
-                              {% set trimmed_examples = example_candidates | map('strip') | select | list %}
-                              <div
-                                class="{% if not trimmed_examples %}d-none{% endif %}"
-                                data-display-examples-wrapper
-                              >
-                                <div class="fw-semibold text-uppercase small text-secondary mb-1">Examples</div>
-                                <ul class="mb-0 small ps-3" data-display-examples>
-                                  {% for example in trimmed_examples %}
-                                    <li>{{ example }}</li>
-                                  {% endfor %}
-                                </ul>
-                              </div>
-                            </div>
-                            <form class="d-none mt-3" data-edit-form>
-                              <div class="row g-2">
-                                <div class="col-md-6">
-                                  <label class="form-label small text-uppercase fw-semibold" for="conceptName{{ concept.id }}">Name</label>
-                                  <input
-                                    type="text"
-                                    class="form-control form-control-sm"
-                                    id="conceptName{{ concept.id }}"
-                                    name="name"
-                                    value="{{ concept.name }}"
-                                    required
-                                  />
-                                </div>
-                                <div class="col-md-6">
-                                  <label class="form-label small text-uppercase fw-semibold" for="conceptIssue{{ concept.id }}">Why it needed clarification</label>
-                                  <input
-                                    type="text"
-                                    class="form-control form-control-sm"
-                                    id="conceptIssue{{ concept.id }}"
-                                    name="issue"
-                                    value="{{ concept.issue or '' }}"
-                                  />
-                                </div>
-                              </div>
-                              <div class="mt-2">
-                                <label class="form-label small text-uppercase fw-semibold" for="conceptDefinition{{ concept.id }}">Definition</label>
-                                <textarea
-                                  class="form-control form-control-sm"
-                                  id="conceptDefinition{{ concept.id }}"
-                                  name="definition"
-                                  rows="4"
-                                  required>{{ concept.definition }}</textarea>
-                              </div>
-                              <div class="mt-2">
-                                <label class="form-label small text-uppercase fw-semibold" for="conceptExamples{{ concept.id }}">Examples (one per line)</label>
-                                <textarea
-                                  class="form-control form-control-sm"
-                                  id="conceptExamples{{ concept.id }}"
-                                  name="examples"
-                                  rows="3">{{ concept.examples or '' }}</textarea>
-                              </div>
-                              <div class="edit-inline-actions mt-3">
-                                <button type="button" class="btn btn-outline-secondary btn-sm" data-edit-cancel>Cancel</button>
-                                <button type="submit" class="btn btn-primary btn-sm">Save</button>
-                              </div>
-                            </form>
-                            <div class="text-end mt-2" data-edit-actions>
-                              <button type="button" class="btn btn-outline-info btn-sm" data-edit-trigger>Edit concept</button>
-                            </div>
-                            <div class="alert alert-danger mt-2 d-none" data-edit-error></div>
-                            <div class="alert alert-success mt-2 d-none" data-edit-success></div>
-                          </div>
-                        {% endfor %}
-                      </div>
-                    {% else %}
-                      <div class="text-secondary text-center py-4">
-                        <p class="mb-1">No concepts have been refined yet.</p>
-                        <p class="mb-0">Use the concept assistant to highlight and define fuzzy ideas.</p>
-                      </div>
-                    {% endif %}
-                  </div>
-                </div>
-                <div class="tile-detail" id="actsPanel" role="tabpanel">
-                  <div class="outline-content d-flex flex-column gap-3">
-                    <div>
-                      <h3 class="h6 mb-1">Act by act outline</h3>
-                      <p class="text-secondary mb-0 small">Each act summary is stored for easy reference.</p>
-                    </div>
-                    {% if project.act1_outline or project.act2_outline or project.act3_outline %}
-                      <div class="d-flex flex-column gap-3">
-                        <div
-                          class="editable-block"
-                          data-edit-type="project-text"
-                          data-endpoint="{{ url_for('project_update_text', project_id=project.id) }}"
-                          data-field="act1_outline"
-                        >
-                          <h4 class="h6 mb-1 text-info">Act I</h4>
-                          <div
-                            class="act-outline-box"
-                            data-edit-display
-                            data-empty-html="{{ 'No outline generated yet.' | tojson | safe }}"
-                          >
-                            {% if project.act1_outline %}
-                              {{ project.act1_outline }}
-                            {% else %}
-                              No outline generated yet.
-                            {% endif %}
-                          </div>
-                          <form class="d-none mt-3" data-edit-form>
-                            <textarea class="form-control" name="value" rows="6">{{ project.act1_outline or '' }}</textarea>
-                            <div class="edit-inline-actions mt-2">
-                              <button type="button" class="btn btn-outline-secondary btn-sm" data-edit-cancel>Cancel</button>
-                              <button type="submit" class="btn btn-primary btn-sm">Save</button>
-                            </div>
-                          </form>
-                          <div class="text-end mt-2" data-edit-actions>
-                            <button type="button" class="btn btn-outline-info btn-sm" data-edit-trigger>Edit act</button>
-                          </div>
-                          <div class="alert alert-danger mt-2 d-none" data-edit-error></div>
-                          <div class="alert alert-success mt-2 d-none" data-edit-success></div>
-                        </div>
-                        <div
-                          class="editable-block"
-                          data-edit-type="project-text"
-                          data-endpoint="{{ url_for('project_update_text', project_id=project.id) }}"
-                          data-field="act2_outline"
-                        >
-                          <h4 class="h6 mb-1 text-info">Act II</h4>
-                          <div
-                            class="act-outline-box"
-                            data-edit-display
-                            data-empty-html="{{ 'No outline generated yet.' | tojson | safe }}"
-                          >
-                            {% if project.act2_outline %}
-                              {{ project.act2_outline }}
-                            {% else %}
-                              No outline generated yet.
-                            {% endif %}
-                          </div>
-                          <form class="d-none mt-3" data-edit-form>
-                            <textarea class="form-control" name="value" rows="6">{{ project.act2_outline or '' }}</textarea>
-                            <div class="edit-inline-actions mt-2">
-                              <button type="button" class="btn btn-outline-secondary btn-sm" data-edit-cancel>Cancel</button>
-                              <button type="submit" class="btn btn-primary btn-sm">Save</button>
-                            </div>
-                          </form>
-                          <div class="text-end mt-2" data-edit-actions>
-                            <button type="button" class="btn btn-outline-info btn-sm" data-edit-trigger>Edit act</button>
-                          </div>
-                          <div class="alert alert-danger mt-2 d-none" data-edit-error></div>
-                          <div class="alert alert-success mt-2 d-none" data-edit-success></div>
-                        </div>
-                        <div
-                          class="editable-block"
-                          data-edit-type="project-text"
-                          data-endpoint="{{ url_for('project_update_text', project_id=project.id) }}"
-                          data-field="act3_outline"
-                        >
-                          <h4 class="h6 mb-1 text-info">Act III</h4>
-                          <div
-                            class="act-outline-box"
-                            data-edit-display
-                            data-empty-html="{{ 'No outline generated yet.' | tojson | safe }}"
-                          >
-                            {% if project.act3_outline %}
-                              {{ project.act3_outline }}
-                            {% else %}
-                              No outline generated yet.
-                            {% endif %}
-                          </div>
-                          <form class="d-none mt-3" data-edit-form>
-                            <textarea class="form-control" name="value" rows="6">{{ project.act3_outline or '' }}</textarea>
-                            <div class="edit-inline-actions mt-2">
-                              <button type="button" class="btn btn-outline-secondary btn-sm" data-edit-cancel>Cancel</button>
-                              <button type="submit" class="btn btn-primary btn-sm">Save</button>
-                            </div>
-                          </form>
-                          <div class="text-end mt-2" data-edit-actions>
-                            <button type="button" class="btn btn-outline-info btn-sm" data-edit-trigger>Edit act</button>
-                          </div>
-                          <div class="alert alert-danger mt-2 d-none" data-edit-error></div>
-                          <div class="alert alert-success mt-2 d-none" data-edit-success></div>
-                        </div>
-                      </div>
-                    {% else %}
-                      <div class="d-flex flex-column gap-3">
-                        <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act I outline will appear here." readonly></textarea>
-                        <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act II outline will appear here." readonly></textarea>
-                        <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act III outline will appear here." readonly></textarea>
-                      </div>
-                    {% endif %}
-                  </div>
-                </div>
-                <div class="tile-detail" id="supportingPanel" role="tabpanel">
-                  <div class="outline-content d-flex flex-column gap-3">
-                    <div>
-                      <h3 class="h6 mb-1">Supporting cast</h3>
-                      <p class="text-secondary mb-0 small">Quick descriptions for secondary characters referenced in the acts.</p>
-                    </div>
-                    {% if supporting_characters %}
-                      <div class="d-flex flex-column gap-3">
-                        {% for character in supporting_characters %}
-                          <div
-                            class="act-outline-box editable-block"
-                            data-edit-type="character"
-                            data-endpoint="{{ url_for('project_update_character', project_id=project.id, character_id=character.id) }}"
-                            data-method="PATCH"
-                          >
-                            <div data-edit-display>
-                              <h4 class="h6 mb-2 text-info" data-display-name>{{ character.name or 'Unnamed character' }}</h4>
-                              <p
-                                class="mb-0"
-                                data-display-description
-                                data-empty-text="No supporting description saved yet."
-                              >
-                                {{ character.character_description or 'No supporting description saved yet.' }}
-                              </p>
-                            </div>
-                            <form class="d-none mt-3" data-edit-form>
-                              <div class="mb-2">
-                                <label class="form-label small text-uppercase fw-semibold" for="supportingName{{ character.id }}">Name</label>
-                                <input
-                                  type="text"
-                                  class="form-control form-control-sm"
-                                  id="supportingName{{ character.id }}"
-                                  name="name"
-                                  value="{{ character.name or '' }}"
-                                />
-                              </div>
-                              <div class="mb-2">
-                                <label class="form-label small text-uppercase fw-semibold" for="supportingDescription{{ character.id }}">Description</label>
-                                <textarea
-                                  class="form-control form-control-sm"
-                                  id="supportingDescription{{ character.id }}"
-                                  name="character_description"
-                                  rows="4">{{ character.character_description or '' }}</textarea>
-                              </div>
-                              <div class="edit-inline-actions mt-3">
-                                <button type="button" class="btn btn-outline-secondary btn-sm" data-edit-cancel>Cancel</button>
-                                <button type="submit" class="btn btn-primary btn-sm">Save</button>
-                              </div>
-                            </form>
-                            <div class="text-end mt-2" data-edit-actions>
-                              <button type="button" class="btn btn-outline-info btn-sm" data-edit-trigger>Edit character</button>
-                            </div>
-                            <div class="alert alert-danger mt-2 d-none" data-edit-error></div>
-                            <div class="alert alert-success mt-2 d-none" data-edit-success></div>
-                          </div>
-                        {% endfor %}
-                      </div>
-                    {% else %}
-                      <div class="text-secondary text-center py-4">
-                        <p class="mb-1">No supporting characters have been captured yet.</p>
-                        <p class="mb-0">Use the assistant to identify and summarise the story's secondary cast.</p>
-                      </div>
-                    {% endif %}
-                  </div>
-                </div>
-                <div class="tile-detail" id="chaptersPanel" role="tabpanel">
-                  <div class="outline-content d-flex flex-column gap-3">
-                    <div>
-                      <h3 class="h6 mb-1">Chapter by chapter outline</h3>
-                      <p class="text-secondary mb-0 small">
-                        Track the scene-level flow for every act.
-                        {% if device_hint %}
-                          <span class="d-block">Text generation currently runs on the {{ device_hint }} backend.</span>
                         {% endif %}
-                      </p>
+                      {% endfor %}
                     </div>
-                    {% if project.act1_chapters or project.act2_chapters or project.act3_chapters %}
-                      {% set act_data = [
-                        (1, 'Act I', project.act1_chapters),
-                        (2, 'Act II', project.act2_chapters),
-                        (3, 'Act III', project.act3_chapters)
-                      ] %}
-                      <div class="d-flex flex-column gap-3">
-                        {% for act_number, act_label, fallback_text in act_data %}
-                          {% set chapters = act_chapter_lists.get(act_number) %}
-                          <div>
-                            <h4 class="h6 mb-1 text-info">{{ act_label }}</h4>
-                              {% if chapters %}
-                                <div class="chapter-list">
-                                  {% for chapter in chapters %}
-                                    <div
-                                      class="chapter-card editable-block"
-                                      data-edit-type="chapter-plan"
-                                      data-endpoint="{{ url_for('project_update_chapter_plan', project_id=project.id) }}"
-                                      data-method="PATCH"
-                                      data-act="{{ act_number }}"
-                                      data-chapter="{{ chapter.number }}"
-                                    >
-                                      <div data-edit-display>
-                                        <div
-                                          class="chapter-card-title"
-                                          data-display-title
-                                          data-title-fallback="Untitled Chapter"
-                                        >
-                                          Chapter {{ chapter.number }}: {{ chapter.title or 'Untitled Chapter' }}
-                                        </div>
-                                        <p
-                                          class="chapter-card-summary{% if not chapter.summary %} d-none{% endif %}"
-                                          data-display-summary
-                                        >
-                                          {{ chapter.summary or '' }}
-                                        </p>
-                                      </div>
-                                      <form class="d-none mt-3" data-edit-form>
-                                        <div class="mb-2">
-                                          <label class="form-label small text-uppercase fw-semibold" for="chapterTitle{{ act_number }}{{ chapter.number }}">Title</label>
-                                          <input
-                                            type="text"
-                                            class="form-control form-control-sm"
-                                            id="chapterTitle{{ act_number }}{{ chapter.number }}"
-                                            name="title"
-                                            value="{{ chapter.title or '' }}"
-                                            required
-                                          />
-                                        </div>
-                                        <div class="mb-2">
-                                          <label class="form-label small text-uppercase fw-semibold" for="chapterSummary{{ act_number }}{{ chapter.number }}">Summary</label>
-                                          <textarea
-                                            class="form-control form-control-sm"
-                                            id="chapterSummary{{ act_number }}{{ chapter.number }}"
-                                            name="summary"
-                                            rows="4"
-                                            required>{{ chapter.summary or '' }}</textarea>
-                                        </div>
-                                        <div class="edit-inline-actions mt-3">
-                                          <button type="button" class="btn btn-outline-secondary btn-sm" data-edit-cancel>Cancel</button>
-                                          <button type="submit" class="btn btn-primary btn-sm">Save</button>
-                                        </div>
-                                      </form>
-                                      <div class="text-end mt-2" data-edit-actions>
-                                        <button type="button" class="btn btn-outline-info btn-sm" data-edit-trigger>Edit chapter</button>
-                                      </div>
-                                      <div class="alert alert-danger mt-2 d-none" data-edit-error></div>
-                                      <div class="alert alert-success mt-2 d-none" data-edit-success></div>
-                                    </div>
-                                  {% endfor %}
-                                </div>
-                              {% else %}
-                                <div class="act-outline-box">{{ fallback_text or 'No chapter outline generated yet.' }}</div>
-                              {% endif %}
-                          </div>
-                        {% endfor %}
-                      </div>
-                    {% else %}
-                      <div class="d-flex flex-column gap-3">
-                        <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act I chapters will appear here." readonly></textarea>
-                        <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act II chapters will appear here." readonly></textarea>
-                        <textarea class="form-control act-empty-textarea" rows="4" placeholder="Act III chapters will appear here." readonly></textarea>
-                      </div>
-                    {% endif %}
-                  </div>
-                </div>
-                <div class="tile-detail" id="draftPanel" role="tabpanel">
-                  <div class="outline-content d-flex flex-column gap-3">
-                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
-                      <div>
-                        <h3 class="h6 mb-1">Chapter drafting workspace</h3>
-                        <p class="text-secondary mb-0 small">
-                          Draft polished chapters using your character roster, outline, and recent scenes for continuity.
-                        </p>
-                      </div>
-                      <div class="d-flex flex-column align-items-end gap-2">
-                        <form
-                          method="post"
-                          action="{{ url_for('chapter_export_pdf', project_id=project.id) }}"
-                          class="d-flex flex-column align-items-end gap-1"
-                        >
-                          <button
-                            type="submit"
-                            class="btn btn-outline-info btn-sm"
-                            {% if not saved_chapter_count %}disabled{% endif %}
-                          >
-                            Export chapters to PDF
-                          </button>
-                          <span class="text-secondary small">Creates <code>temp.pdf</code> in the project folder.</span>
-                        </form>
-                        <form
-                          method="post"
-                          action="{{ url_for('chapter_export_txt', project_id=project.id) }}"
-                          class="d-flex flex-column align-items-end gap-1"
-                        >
-                          <button
-                            type="submit"
-                            class="btn btn-outline-info btn-sm"
-                            {% if not saved_chapter_count %}disabled{% endif %}
-                          >
-                            Export chapters to TXT
-                          </button>
-                          <span class="text-secondary small">Creates <code>temp.txt</code> in the project folder.</span>
-                        </form>
-                      </div>
+                  {% else %}
+                    <div class="chapter-preview-box empty">
+                      No drafted chapters saved yet. Use the assistant to generate your first chapter draft.
                     </div>
-                    {% if draft_export_error %}
-                      <div class="alert alert-danger" role="alert">{{ draft_export_error }}</div>
-                    {% endif %}
-                    {% if draft_export_message %}
-                      <div class="alert alert-success" role="alert">{{ draft_export_message }}</div>
-                    {% endif %}
-                    <div>
-                      <h4 class="h6 mb-1 text-info">Selected act outline</h4>
-                      {% set selected_plan = act_chapter_lists.get(draft_selected_act) %}
-                      {% if selected_plan %}
-                        <div class="chapter-list">
-                          {% for chapter in selected_plan %}
-                            <div class="chapter-card">
-                              <div class="chapter-card-title">Chapter {{ chapter.number }}: {{ chapter.title or 'Untitled Chapter' }}</div>
-                              {% if chapter.summary %}
-                                <p class="chapter-card-summary">{{ chapter.summary }}</p>
-                              {% endif %}
-                            </div>
-                          {% endfor %}
-                        </div>
-                      {% else %}
-                        <div class="chapter-preview-box empty">
-                          Generate the chapter-by-chapter outline for Act {{ draft_selected_act }} to start drafting prose.
-                        </div>
-                      {% endif %}
-                    </div>
-                    <div>
-                      <h4 class="h6 mb-1 text-info">Saved chapter drafts</h4>
-                      {% if saved_chapter_count %}
-                        <div class="d-flex flex-column gap-3">
-                          {% for act_number in [1, 2, 3] %}
-                            {% set entries = chapter_draft_groups.get(act_number, []) %}
-                            {% if entries %}
-                              <div>
-                                <div class="text-uppercase text-secondary small fw-semibold mb-2">Act {{ act_number }}</div>
-                                <div class="d-flex flex-column">
-                                  {% for entry in entries %}
-                                    <div class="chapter-draft-entry">
-                                      <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-                                        <div class="fw-semibold">
-                                          Chapter {{ entry.chapter_number }}: {{ entry.title or 'Untitled Chapter' }}
-                                        </div>
-                                        {% if entry.updated_display %}
-                                          <div class="draft-metadata">Updated {{ entry.updated_display }}</div>
-                                        {% endif %}
-                                      </div>
-                                      {% if entry.outline_summary %}
-                                        <p class="draft-metadata mb-2">Outline: {{ entry.outline_summary }}</p>
-                                      {% endif %}
-                                      {% if entry.content %}
-                                        <p class="text-secondary small mb-0">{{ entry.content|truncate(220, True, '…') }}</p>
-                                      {% else %}
-                                        <p class="draft-metadata mb-0">No prose saved yet.</p>
-                                      {% endif %}
-                                    </div>
-                                  {% endfor %}
-                                </div>
-                              </div>
-                            {% endif %}
-                          {% endfor %}
-                        </div>
-                      {% else %}
-                        <div class="chapter-preview-box empty">
-                          No drafted chapters saved yet. Use the assistant to generate your first chapter draft.
-                        </div>
-                      {% endif %}
-                    </div>
-                  </div>
+                  {% endif %}
                 </div>
               </div>
             </div>
-            <div class="col-12 col-lg-6">
-              <div class="chat-column">
-                <div id="ideationChatPanel" class="chat-panel{% if ideation_active %} active{% endif %}" role="tabpanel" aria-labelledby="ideationPanel">
-                    <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
-                    <div>
-                      <h2 class="h5 mb-1">Idea catalyst assistant</h2>
-                      <p class="text-secondary mb-0">Hold a conversation to shape the exact idea that will inform your seed prompt.</p>
-                    </div>
-                    <div class="d-flex flex-wrap gap-2 justify-content-end">
-                      <form
-                        method="post"
-                        data-chat-form
-                        data-loading-target="ideationLoadingIndicator"
-                        class="d-flex align-items-center gap-2"
-                      >
-                        <input type="hidden" name="chat_type" value="ideation_simulate" />
-                        <div class="form-check mb-0">
-                          <input class="form-check-input" type="checkbox" value="1" id="ideationSimulateUseApi" name="use_api" />
-                          <label class="form-check-label small" for="ideationSimulateUseApi">API</label>
-                        </div>
-                        <button type="submit" class="btn btn-info btn-sm">Simulate until act by act</button>
-                      </form>
-                      <form method="post">
-                        <input type="hidden" name="chat_type" value="ideation" />
-                        <button type="submit" name="delete_pitch_history" value="1" class="btn btn-warning btn-sm">Delete pitch history</button>
-                      </form>
-                      <form method="post">
-                        <input type="hidden" name="chat_type" value="ideation" />
-                        <button type="submit" name="delete_ideation_history" value="1" class="btn btn-danger btn-sm">Delete chat history</button>
-                      </form>
-                      <form method="post">
-                        <input type="hidden" name="chat_type" value="ideation" />
-                        <button type="submit" name="reset" value="1" class="btn btn-outline-light btn-sm">Clear chat</button>
-                      </form>
-                    </div>
+          </div>
+        </div>
+        <div class="col-12 col-lg-6">
+          <div class="chat-column">
+            <div id="characterFormPanel" class="chat-panel{% if initial_step == 'characters' %} active{% endif %}" role="tabpanel" aria-labelledby="charactersPanel">
+              <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
+                <div>
+                  <h2 class="h5 mb-1">Character builder</h2>
+                  <p class="text-secondary mb-0">Start a new profile here, then open it to complete the full sheet.</p>
+                </div>
+              </div>
+              <div class="character-form-card">
+                <form method="post" action="{{ url_for('character_create', project_id=project.id) }}" class="d-flex flex-column gap-3">
+                  <input type="hidden" name="return_to_project" value="1" />
+                  <div>
+                    <label class="form-label" for="characterNameInput">Character name</label>
+                    <input type="text" class="form-control" id="characterNameInput" name="name" placeholder="e.g. Nyla Arden" />
                   </div>
-                  <p class="text-secondary small mb-3">The assistant remembers roughly {{ ideation_context_window or 5000 }} tokens of context from this chat. When the discussion gets long, older messages are trimmed first. The pitch below refreshes after every message using up to {{ ideation_validation_context_window or 50000 }} tokens of history.</p>
-                  {% if pitch_history %}
-                    <div class="alert alert-info" role="status">
-                      <div class="d-flex justify-content-between align-items-start gap-3">
-                        <div>
-                          <div class="fw-semibold mb-1">Current pitch (v{{ active_pitch_version.version_index }})</div>
-                          <div class="mb-0">{{ active_pitch_version.content }}</div>
-                          <div class="text-secondary small mt-2">Keeping the latest {{ pitch_history_limit }} versions.</div>
-                        </div>
-                        <span class="badge bg-success">Active</span>
-                      </div>
-                    </div>
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                      <h3 class="h6 mb-0">Pitch history</h3>
-                      <div class="text-secondary small">Revert or reuse a previous validated pitch.</div>
-                    </div>
-                    <div class="d-flex flex-column gap-2 mb-3">
-                      {% for pitch in pitch_history %}
-                        <div class="card bg-transparent border border-secondary-subtle">
-                          <div class="card-body">
-                            <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
-                              <div>
-                                <div class="fw-semibold">Version {{ pitch.version_index }}</div>
-                                <div class="text-secondary small">Saved {{ pitch.created_at.strftime("%Y-%m-%d %H:%M") }}</div>
-                              </div>
-                              {% if active_pitch_version and pitch.id == active_pitch_version.id %}
-                                <span class="badge bg-success">In use</span>
-                              {% else %}
-                                <form method="post" class="ms-auto">
-                                  <input type="hidden" name="chat_type" value="ideation" />
-                                  <input type="hidden" name="pitch_version_id" value="{{ pitch.id }}" />
-                                  <button type="submit" name="set_pitch_version" value="1" class="btn btn-outline-info btn-sm">Use this version</button>
-                                </form>
-                              {% endif %}
-                            </div>
-                            <p class="mb-0">{{ pitch.content }}</p>
-                          </div>
-                        </div>
-                      {% endfor %}
-                    </div>
-                  {% elif ideation_summary %}
-                    <div class="alert alert-info" role="status">
-                      <div class="fw-semibold mb-1">Pitch</div>
-                      <div class="mb-0">{{ ideation_summary }}</div>
-                    </div>
-                  {% endif %}
-                  <div class="chat-messages flex-grow-1 mb-3">
-                    {% if ideation_history %}
-                      {% for message in ideation_history %}
-                        <div class="message {{ message.role }}">
-                          <strong class="d-block mb-1 text-uppercase small">{{ message.role }}</strong>
-                          <div>{{ message.content }}</div>
-                          {% if message.device_type %}
-                            <div class="message-device">Generated using the {{ message.device_type }} backend.</div>
-                          {% endif %}
-                        </div>
-                      {% endfor %}
-                    {% else %}
-                      <div class="text-secondary text-center w-100 my-auto">Describe the spark—genre, fantastical level, or themes—and the assistant will ask clarifying questions.</div>
-                    {% endif %}
+                  <div>
+                    <label class="form-label" for="characterRoleInput">Role in story</label>
+                    <input type="text" class="form-control" id="characterRoleInput" name="role_in_story" placeholder="Protagonist, rival, mentor..." />
                   </div>
-                  {% if ideation_error %}
-                    <div class="alert alert-danger" role="alert">{{ ideation_error }}</div>
-                  {% endif %}
-                  {% if ideation_success %}
-                    <div class="alert alert-success" role="alert">{{ ideation_success }}</div>
-                  {% endif %}
-                  <div id="ideationLoadingIndicator" class="loading-indicator" role="status" aria-live="polite">
-                    <div class="spinner-border text-info" role="status" aria-hidden="true"></div>
-                    <span>Assistant is thinking…</span>
+                  <div>
+                    <label class="form-label" for="characterHookInput">Quick description</label>
+                    <textarea class="form-control" id="characterHookInput" name="character_description" rows="3" placeholder="A short hook to remember them by."></textarea>
                   </div>
-                  <form method="post" data-chat-form data-loading-target="ideationLoadingIndicator" class="d-flex flex-column gap-3">
+                  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <a
+                      href="{{ url_for('character_create', project_id=project.id) }}"
+                      class="btn btn-outline-dark"
+                    >
+                      Open full character form
+                    </a>
+                    <button type="submit" class="btn btn-primary">Create character</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+            <div id="ideationChatPanel" class="chat-panel{% if initial_step == 'ideation' %} active{% endif %}" role="tabpanel" aria-labelledby="ideationPanel">
+              <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
+                <div>
+                  <h2 class="h5 mb-1">Ideation catalyst assistant</h2>
+                  <p class="text-secondary mb-0">Chat through genre, themes, and stakes until the pitch feels right.</p>
+                </div>
+                <div class="d-flex flex-wrap gap-2 justify-content-end">
+                  <form method="post">
                     <input type="hidden" name="chat_type" value="ideation" />
-                    <textarea class="form-control" name="message" rows="3" placeholder="Share an inspiration, question, or requirement for the story seed."></textarea>
-                    <div class="d-flex align-items-center justify-content-end gap-3">
-                      <div class="form-check mb-0">
-                        <input class="form-check-input" type="checkbox" value="1" id="ideationUseApi" name="use_api" />
-                        <label class="form-check-label small" for="ideationUseApi">API</label>
-                      </div>
-                      <button type="submit" class="btn btn-primary">Send to assistant</button>
-                    </div>
+                    <button type="submit" name="delete_pitch_history" value="1" class="btn btn-outline-dark btn-sm">Delete pitch history</button>
+                  </form>
+                  <form method="post">
+                    <input type="hidden" name="chat_type" value="ideation" />
+                    <button type="submit" name="delete_ideation_history" value="1" class="btn btn-outline-dark btn-sm">Delete chat history</button>
+                  </form>
+                  <form method="post">
+                    <input type="hidden" name="chat_type" value="ideation" />
+                    <button type="submit" name="reset" value="1" class="btn btn-outline-dark btn-sm">Clear chat</button>
                   </form>
                 </div>
-                <div id="overviewChatPanel" class="chat-panel{% if overview_active %} active{% endif %}" role="tabpanel" aria-labelledby="overviewPanel">
-                  <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
-                    <div>
-                      <h2 class="h5 mb-1">Seed prompt builder</h2>
-                      <p class="text-secondary mb-0">Generate the seed prompt directly from the validated pitch and your characters.</p>
+              </div>
+              <p class="text-secondary small mb-3">The assistant remembers roughly {{ ideation_context_window or 5000 }} tokens of context from this chat. The pitch refreshes after each message.</p>
+              <div class="chat-messages flex-grow-1 mb-3">
+                {% if ideation_history %}
+                  {% for message in ideation_history %}
+                    <div class="message {{ message.role }}">
+                      <strong class="d-block mb-1 text-uppercase small">{{ message.role }}</strong>
+                      <div>{{ message.content }}</div>
+                      {% if message.device_type %}
+                        <div class="message-device">Generated using the {{ message.device_type }} backend.</div>
+                      {% endif %}
                     </div>
-                    {% if project_overview_summary or overview_sections %}
-                      <form method="post">
-                        <input type="hidden" name="chat_type" value="overview" />
-                        <button type="submit" name="clear_overview" value="1" class="btn btn-outline-light btn-sm">Clear seed prompt</button>
-                      </form>
-                    {% endif %}
-                  </div>
-                  {% if ideation_summary %}
-                    <div class="alert alert-info" role="status">
-                      <div class="fw-semibold mb-1">Latest validated pitch</div>
-                      <div class="mb-0">{{ ideation_summary }}</div>
-                    </div>
-                  {% endif %}
-                  {% if author_notes %}
-                    <div class="alert alert-secondary" role="status">
-                      <div class="fw-semibold mb-1">Author notes from ideation</div>
-                      <div class="mb-0">{{ author_notes }}</div>
-                    </div>
-                  {% endif %}
-                  {% if overview_error %}
-                    <div class="alert alert-danger" role="alert">{{ overview_error }}</div>
-                  {% endif %}
-                  <form method="post" class="d-flex flex-column gap-4">
-                    <input type="hidden" name="chat_type" value="overview" />
-                    <input type="hidden" name="pitch" value="{{ ideation_summary or overview_form.pitch or '' }}" />
-                    <div class="act-outline-box">
-                      <div class="fw-semibold text-info mb-2 text-uppercase small">How this stage works</div>
-                      <p class="mb-2 small">Generate the seed prompt without filling out any genre, audience, or metadata fields. The assistant will use the latest validated pitch from the idea catalyst and any characters you've created.</p>
-                      <p class="mb-0 small">If you want to change the pitch, update it in the idea catalyst chat before regenerating the seed prompt.</p>
-                    </div>
-                    <div class="d-flex align-items-center justify-content-end gap-3">
-                      <div class="form-check mb-0">
-                        <input class="form-check-input" type="checkbox" value="1" id="overviewUseApi" name="use_api" />
-                        <label class="form-check-label small" for="overviewUseApi">API</label>
-                      </div>
-                      <button type="submit" class="btn btn-primary">Generate seed prompt</button>
-                    </div>
-                  </form>
-                </div>
-                <div id="characterChatPanel" class="chat-panel" role="tabpanel" aria-labelledby="charactersPanel">
-                  <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
-                    <div>
-                      <h2 class="h5 mb-1">Character workspace</h2>
-                      <p class="text-secondary mb-0">Generate or refine character sheets before outlining.</p>
-                    </div>
-                    <form method="post" action="{{ url_for('character_create', project_id=project.id) }}">
-                      <button type="submit" class="btn btn-outline-light btn-sm">Add character</button>
-                    </form>
-                  </div>
-                  <div class="chat-messages flex-grow-1 mb-3">
-                    <div class="message assistant">
-                      <strong class="d-block mb-1 text-uppercase small">assistant</strong>
-                      <div>Open a character profile from the left panel to develop their voice, motivations, and arcs. Use the button above to start a brand-new profile.</div>
-                    </div>
-                  </div>
-                </div>
-                <div id="outlineChatPanel" class="chat-panel{% if outline_active %} active{% endif %}" role="tabpanel" aria-labelledby="outlinePanel">
-            <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
-              <div>
-                <h2 class="h5 mb-1">Outline assistant</h2>
-                <p class="text-secondary mb-0">Share a quick pitch so I can weave your characters into a story outline.</p>
-              </div>
-              <form method="post">
-                <input type="hidden" name="chat_type" value="outline" />
-                <button type="submit" name="reset" value="1" class="btn btn-outline-light btn-sm">Clear chat</button>
-              </form>
-            </div>
-            <div class="chat-messages flex-grow-1 mb-3">
-              {% if history %}
-                {% for message in history %}
-                  <div class="message {{ message.role }}">
-                    <strong class="d-block mb-1 text-uppercase small">{{ message.role }}</strong>
-                    <div>{{ message.content }}</div>
-                    {% if message.device_type %}
-                      <div class="message-device">Generated using the {{ message.device_type }} backend.</div>
-                    {% endif %}
-                  </div>
-                {% endfor %}
-              {% else %}
-                <div class="text-secondary text-center w-100 my-auto">
-                  Share a short pitch to generate a character-driven outline.
-                </div>
-              {% endif %}
-            </div>
-            {% if error %}
-              <div class="alert alert-danger" role="alert">{{ error }}</div>
-            {% endif %}
-            <div id="outlineLoadingIndicator" class="loading-indicator" role="status" aria-live="polite">
-              <div class="spinner-border text-info" role="status" aria-hidden="true"></div>
-              <span>Assistant is thinking…</span>
-            </div>
-            <form method="post" id="outlineChatForm" data-chat-form data-loading-target="outlineLoadingIndicator" class="d-flex flex-column gap-3">
-              <input type="hidden" name="chat_type" value="outline" />
-              <textarea
-                class="form-control"
-                name="message"
-                rows="3"
-                placeholder="Add optional notes for the outline assistant."
-              ></textarea>
-              <div class="d-flex align-items-center justify-content-end gap-3">
-                <div class="form-check mb-0">
-                  <input class="form-check-input" type="checkbox" value="1" id="outlineUseApi" name="use_api" />
-                  <label class="form-check-label small" for="outlineUseApi">API</label>
-                </div>
-                <button type="submit" class="btn btn-primary">Generate outline</button>
-              </div>
-            </form>
-          </div>
-          <div id="conceptChatPanel" class="chat-panel" role="tabpanel" aria-labelledby="conceptsPanel">
-            <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
-              <div>
-                <h2 class="h5 mb-1">Concept assistant</h2>
-                <p class="text-secondary mb-0">Spot ambiguous ideas in the outline and lock in clear definitions with examples.</p>
-              </div>
-              <form method="post">
-                <input type="hidden" name="chat_type" value="concepts" />
-                <button type="submit" name="reset" value="1" class="btn btn-outline-light btn-sm">Clear log</button>
-              </form>
-            </div>
-            <div class="chat-messages flex-grow-1 mb-3">
-              {% if concept_history %}
-                {% for message in concept_history %}
-                  <div class="message {{ message.role }}">
-                    <strong class="d-block mb-1 text-uppercase small">{{ message.role }}</strong>
-                    <div>{{ message.content }}</div>
-                    {% if message.device_type %}
-                      <div class="message-device">Generated using the {{ message.device_type }} backend.</div>
-                    {% endif %}
-                  </div>
-                {% endfor %}
-              {% else %}
-                <div class="message assistant">
-                  <strong class="d-block mb-1 text-uppercase small">assistant</strong>
-                  <div>Ready to refine your worldbuilding? I can analyse the outline, surface fuzzy concepts, and propose precise definitions with examples.</div>
-                </div>
-              {% endif %}
-            </div>
-            {% if concept_error %}
-              <div class="alert alert-danger" role="alert">{{ concept_error }}</div>
-            {% endif %}
-            {% if concept_success %}
-              <div class="alert alert-success" role="alert">{{ concept_success }}</div>
-            {% endif %}
-            <div id="conceptLoadingIndicator" class="loading-indicator" role="status" aria-live="polite">
-              <div class="spinner-border text-info" role="status" aria-hidden="true"></div>
-              <span>Assistant is thinking…</span>
-            </div>
-            <form
-              method="post"
-              id="conceptChatForm"
-              data-chat-form
-              data-loading-target="conceptLoadingIndicator"
-              class="d-flex flex-column gap-3"
-            >
-              <input type="hidden" name="chat_type" value="concepts" />
-              <textarea
-                class="form-control"
-                name="message"
-                rows="3"
-                placeholder="Optional: add nuance about tone, genre touchstones, or specific worldbuilding needs."
-              ></textarea>
-              <div class="d-flex align-items-center justify-content-end gap-3">
-                <div class="form-check mb-0">
-                  <input class="form-check-input" type="checkbox" value="1" id="conceptUseApi" name="use_api" />
-                  <label class="form-check-label small" for="conceptUseApi">API</label>
-                </div>
-                <button type="submit" class="btn btn-primary">Generate concept clarifications</button>
-              </div>
-            </form>
-          </div>
-          <div id="actChatPanel" class="chat-panel" role="tabpanel" aria-labelledby="actsPanel">
-            <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
-              <div>
-                <h2 class="h5 mb-1">Three-act assistant</h2>
-                <p class="text-secondary mb-0">Refine each act with targeted guidance.</p>
-              </div>
-              <form method="post">
-                <input type="hidden" name="chat_type" value="acts" />
-                <button type="submit" name="reset" value="1" class="btn btn-outline-light btn-sm">Clear chat</button>
-              </form>
-            </div>
-            <div class="chat-messages flex-grow-1 mb-3">
-              {% if act_history %}
-                {% for message in act_history %}
-                  <div class="message {{ message.role }}">
-                    <strong class="d-block mb-1 text-uppercase small">{{ message.role }}</strong>
-                    <div>{{ message.content }}</div>
-                    {% if message.device_type %}
-                      <div class="message-device">Generated using the {{ message.device_type }} backend.</div>
-                    {% endif %}
-                  </div>
-                {% endfor %}
-              {% else %}
-                <div class="message assistant">
-                  <strong class="d-block mb-1 text-uppercase small">assistant</strong>
-                  <div>If you are happy with the outline and your character we can start getting into more details. Do you want to add some final notes?</div>
-                </div>
-              {% endif %}
-            </div>
-            {% if act_error %}
-              <div class="alert alert-danger" role="alert">{{ act_error }}</div>
-            {% endif %}
-            {% if act_success %}
-              <div class="alert alert-success" role="alert">{{ act_success }}</div>
-            {% endif %}
-            <div id="actLoadingIndicator" class="loading-indicator" role="status" aria-live="polite">
-              <div class="spinner-border text-info" role="status" aria-hidden="true"></div>
-              <span>Assistant is thinking…</span>
-            </div>
-            <form method="post" id="actChatForm" data-chat-form data-loading-target="actLoadingIndicator" class="d-flex flex-column gap-3">
-              <input type="hidden" name="chat_type" value="acts" />
-              <textarea
-                class="form-control"
-                name="message"
-                rows="3"
-                placeholder="Share any final notes before generating the acts."
-                required
-              ></textarea>
-              <div class="d-flex align-items-center justify-content-end gap-3">
-                <div class="form-check mb-0">
-                  <input class="form-check-input" type="checkbox" value="1" id="actUseApi" name="use_api" />
-                  <label class="form-check-label small" for="actUseApi">API</label>
-                </div>
-                <button type="submit" class="btn btn-primary">Send</button>
-              </div>
-            </form>
-          </div>
-          <div id="supportingChatPanel" class="chat-panel" role="tabpanel" aria-labelledby="supportingPanel">
-            <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
-              <div>
-                <h2 class="h5 mb-1">Supporting cast assistant</h2>
-                <p class="text-secondary mb-0">Spot secondary characters implied by the acts and capture reference notes.</p>
-              </div>
-              <form method="post">
-                <input type="hidden" name="chat_type" value="supporting" />
-                <button type="submit" name="reset" value="1" class="btn btn-outline-light btn-sm">Clear chat</button>
-              </form>
-            </div>
-            <div class="chat-messages flex-grow-1 mb-3">
-              {% if supporting_history %}
-                {% for message in supporting_history %}
-                  <div class="message {{ message.role }}">
-                    <strong class="d-block mb-1 text-uppercase small">{{ message.role }}</strong>
-                    <div>{{ message.content }}</div>
-                    {% if message.device_type %}
-                      <div class="message-device">Generated using the {{ message.device_type }} backend.</div>
-                    {% endif %}
-                  </div>
-                {% endfor %}
-              {% else %}
-                <div class="message assistant">
-                  <strong class="d-block mb-1 text-uppercase small">assistant</strong>
-                  <div>Share any notes about the tone or pacing, or leave this blank to automatically draft supporting character blurbs from the current act outline.</div>
-                </div>
-              {% endif %}
-            </div>
-            {% if supporting_error %}
-              <div class="alert alert-danger" role="alert">{{ supporting_error }}</div>
-            {% endif %}
-            {% if supporting_success %}
-              <div class="alert alert-success" role="alert">{{ supporting_success }}</div>
-            {% endif %}
-            <div id="supportingLoadingIndicator" class="loading-indicator" role="status" aria-live="polite">
-              <div class="spinner-border text-info" role="status" aria-hidden="true"></div>
-              <span>Assistant is thinking…</span>
-            </div>
-            <form
-              method="post"
-              id="supportingChatForm"
-              data-chat-form
-              data-loading-target="supportingLoadingIndicator"
-              class="d-flex flex-column gap-3"
-            >
-              <input type="hidden" name="chat_type" value="supporting" />
-              <textarea
-                class="form-control"
-                name="message"
-                rows="3"
-                placeholder="Optional: highlight relationships, tone, or other notes before generating supporting characters."
-              ></textarea>
-              <div class="d-flex align-items-center justify-content-end gap-3">
-                <div class="form-check mb-0">
-                  <input class="form-check-input" type="checkbox" value="1" id="supportingUseApi" name="use_api" />
-                  <label class="form-check-label small" for="supportingUseApi">API</label>
-                </div>
-                <button type="submit" class="btn btn-primary">Generate supporting characters</button>
-              </div>
-            </form>
-          </div>
-          <div id="chapterChatPanel" class="chat-panel" role="tabpanel" aria-labelledby="chaptersPanel">
-            <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
-              <div>
-                <h2 class="h5 mb-1">Chapter breakdown assistant</h2>
-                <p class="text-secondary mb-0">Transform each act into a chapter-by-chapter roadmap.</p>
-              </div>
-              <form method="post">
-                <input type="hidden" name="chat_type" value="chapters" />
-                <button type="submit" name="reset" value="1" class="btn btn-outline-light btn-sm">Clear chat</button>
-              </form>
-            </div>
-            <div class="chat-messages flex-grow-1 mb-3">
-              {% if chapter_history %}
-                {% for message in chapter_history %}
-                  <div class="message {{ message.role }}">
-                    <strong class="d-block mb-1 text-uppercase small">{{ message.role }}</strong>
-                    <div>{{ message.content }}</div>
-                    {% if message.device_type %}
-                      <div class="message-device">Generated using the {{ message.device_type }} backend.</div>
-                    {% endif %}
-                  </div>
-                {% endfor %}
-              {% else %}
-                <div class="message assistant">
-                  <strong class="d-block mb-1 text-uppercase small">assistant</strong>
-                  <div>Ready to go deeper? Share any final direction before we generate chapter-by-chapter outlines for each act.</div>
-                </div>
-              {% endif %}
-            </div>
-            {% if chapter_error %}
-              <div class="alert alert-danger" role="alert">{{ chapter_error }}</div>
-            {% endif %}
-            {% if chapter_warning %}
-              <div class="alert alert-warning" role="alert">{{ chapter_warning }}</div>
-            {% endif %}
-            {% if chapter_success %}
-              <div class="alert alert-success" role="alert">{{ chapter_success }}</div>
-            {% endif %}
-            {% if chapter_debug_details %}
-              <div class="alert alert-info" role="alert">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                  <strong class="text-uppercase small mb-0">Debug log</strong>
-                  <span class="badge bg-dark text-light">Chapter generation</span>
-                </div>
-                <ul class="mb-0 small" style="max-height: 200px; overflow-y: auto;">
-                  {% for entry in chapter_debug_details %}
-                    <li><code>{{ entry }}</code></li>
                   {% endfor %}
-                </ul>
+                {% else %}
+                  <div class="text-secondary text-center w-100 my-auto">Describe the spark—genre, fantastical level, or themes—and the assistant will ask clarifying questions.</div>
+                {% endif %}
               </div>
-            {% endif %}
-            <div id="chapterLoadingIndicator" class="loading-indicator" role="status" aria-live="polite">
-              <div class="spinner-border text-info" role="status" aria-hidden="true"></div>
-              <span>Assistant is thinking…</span>
-            </div>
-            <form
-              method="post"
-              id="chapterChatForm"
-              data-chat-form
-              data-loading-target="chapterLoadingIndicator"
-              class="d-flex flex-column gap-3"
-            >
-              <input type="hidden" name="chat_type" value="chapters" />
-              <div class="row g-3">
-                <div class="col-lg-8">
-                  <label for="chapterNotes" class="form-label">Additional guidance</label>
-                  <textarea
-                    class="form-control"
-                    id="chapterNotes"
-                    name="message"
-                    rows="3"
-                    placeholder="Share any last notes before generating chapter outlines."
-                    required
-                  ></textarea>
+              {% if ideation_error %}
+                <div class="alert alert-danger" role="alert">{{ ideation_error }}</div>
+              {% endif %}
+              {% if ideation_success %}
+                <div class="alert alert-success" role="alert">{{ ideation_success }}</div>
+              {% endif %}
+              <div id="ideationLoadingIndicator" class="loading-indicator" role="status" aria-live="polite">
+                <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
+                <span>Assistant is thinking…</span>
+              </div>
+              <form method="post" data-chat-form data-loading-target="ideationLoadingIndicator" class="d-flex flex-column gap-3">
+                <input type="hidden" name="chat_type" value="ideation" />
+                <textarea class="form-control" name="message" rows="3" placeholder="Share an inspiration, question, or requirement for the story seed."></textarea>
+                <div class="d-flex align-items-center justify-content-end gap-3">
+                  <div class="form-check mb-0">
+                    <input class="form-check-input" type="checkbox" value="1" id="ideationUseApi" name="use_api" />
+                    <label class="form-check-label small" for="ideationUseApi">API</label>
+                  </div>
+                  <button type="submit" class="btn btn-primary">Send to assistant</button>
                 </div>
-                <div class="col-lg-4">
-                  <label for="chaptersCount" class="form-label">Chapters per act</label>
-                  <input
-                    type="number"
-                    class="form-control"
-                    id="chaptersCount"
-                    name="chapters_count"
-                    min="1"
-                    value="{{ chapter_count_value }}"
-                    required
-                  />
-                </div>
-              </div>
-              <div class="d-flex align-items-center justify-content-end gap-3">
-                <div class="form-check mb-0">
-                  <input class="form-check-input" type="checkbox" value="1" id="chapterUseApi" name="use_api" />
-                  <label class="form-check-label small" for="chapterUseApi">API</label>
-                </div>
-                <button type="submit" class="btn btn-primary">Generate scene-by-scene outline</button>
-              </div>
-            </form>
-          </div>
-          <div id="draftChatPanel" class="chat-panel" role="tabpanel" aria-labelledby="draftPanel">
-            <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
-              <div>
-                <h2 class="h5 mb-1">Chapter drafting assistant</h2>
-                <p class="text-secondary mb-0">Write full chapters with continuity from prior scenes and your character roster.</p>
-              </div>
-              <form method="post">
-                <input type="hidden" name="chat_type" value="drafts" />
-                <button type="submit" name="reset" value="1" class="btn btn-outline-light btn-sm">Clear chat</button>
               </form>
             </div>
-            <div class="chat-messages flex-grow-1 mb-3">
-              {% if draft_history %}
-                {% for message in draft_history %}
-                  <div class="message {{ message.role }}">
-                    <strong class="d-block mb-1 text-uppercase small">{{ message.role }}</strong>
-                    <div>{{ message.content }}</div>
-                    {% if message.device_type %}
-                      <div class="message-device">Generated using the {{ message.device_type }} backend.</div>
-                    {% endif %}
+            <div id="actChatPanel" class="chat-panel{% if initial_step == 'acts' %} active{% endif %}" role="tabpanel" aria-labelledby="actsPanel">
+              <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
+                <div>
+                  <h2 class="h5 mb-1">Three-act assistant</h2>
+                  <p class="text-secondary mb-0">Refine each act with targeted guidance.</p>
+                </div>
+                <form method="post">
+                  <input type="hidden" name="chat_type" value="acts" />
+                  <button type="submit" name="reset" value="1" class="btn btn-outline-dark btn-sm">Clear chat</button>
+                </form>
+              </div>
+              <div class="chat-messages flex-grow-1 mb-3">
+                {% if act_history %}
+                  {% for message in act_history %}
+                    <div class="message {{ message.role }}">
+                      <strong class="d-block mb-1 text-uppercase small">{{ message.role }}</strong>
+                      <div>{{ message.content }}</div>
+                      {% if message.device_type %}
+                        <div class="message-device">Generated using the {{ message.device_type }} backend.</div>
+                      {% endif %}
+                    </div>
+                  {% endfor %}
+                {% else %}
+                  <div class="message assistant">
+                    <strong class="d-block mb-1 text-uppercase small">assistant</strong>
+                    <div>If you are happy with the outline and your character we can start getting into more details. Do you want to add some final notes?</div>
                   </div>
-                {% endfor %}
-              {% else %}
-                <div class="message assistant">
-                  <strong class="d-block mb-1 text-uppercase small">assistant</strong>
-                  <div>Select a chapter plan and I will expand it into prose, using recent chapters and character notes for continuity.</div>
-                </div>
+                {% endif %}
+              </div>
+              {% if act_error %}
+                <div class="alert alert-danger" role="alert">{{ act_error }}</div>
               {% endif %}
-            </div>
-            {% if draft_error %}
-              <div class="alert alert-danger" role="alert">{{ draft_error }}</div>
-            {% endif %}
-            {% if draft_success %}
-              <div class="alert alert-success" role="alert">{{ draft_success }}</div>
-            {% endif %}
-            <div id="draftLoadingIndicator" class="loading-indicator" role="status" aria-live="polite">
-              <div class="spinner-border text-info" role="status" aria-hidden="true"></div>
-              <span>Assistant is thinking…</span>
-            </div>
-            <form
-              method="post"
-              id="draftChatForm"
-              data-chat-form
-              data-loading-target="draftLoadingIndicator"
-              class="d-flex flex-column gap-3"
-            >
-              <input type="hidden" name="chat_type" value="drafts" />
-              <div class="row g-3">
-                <div class="col-md-4">
-                  <label for="draftActSelect" class="form-label">Act</label>
-                  <select class="form-select" id="draftActSelect" name="act_number" required>
-                    {% for act_number in [1, 2, 3] %}
-                      <option value="{{ act_number }}" {% if act_number == draft_selected_act %}selected{% endif %}>
-                        Act {{ act_number }}
-                      </option>
-                    {% endfor %}
-                  </select>
+              {% if act_success %}
+                <div class="alert alert-success" role="alert">{{ act_success }}</div>
+              {% endif %}
+              <div id="actLoadingIndicator" class="loading-indicator" role="status" aria-live="polite">
+                <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
+                <span>Assistant is thinking…</span>
+              </div>
+              <form method="post" id="actChatForm" data-chat-form data-loading-target="actLoadingIndicator" class="d-flex flex-column gap-3">
+                <input type="hidden" name="chat_type" value="acts" />
+                <textarea
+                  class="form-control"
+                  name="message"
+                  rows="3"
+                  placeholder="Share any final notes before generating the acts."
+                  required
+                ></textarea>
+                <div class="d-flex align-items-center justify-content-end gap-3">
+                  <div class="form-check mb-0">
+                    <input class="form-check-input" type="checkbox" value="1" id="actUseApi" name="use_api" />
+                    <label class="form-check-label small" for="actUseApi">API</label>
+                  </div>
+                  <button type="submit" class="btn btn-primary">Send</button>
                 </div>
-                <div class="col-md-4">
-                  <label for="draftChapterSelect" class="form-label">Chapter</label>
-                  {% set selected_plan = act_chapter_lists.get(draft_selected_act) %}
-                  <select
-                    class="form-select"
-                    id="draftChapterSelect"
-                    name="chapter_number"
-                    required
-                    data-current="{{ draft_selected_chapter }}"
-                    {% if not selected_plan %}disabled{% endif %}
-                  >
-                    {% if selected_plan %}
-                      {% for chapter in selected_plan %}
-                        <option value="{{ chapter.number }}" {% if chapter.number == draft_selected_chapter %}selected{% endif %}>
-                          Chapter {{ chapter.number }} — {{ chapter.title or 'Untitled' }}
+              </form>
+            </div>
+            <div id="draftChatPanel" class="chat-panel{% if initial_step == 'draft' %} active{% endif %}" role="tabpanel" aria-labelledby="draftPanel">
+              <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
+                <div>
+                  <h2 class="h5 mb-1">Chapter drafting assistant</h2>
+                  <p class="text-secondary mb-0">Write full chapters with continuity from prior scenes and your character roster.</p>
+                </div>
+                <form method="post">
+                  <input type="hidden" name="chat_type" value="drafts" />
+                  <button type="submit" name="reset" value="1" class="btn btn-outline-dark btn-sm">Clear chat</button>
+                </form>
+              </div>
+              <div class="chat-messages flex-grow-1 mb-3">
+                {% if draft_history %}
+                  {% for message in draft_history %}
+                    <div class="message {{ message.role }}">
+                      <strong class="d-block mb-1 text-uppercase small">{{ message.role }}</strong>
+                      <div>{{ message.content }}</div>
+                      {% if message.device_type %}
+                        <div class="message-device">Generated using the {{ message.device_type }} backend.</div>
+                      {% endif %}
+                    </div>
+                  {% endfor %}
+                {% else %}
+                  <div class="message assistant">
+                    <strong class="d-block mb-1 text-uppercase small">assistant</strong>
+                    <div>Select a chapter plan and I will expand it into prose, using recent chapters and character notes for continuity.</div>
+                  </div>
+                {% endif %}
+              </div>
+              {% if draft_error %}
+                <div class="alert alert-danger" role="alert">{{ draft_error }}</div>
+              {% endif %}
+              {% if draft_success %}
+                <div class="alert alert-success" role="alert">{{ draft_success }}</div>
+              {% endif %}
+              <div id="draftLoadingIndicator" class="loading-indicator" role="status" aria-live="polite">
+                <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
+                <span>Assistant is thinking…</span>
+              </div>
+              <form
+                method="post"
+                id="draftChatForm"
+                data-chat-form
+                data-loading-target="draftLoadingIndicator"
+                class="d-flex flex-column gap-3"
+              >
+                <input type="hidden" name="chat_type" value="drafts" />
+                <div class="row g-3">
+                  <div class="col-md-4">
+                    <label for="draftActSelect" class="form-label">Act</label>
+                    <select class="form-select" id="draftActSelect" name="act_number" required>
+                      {% for act_number in [1, 2, 3] %}
+                        <option value="{{ act_number }}" {% if act_number == draft_selected_act %}selected{% endif %}>
+                          Act {{ act_number }}
                         </option>
                       {% endfor %}
-                    {% else %}
-                      <option value="">Generate the outline first</option>
-                    {% endif %}
-                  </select>
-                </div>
-                <div class="col-md-4">
-                  <label for="draftContextCount" class="form-label">Past chapters for context</label>
-                  <input
-                    type="number"
-                    class="form-control"
-                    id="draftContextCount"
-                    name="context_count"
-                    min="0"
-                    value="{{ draft_context_value }}"
-                  />
-                </div>
-              </div>
-              <div class="row g-3">
-                <div class="col-lg-6">
-                  <label for="draftNotes" class="form-label">Author guidance</label>
-                  <textarea
-                    class="form-control"
-                    id="draftNotes"
-                    name="message"
-                    rows="4"
-                    placeholder="Optional: highlight tone, pacing, or scenes you want to emphasise."
-                  ></textarea>
-                </div>
-                <div class="col-lg-6 d-flex flex-column gap-3">
-                  <div>
-                    <div class="d-flex justify-content-between align-items-center mb-1">
-                      <span class="small text-uppercase text-secondary fw-semibold">Outline summary</span>
-                      <span class="badge bg-dark text-light" id="draftOutlineLabel">Preview</span>
-                    </div>
-                    <div id="draftOutlinePreview" class="chapter-preview-box empty">
-                      Select a chapter to view its outline summary.
-                    </div>
+                    </select>
                   </div>
-                  <div>
-                    <div class="d-flex justify-content-between align-items-center mb-1">
-                      <span class="small text-uppercase text-secondary fw-semibold">Saved draft</span>
-                      <span class="badge bg-dark text-light" id="draftSavedLabel">Preview</span>
-                    </div>
-                    <div id="draftSavedPreview" class="chapter-preview-box empty">
-                      No prose saved for the selected chapter yet.
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div class="d-flex flex-column gap-2">
-                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                  <div class="form-check mb-0">
-                    <input class="form-check-input" type="checkbox" value="1" id="draftUseApi" name="use_api" />
-                    <label class="form-check-label small" for="draftUseApi">API</label>
-                  </div>
-                  <div class="d-flex align-items-center gap-2">
-                    <button
-                      type="button"
-                      class="btn btn-outline-info"
-                      id="draftWriteAllButton"
+                  <div class="col-md-4">
+                    <label for="draftChapterSelect" class="form-label">Chapter</label>
+                    {% set selected_plan = act_chapter_lists.get(draft_selected_act) %}
+                    <select
+                      class="form-select"
+                      id="draftChapterSelect"
+                      name="chapter_number"
+                      required
+                      data-current="{{ draft_selected_chapter }}"
                       {% if not selected_plan %}disabled{% endif %}
                     >
-                      Write all chapters
-                    </button>
-                    <button type="submit" class="btn btn-primary" {% if not selected_plan %}disabled{% endif %}>
-                      Draft chapter
-                    </button>
+                      {% if selected_plan %}
+                        {% for chapter in selected_plan %}
+                          <option value="{{ chapter.number }}" {% if chapter.number == draft_selected_chapter %}selected{% endif %}>
+                            Chapter {{ chapter.number }} — {{ chapter.title or 'Untitled' }}
+                          </option>
+                        {% endfor %}
+                      {% else %}
+                        <option value="">Generate the outline first</option>
+                      {% endif %}
+                    </select>
+                  </div>
+                  <div class="col-md-4">
+                    <label for="draftContextCount" class="form-label">Past chapters for context</label>
+                    <input
+                      type="number"
+                      class="form-control"
+                      id="draftContextCount"
+                      name="context_count"
+                      min="0"
+                      value="{{ draft_context_value }}"
+                    />
                   </div>
                 </div>
-                <div class="w-100">
-                  <div id="draftWriteAllProgress" class="progress d-none" aria-hidden="true">
-                    <div
-                      class="progress-bar progress-bar-striped"
-                      id="draftWriteAllProgressBar"
-                      role="progressbar"
-                      style="width: 0%"
-                      aria-valuemin="0"
-                      aria-valuemax="100"
-                      aria-valuenow="0"
-                    >
-                      0%
+                <div class="row g-3">
+                  <div class="col-lg-6">
+                    <label for="draftNotes" class="form-label">Author guidance</label>
+                    <textarea
+                      class="form-control"
+                      id="draftNotes"
+                      name="message"
+                      rows="4"
+                      placeholder="Optional: highlight tone, pacing, or scenes you want to emphasise."
+                    ></textarea>
+                  </div>
+                  <div class="col-lg-6 d-flex flex-column gap-3">
+                    <div>
+                      <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="small text-uppercase text-secondary fw-semibold">Outline summary</span>
+                        <span class="badge bg-dark text-light" id="draftOutlineLabel">Preview</span>
+                      </div>
+                      <div id="draftOutlinePreview" class="chapter-preview-box empty">
+                        Select a chapter to view its outline summary.
+                      </div>
+                    </div>
+                    <div>
+                      <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="small text-uppercase text-secondary fw-semibold">Saved draft</span>
+                        <span class="badge bg-dark text-light" id="draftSavedLabel">Preview</span>
+                      </div>
+                      <div id="draftSavedPreview" class="chapter-preview-box empty">
+                        No prose saved for the selected chapter yet.
+                      </div>
                     </div>
                   </div>
-                  <div id="draftWriteAllStatus" class="small text-secondary mt-2 d-none" aria-live="polite"></div>
                 </div>
-              </div>
-            </form>
+                <div class="d-flex flex-column gap-2">
+                  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <div class="form-check mb-0">
+                      <input class="form-check-input" type="checkbox" value="1" id="draftUseApi" name="use_api" />
+                      <label class="form-check-label small" for="draftUseApi">API</label>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                      <button
+                        type="button"
+                        class="btn btn-outline-dark"
+                        id="draftWriteAllButton"
+                        {% if not selected_plan %}disabled{% endif %}
+                      >
+                        Write all chapters
+                      </button>
+                      <button type="submit" class="btn btn-primary" {% if not selected_plan %}disabled{% endif %}>
+                        Draft chapter
+                      </button>
+                    </div>
+                  </div>
+                  <div class="w-100">
+                    <div id="draftWriteAllProgress" class="progress d-none" aria-hidden="true">
+                      <div
+                        class="progress-bar progress-bar-striped"
+                        id="draftWriteAllProgressBar"
+                        role="progressbar"
+                        style="width: 0%"
+                        aria-valuemin="0"
+                        aria-valuemax="100"
+                        aria-valuenow="0"
+                      >
+                        0%
+                      </div>
+                    </div>
+                    <div id="draftWriteAllStatus" class="small text-secondary mt-2 d-none" aria-live="polite"></div>
+                  </div>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       </div>
@@ -1808,23 +1061,26 @@
       const chatMessageContainers = Array.from(
         document.querySelectorAll(".chat-messages")
       );
-      const stakesSlider = document.querySelector('[data-stakes-slider]');
-      const stakesDisplay = document.querySelector('[data-stakes-display]');
-
-      if (stakesSlider && stakesDisplay) {
-        const updateStakesLabel = function () {
-          stakesDisplay.textContent = `${stakesSlider.value}/10`;
-        };
-        stakesSlider.addEventListener("input", updateStakesLabel);
-        stakesSlider.addEventListener("change", updateStakesLabel);
-        updateStakesLabel();
-      }
+      const workflowProgressBar = document.getElementById("workflowProgressBar");
 
       const scrollToBottom = function (container) {
         if (!container) {
           return;
         }
         container.scrollTop = container.scrollHeight;
+      };
+
+      const updateWorkflowProgress = function (activeTile) {
+        if (!workflowProgressBar || !activeTile) {
+          return;
+        }
+        const totalSteps = tiles.length || 1;
+        const stepIndex = parseInt(activeTile.getAttribute("data-step-index"), 10) || 1;
+        const progress = totalSteps > 1
+          ? ((stepIndex - 1) / (totalSteps - 1)) * 100
+          : 100;
+        workflowProgressBar.style.width = progress + "%";
+        workflowProgressBar.setAttribute("aria-valuenow", String(Math.round(progress)));
       };
 
       chatMessageContainers.forEach(function (container) {
@@ -1888,8 +1144,16 @@
               scrollToBottom(messages);
             });
           }
+          updateWorkflowProgress(tile);
         });
       });
+
+      const activeTile = tiles.find(function (tile) {
+        return tile.classList.contains("active");
+      });
+      if (activeTile) {
+        updateWorkflowProgress(activeTile);
+      }
 
       const projectId = {{ project.id | tojson }};
       const draftContextDefault = {{ draft_context_default | tojson }};
@@ -1998,16 +1262,9 @@
         if (draftSavedLabel) {
           draftSavedLabel.textContent = draftEntry ? "Updated" : "Preview";
         }
-        if (!chapterValue) {
-          clearPreview(draftOutlinePreview, "Generate the chapter outline to view the summary.");
-          clearPreview(draftSavedPreview, "No prose saved for the selected chapter yet.");
-          return;
-        }
         if (outlineEntry) {
-          const summary = (outlineEntry.summary || "").trim();
-          const title = outlineEntry.title ? "Chapter " + chapterValue + ": " + outlineEntry.title : "Chapter " + chapterValue;
-          const combined = summary ? title + "\n\n" + summary : title;
-          setPreview(draftOutlinePreview, combined);
+          const outlineText = outlineEntry.summary || outlineEntry.title || "";
+          setPreview(draftOutlinePreview, outlineText);
         } else {
           clearPreview(draftOutlinePreview, "No outline summary available for this chapter.");
         }
@@ -2018,293 +1275,100 @@
         }
       }
 
-      const writeAllStatusBaseClasses = ["small", "mt-2"];
-
-      function collectPendingChapters() {
-        const acts = [1, 2, 3];
-        const pending = [];
-        acts.forEach(function (actNumber) {
-          const chapters = chapterPlanData[String(actNumber)] || [];
-          chapters.forEach(function (chapter) {
-            const number = chapter.number;
-            if (number === undefined || number === null) {
-              return;
-            }
-            const key = String(actNumber) + "-" + String(number);
-            const draftEntry = draftLookup[key];
-            const content = draftEntry && draftEntry.content ? String(draftEntry.content).trim() : "";
-            if (!content) {
-              pending.push({
-                act: Number(actNumber),
-                number: Number(number),
-                title: chapter.title || "",
-                key: key,
-              });
-            }
-          });
-        });
-        return pending;
+      function updateDraftStatus(statusText, progressValue) {
+        if (draftWriteAllStatus) {
+          draftWriteAllStatus.textContent = statusText || "";
+        }
+        if (draftWriteAllProgressBar) {
+          const safeValue = Math.max(0, Math.min(progressValue || 0, 100));
+          draftWriteAllProgressBar.style.width = safeValue + "%";
+          draftWriteAllProgressBar.setAttribute("aria-valuenow", String(safeValue));
+          draftWriteAllProgressBar.textContent = safeValue + "%";
+        }
       }
 
-      function toggleProgressVisibility(visible) {
-        if (!draftWriteAllProgress || !draftWriteAllProgressBar) {
+      function toggleDraftInputs(enabled) {
+        if (!draftChatForm) {
           return;
         }
-        draftWriteAllProgress.classList.toggle("d-none", !visible);
-        draftWriteAllProgress.setAttribute("aria-hidden", visible ? "false" : "true");
-        draftWriteAllProgressBar.classList.toggle("progress-bar-animated", Boolean(visible));
-      }
-
-      function updateProgressBar(completed, total) {
-        if (!draftWriteAllProgressBar) {
-          return;
-        }
-        const safeTotal = total > 0 ? total : 1;
-        const fraction = Math.min(Math.max(completed / safeTotal, 0), 1);
-        const percent = Math.round(fraction * 100);
-        draftWriteAllProgressBar.style.width = percent + "%";
-        draftWriteAllProgressBar.setAttribute("aria-valuenow", String(percent));
-        draftWriteAllProgressBar.textContent = percent + "%";
-      }
-
-      function setWriteAllStatus(message, variant) {
-        if (!draftWriteAllStatus) {
-          return;
-        }
-        draftWriteAllStatus.className = writeAllStatusBaseClasses.join(" ");
-        if (!message) {
-          draftWriteAllStatus.classList.add("d-none");
-          draftWriteAllStatus.textContent = "";
-          return;
-        }
-        if (variant === "error") {
-          draftWriteAllStatus.classList.add("text-danger");
-        } else if (variant === "success") {
-          draftWriteAllStatus.classList.add("text-success");
-        } else {
-          draftWriteAllStatus.classList.add("text-secondary");
-        }
-        draftWriteAllStatus.textContent = message;
-        draftWriteAllStatus.classList.remove("d-none");
-      }
-
-      function appendChatMessage(role, content, deviceLabel) {
-        if (!draftMessagesContainer) {
-          return;
-        }
-        const wrapper = document.createElement("div");
-        wrapper.classList.add("message", role);
-        const heading = document.createElement("strong");
-        heading.className = "d-block mb-1 text-uppercase small";
-        heading.textContent = role;
-        wrapper.appendChild(heading);
-        const body = document.createElement("div");
-        body.textContent = content;
-        wrapper.appendChild(body);
-        if (role === "assistant" && deviceLabel) {
-          const deviceLine = document.createElement("div");
-          deviceLine.className = "message-device";
-          deviceLine.textContent = "Generated using the " + deviceLabel + " backend.";
-          wrapper.appendChild(deviceLine);
-        }
-        draftMessagesContainer.appendChild(wrapper);
-        draftMessagesContainer.scrollTop = draftMessagesContainer.scrollHeight;
-      }
-
-      function resolveContextCount() {
-        if (!draftContextCountInput) {
-          return draftContextDefault;
-        }
-        const value = draftContextCountInput.value;
-        if (value === undefined || value === null || value === "") {
-          return draftContextDefault;
-        }
-        const parsed = parseInt(value, 10);
-        if (Number.isNaN(parsed) || parsed < 0) {
-          return draftContextDefault;
-        }
-        return parsed;
-      }
-
-      async function runWriteAllChapters() {
-        if (!draftWriteAllButton) {
-          return;
-        }
-
-        const pendingChapters = collectPendingChapters();
-        if (!pendingChapters.length) {
-          setWriteAllStatus(
-            "All planned chapters already have saved drafts.",
-            "success"
-          );
-          toggleProgressVisibility(false);
-          return;
-        }
-
+        const submitButton = draftChatForm.querySelector("button[type='submit']");
         const originalStates = {
-          writeAllDisabled: draftWriteAllButton.disabled,
-          writeAllLabel: draftWriteAllButton.innerHTML,
           actDisabled: draftActSelect ? draftActSelect.disabled : false,
           chapterDisabled: draftChapterSelect ? draftChapterSelect.disabled : false,
           contextDisabled: draftContextCountInput ? draftContextCountInput.disabled : false,
           notesDisabled: draftNotesInput ? draftNotesInput.disabled : false,
           useApiDisabled: draftUseApiInput ? draftUseApiInput.disabled : false,
-          submitDisabled:
-            draftChatForm && draftChatForm.querySelector("button[type='submit']")
-              ? draftChatForm.querySelector("button[type='submit']").disabled
-              : false,
+          submitDisabled: submitButton ? submitButton.disabled : false,
+          writeAllDisabled: draftWriteAllButton ? draftWriteAllButton.disabled : false,
+          writeAllLabel: draftWriteAllButton ? draftWriteAllButton.textContent : "",
         };
-
-        const submitButton =
-          draftChatForm && draftChatForm.querySelector("button[type='submit']");
-
-        draftWriteAllButton.disabled = true;
-        draftWriteAllButton.textContent = "Writing…";
-        if (draftActSelect) {
-          draftActSelect.disabled = true;
-        }
-        if (draftChapterSelect) {
-          draftChapterSelect.disabled = true;
-        }
-        if (draftContextCountInput) {
-          draftContextCountInput.disabled = true;
-        }
-        if (draftNotesInput) {
-          draftNotesInput.disabled = true;
-        }
-        if (draftUseApiInput) {
-          draftUseApiInput.disabled = true;
-        }
-        if (submitButton) {
-          submitButton.disabled = true;
-        }
-
-        toggleProgressVisibility(true);
-        updateProgressBar(0, pendingChapters.length);
-        setWriteAllStatus(
-          "Preparing to write " + pendingChapters.length + " chapter(s)…",
-          "info"
-        );
-
-        const contextCount = resolveContextCount();
-        const guidance = draftNotesInput ? draftNotesInput.value.trim() : "";
-        const useApi = draftUseApiInput ? draftUseApiInput.checked : false;
-
-        let completed = 0;
-        let encounteredError = false;
-
-        for (const chapter of pendingChapters) {
-          const chapterLabel =
-            "Act " + chapter.act + ", Chapter " + chapter.number +
-            (chapter.title ? " — " + chapter.title : "");
-          setWriteAllStatus("Writing " + chapterLabel + "…", "info");
-
+        if (!enabled) {
           if (draftActSelect) {
-            draftActSelect.value = String(chapter.act);
+            draftActSelect.disabled = true;
           }
           if (draftChapterSelect) {
-            draftChapterSelect.setAttribute("data-current", String(chapter.number));
+            draftChapterSelect.disabled = true;
+          }
+          if (draftContextCountInput) {
+            draftContextCountInput.disabled = true;
+          }
+          if (draftNotesInput) {
+            draftNotesInput.disabled = true;
+          }
+          if (draftUseApiInput) {
+            draftUseApiInput.disabled = true;
+          }
+          if (submitButton) {
+            submitButton.disabled = true;
+          }
+          if (draftWriteAllButton) {
+            draftWriteAllButton.disabled = true;
+            draftWriteAllButton.textContent = "Writing…";
+          }
+          if (draftWriteAllProgress) {
+            draftWriteAllProgress.classList.remove("d-none");
+          }
+          if (draftWriteAllStatus) {
+            draftWriteAllStatus.classList.remove("d-none");
+          }
+          if (draftWriteAllProgressBar) {
+            draftWriteAllProgressBar.classList.add("progress-bar-animated");
+          }
+        } else {
+          if (draftWriteAllProgress) {
+            draftWriteAllProgress.classList.add("d-none");
+          }
+          if (draftWriteAllStatus) {
+            draftWriteAllStatus.classList.add("d-none");
+          }
+          if (draftWriteAllProgressBar) {
+            draftWriteAllProgressBar.classList.remove("progress-bar-animated");
+          }
+          if (draftActSelect) {
+            draftActSelect.disabled = originalStates.actDisabled;
+          }
+          if (draftChapterSelect) {
+            draftChapterSelect.disabled = originalStates.chapterDisabled;
+          }
+          if (draftContextCountInput) {
+            draftContextCountInput.disabled = originalStates.contextDisabled;
+          }
+          if (draftNotesInput) {
+            draftNotesInput.disabled = originalStates.notesDisabled;
+          }
+          if (draftUseApiInput) {
+            draftUseApiInput.disabled = originalStates.useApiDisabled;
+          }
+          if (submitButton) {
+            submitButton.disabled = originalStates.submitDisabled;
+          }
+          if (draftWriteAllButton) {
+            draftWriteAllButton.disabled = originalStates.writeAllDisabled;
+            draftWriteAllButton.textContent = originalStates.writeAllLabel;
           }
           refreshDraftChapterOptions();
-          if (draftChapterSelect) {
-            draftChapterSelect.value = String(chapter.number);
-          }
           updateDraftPreviews();
-
-          try {
-            const response = await fetch(
-              "/projects/" + projectId + "/draft_chapter",
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "X-Requested-With": "XMLHttpRequest",
-                },
-                body: JSON.stringify({
-                  act_number: chapter.act,
-                  chapter_number: chapter.number,
-                  context_count: contextCount,
-                  message: guidance,
-                  use_api: useApi,
-                }),
-              }
-            );
-
-            const payload = await response.json();
-            if (!response.ok || !payload.ok) {
-              const errorMessage = payload && payload.error ? payload.error : "Chapter drafting failed.";
-              setWriteAllStatus(errorMessage, "error");
-              encounteredError = true;
-              break;
-            }
-
-            if (payload.user_message) {
-              appendChatMessage("user", payload.user_message, "");
-            }
-            if (payload.assistant_reply) {
-              appendChatMessage(
-                "assistant",
-                payload.assistant_reply,
-                payload.device_label || ""
-              );
-            }
-
-            if (payload.draft) {
-              draftLookup[chapter.key] = Object.assign({}, payload.draft);
-            }
-
-            completed += 1;
-            updateProgressBar(completed, pendingChapters.length);
-            setWriteAllStatus(
-              "Saved " + chapterLabel + ".",
-              "success"
-            );
-            updateDraftPreviews();
-          } catch (error) {
-            console.error("Failed to draft chapter", error);
-            setWriteAllStatus(
-              "A network error interrupted the chapter drafting sequence.",
-              "error"
-            );
-            encounteredError = true;
-            break;
-          }
         }
-
-        if (!encounteredError && completed === pendingChapters.length) {
-          setWriteAllStatus(
-            "All pending chapters have been drafted.",
-            "success"
-          );
-        }
-
-        if (draftWriteAllProgressBar) {
-          draftWriteAllProgressBar.classList.remove("progress-bar-animated");
-        }
-
-        if (draftActSelect) {
-          draftActSelect.disabled = originalStates.actDisabled;
-        }
-        if (draftChapterSelect) {
-          draftChapterSelect.disabled = originalStates.chapterDisabled;
-        }
-        if (draftContextCountInput) {
-          draftContextCountInput.disabled = originalStates.contextDisabled;
-        }
-        if (draftNotesInput) {
-          draftNotesInput.disabled = originalStates.notesDisabled;
-        }
-        if (draftUseApiInput) {
-          draftUseApiInput.disabled = originalStates.useApiDisabled;
-        }
-        if (submitButton) {
-          submitButton.disabled = originalStates.submitDisabled;
-        }
-        draftWriteAllButton.disabled = originalStates.writeAllDisabled;
-        draftWriteAllButton.innerHTML = originalStates.writeAllLabel;
-
-        refreshDraftChapterOptions();
-        updateDraftPreviews();
       }
 
       function showFeedback(container, type, message) {
@@ -2621,6 +1685,18 @@
               toggleEditMode(container, false);
             });
           }
+          if (container.getAttribute("data-click-to-edit") === "true") {
+            container.addEventListener("click", function (event) {
+              const ignored = event.target.closest(
+                "button, a, input, textarea, label, select"
+              );
+              if (ignored || container.dataset.editing === "true") {
+                return;
+              }
+              showFeedback(container, "clear", "");
+              toggleEditMode(container, true);
+            });
+          }
           form.addEventListener("submit", async function (event) {
             event.preventDefault();
             const endpoint = container.getAttribute("data-endpoint");
@@ -2682,17 +1758,90 @@
         });
       }
 
+      if (draftActSelect) {
+        refreshDraftChapterOptions();
+      }
+      if (draftActSelect && draftChapterSelect) {
+        updateDraftPreviews();
+      }
+
       if (draftWriteAllButton) {
-        draftWriteAllButton.addEventListener("click", function () {
-          if (draftWriteAllButton.disabled) {
+        draftWriteAllButton.addEventListener("click", async function () {
+          if (!draftActSelect || !draftChatForm) {
             return;
           }
-          runWriteAllChapters();
+          const actValue = draftActSelect.value;
+          const useApiRequested = draftUseApiInput && draftUseApiInput.checked;
+          const notes = draftNotesInput ? draftNotesInput.value : "";
+          const contextCount = draftContextCountInput
+            ? parseInt(draftContextCountInput.value || "0", 10)
+            : draftContextDefault;
+          const payload = {
+            act_number: actValue,
+            context_count: isNaN(contextCount) ? draftContextDefault : contextCount,
+            message: notes,
+            use_api: useApiRequested,
+          };
+
+          toggleDraftInputs(false);
+          updateDraftStatus("Starting batch drafting…", 0);
+
+          try {
+            const response = await fetch(`/projects/${projectId}/draft_all_chapters`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-Requested-With": "XMLHttpRequest",
+              },
+              body: JSON.stringify(payload),
+            });
+            const data = await response.json();
+            if (!response.ok || !data || data.ok === false) {
+              throw new Error(data && data.error ? data.error : "Unable to draft chapters.");
+            }
+            updateDraftStatus(data.status || "Drafting completed.", 100);
+            if (draftMessagesContainer && Array.isArray(data.messages)) {
+              data.messages.forEach(function (message) {
+                const messageEl = document.createElement("div");
+                messageEl.classList.add("message", message.role || "assistant");
+                messageEl.innerHTML =
+                  '<strong class="d-block mb-1 text-uppercase small">' +
+                  (message.role || "assistant") +
+                  "</strong>" +
+                  "<div>" +
+                  (message.content || "") +
+                  "</div>";
+                draftMessagesContainer.appendChild(messageEl);
+              });
+              scrollToBottom(draftMessagesContainer);
+            }
+            if (data.updated_lookup) {
+              Object.keys(data.updated_lookup).forEach(function (key) {
+                draftLookup[key] = data.updated_lookup[key];
+              });
+            }
+          } catch (error) {
+            console.error("Draft all chapters failed", error);
+            updateDraftStatus(error.message || "Drafting failed.", 0);
+          } finally {
+            window.setTimeout(function () {
+              toggleDraftInputs(true);
+              updateDraftStatus("", 0);
+            }, 800);
+          }
         });
       }
 
-      refreshDraftChapterOptions();
-      updateDraftPreviews();
+      if (draftChatForm) {
+        draftChatForm.addEventListener("submit", function () {
+          const submitButton = draftChatForm.querySelector("button[type='submit']");
+          if (submitButton) {
+            submitButton.disabled = true;
+            submitButton.innerHTML =
+              '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Drafting…';
+          }
+        });
+      }
     })();
   </script>
 {% endblock %}

@@ -12,52 +12,78 @@
     >
     <style>
       body {
-        background: linear-gradient(120deg, #0b0f2b, #14215f);
+        background: linear-gradient(130deg, #f6d3b1, #fff2e6);
         min-height: 100vh;
-        color: #f1f5f9;
+        color: #3c2a1f;
+        position: relative;
+        overflow-x: hidden;
+      }
+      body::before,
+      body::after {
+        content: "";
+        position: fixed;
+        width: 420px;
+        height: 420px;
+        border-radius: 45% 55% 60% 40%;
+        background: radial-gradient(circle, rgba(230, 166, 109, 0.35), transparent 70%);
+        z-index: 0;
+        pointer-events: none;
+      }
+      body::before {
+        top: -120px;
+        right: -140px;
+      }
+      body::after {
+        bottom: -160px;
+        left: -140px;
       }
       .navbar {
-        background: rgba(15, 23, 42, 0.85);
+        background: rgba(255, 239, 220, 0.9);
+        border-bottom: 1px solid rgba(165, 115, 82, 0.2);
+        z-index: 1;
       }
       .content-container {
         padding: 2rem 1rem 4rem;
+        position: relative;
+        z-index: 1;
       }
       .card {
-        background: rgba(15, 23, 42, 0.85);
-        border: 1px solid rgba(148, 163, 184, 0.2);
-        box-shadow: 0 20px 40px rgba(15, 23, 42, 0.4);
+        background: rgba(255, 248, 240, 0.95);
+        border: 1px solid rgba(165, 115, 82, 0.2);
+        box-shadow: 0 20px 40px rgba(171, 110, 69, 0.15);
+        border-radius: 1.25rem;
       }
       .list-group-item {
-        background: rgba(15, 23, 42, 0.7);
-        color: #f1f5f9;
-        border-color: rgba(148, 163, 184, 0.2);
+        background: rgba(255, 246, 236, 0.9);
+        color: #3c2a1f;
+        border-color: rgba(165, 115, 82, 0.2);
       }
       .list-group-item:hover,
       .list-group-item:focus {
-        background: rgba(37, 99, 235, 0.3);
-        color: #f8fafc;
+        background: rgba(246, 204, 162, 0.35);
+        color: #3c2a1f;
       }
-      textarea.form-control, input.form-control {
-        background: rgba(15, 23, 42, 0.6);
-        border: 1px solid rgba(148, 163, 184, 0.3);
-        color: #f1f5f9;
+      textarea.form-control, input.form-control, select.form-select {
+        background: rgba(255, 252, 248, 0.95);
+        border: 1px solid rgba(165, 115, 82, 0.3);
+        color: #3c2a1f;
       }
-      textarea.form-control:focus, input.form-control:focus {
-        background: rgba(15, 23, 42, 0.8);
-        color: #f1f5f9;
-        border-color: #38bdf8;
-        box-shadow: 0 0 0 0.2rem rgba(56, 189, 248, 0.25);
+      textarea.form-control:focus, input.form-control:focus, select.form-select:focus {
+        background: rgba(255, 252, 248, 0.98);
+        color: #3c2a1f;
+        border-color: #d97c4a;
+        box-shadow: 0 0 0 0.2rem rgba(217, 124, 74, 0.2);
       }
       .text-secondary,
       .text-muted,
       .text-body-secondary {
-        color: #e2e8f0 !important;
+        color: #6f5646 !important;
       }
     </style>
     {% block head_extra %}{% endblock %}
   </head>
   <body>
-    <nav class="navbar navbar-expand-lg navbar-dark">
+    <nav class="navbar navbar-expand-lg">
       <div class="container">
         <a class="navbar-brand" href="{{ url_for('dashboard') }}">Story Projects</a>
       </div>
