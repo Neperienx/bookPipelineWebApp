@@ -2926,6 +2926,26 @@ def create_app() -> Flask:
         )
 
     @app.route(
+        "/projects/<int:project_id>/characters/<int:character_id>",
+        methods=["DELETE"],
+    )
+    def character_delete(project_id: int, character_id: int):
+        project = db.session.get(Project, project_id)
+        if project is None:
+            abort(404)
+
+        character = Character.query.filter_by(
+            id=character_id, project_id=project_id
+        ).first()
+        if character is None:
+            return jsonify({"ok": False, "error": "Character not found."}), 404
+
+        db.session.delete(character)
+        db.session.commit()
+
+        return jsonify({"ok": True, "deleted_id": character_id})
+
+    @app.route(
         "/projects/<int:project_id>/chapters/plan",
         methods=["PATCH"],
     )

@@ -278,10 +278,38 @@
       justify-content: center;
       align-items: flex-start;
       text-decoration: none;
+      position: relative;
     }
     .character-tile:hover {
       transform: translateY(-2px);
       box-shadow: 0 12px 24px rgba(54, 36, 22, 0.08);
+    }
+    .character-tile-delete {
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+      width: 2rem;
+      height: 2rem;
+      border-radius: 50%;
+      border: none;
+      background: rgba(255, 255, 255, 0.92);
+      color: #7b3f2b;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      box-shadow: 0 6px 12px rgba(54, 36, 22, 0.12);
+    }
+    .character-tile:hover .character-tile-delete {
+      opacity: 1;
+      pointer-events: auto;
+      transform: scale(1.05);
+    }
+    .character-tile-delete:hover {
+      color: #b03824;
+      transform: scale(1.1);
     }
     .character-tile.add-character-tile {
       border-style: dashed;
@@ -435,6 +463,18 @@
                         href="{{ url_for('character_detail', project_id=project.id, character_id=character.id) }}"
                         class="character-tile"
                       >
+                        <button
+                          type="button"
+                          class="character-tile-delete"
+                          data-character-delete="true"
+                          data-character-name="{{ character.name or 'Untitled character' }}"
+                          data-delete-url="{{ url_for('character_delete', project_id=project.id, character_id=character.id) }}"
+                          aria-label="Delete character"
+                        >
+                          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M9 3h6a1 1 0 0 1 1 1v1h4v2h-1l-1.2 13.1A2 2 0 0 1 15.8 22H8.2a2 2 0 0 1-2-1.9L5 7H4V5h4V4a1 1 0 0 1 1-1zm2 4v11h2V7h-2zm-3 0v11h2V7H8zm6 0v11h2V7h-2zM10 5v0h4V5h-4z"/>
+                          </svg>
+                        </button>
                         <div class="character-tile-content">
                           <div class="character-tile-name fw-semibold">{{ character.name or 'Untitled character' }}</div>
                           <div class="character-tile-role text-secondary small">
@@ -1708,6 +1748,53 @@
       }
 
       initEditableBlocks();
+
+      const characterDeleteButtons = document.querySelectorAll(
+        "[data-character-delete='true']"
+      );
+      characterDeleteButtons.forEach(function (button) {
+        button.addEventListener("click", async function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          const characterName = button.getAttribute("data-character-name") || "this character";
+          const deleteUrl = button.getAttribute("data-delete-url");
+          if (!deleteUrl) {
+            return;
+          }
+          const confirmed = window.confirm(
+            `Are you sure you want to delete ${characterName}?`
+          );
+          if (!confirmed) {
+            return;
+          }
+          button.disabled = true;
+          try {
+            const response = await fetch(deleteUrl, {
+              method: "DELETE",
+              headers: {
+                "X-Requested-With": "XMLHttpRequest",
+              },
+            });
+            const data = await response.json().catch(function () {
+              return null;
+            });
+            if (!response.ok || !data || data.ok === false) {
+              const message = data && data.error ? data.error : "Unable to delete the character.";
+              window.alert(message);
+              return;
+            }
+            const tile = button.closest(".character-tile");
+            if (tile) {
+              tile.remove();
+            }
+          } catch (error) {
+            console.error("Failed to delete character", error);
+            window.alert("A network error prevented deleting the character.");
+          } finally {
+            button.disabled = false;
+          }
+        });
+      });
 
       if (draftActSelect) {
         draftActSelect.addEventListener("change", function () {
