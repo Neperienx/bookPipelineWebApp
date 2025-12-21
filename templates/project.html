@@ -404,17 +404,18 @@
                   </div>
                 </div>
                 <div class="character-tile-grid">
-                  <button
-                    type="button"
-                    class="character-tile add-character-tile"
-                    data-character-create-trigger
-                  >
-                    <div class="d-flex flex-column align-items-center justify-content-center gap-2">
-                      <span class="badge rounded-pill text-bg-light border">+</span>
-                      <span>Add new character</span>
-                      <span class="small text-secondary">Open the creation form</span>
-                    </div>
-                  </button>
+                  <form method="post" action="{{ url_for('character_create', project_id=project.id) }}">
+                    <button
+                      type="submit"
+                      class="character-tile add-character-tile"
+                    >
+                      <div class="d-flex flex-column align-items-center justify-content-center gap-2">
+                        <span class="badge rounded-pill text-bg-light border">+</span>
+                        <span>Add new character</span>
+                        <span class="small text-secondary">Open the full brief</span>
+                      </div>
+                    </button>
+                  </form>
                   {% if main_characters %}
                     {% for character in main_characters %}
                       <div
@@ -797,28 +798,9 @@
             <div id="characterFormPanel" class="chat-panel{% if initial_step == 'characters' %} active{% endif %}" role="tabpanel" aria-labelledby="charactersPanel">
               <div class="d-flex justify-content-between align-items-start mb-3 gap-3">
                 <div>
-                  <h2 class="h5 mb-1">Character builder</h2>
-                  <p class="text-secondary mb-0">Start a new profile here, then open it to complete the full sheet.</p>
+                  <h2 class="h5 mb-1">Character workspace</h2>
+                  <p class="text-secondary mb-0">Choose a character tile to edit details, or add a new one to open the full brief.</p>
                 </div>
-              </div>
-              <div class="character-form-card">
-                <form method="post" action="{{ url_for('character_create', project_id=project.id) }}" class="d-flex flex-column gap-3">
-                  <div>
-                    <label class="form-label" for="characterNameInput">Character name</label>
-                    <input type="text" class="form-control" id="characterNameInput" name="name" placeholder="e.g. Nyla Arden" />
-                  </div>
-                  <div>
-                    <label class="form-label" for="characterRoleInput">Role in story</label>
-                    <input type="text" class="form-control" id="characterRoleInput" name="role_in_story" placeholder="Protagonist, rival, mentor..." />
-                  </div>
-                  <div>
-                    <label class="form-label" for="characterHookInput">Quick description</label>
-                    <textarea class="form-control" id="characterHookInput" name="character_description" rows="3" placeholder="A short hook to remember them by."></textarea>
-                  </div>
-                  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                    <button type="submit" class="btn btn-primary">Create character &amp; open full form</button>
-                  </div>
-                </form>
               </div>
             </div>
             <div id="ideationChatPanel" class="chat-panel{% if initial_step == 'ideation' %} active{% endif %}" role="tabpanel" aria-labelledby="ideationPanel">
@@ -1116,11 +1098,6 @@
       const chatMessageContainers = Array.from(
         document.querySelectorAll(".chat-messages")
       );
-      const characterCreateTriggers = Array.from(
-        document.querySelectorAll("[data-character-create-trigger]")
-      );
-      const characterFormPanel = document.getElementById("characterFormPanel");
-      const characterNameInput = document.getElementById("characterNameInput");
       const workflowProgressBar = document.getElementById("workflowProgressBar");
 
       const scrollToBottom = function (container) {
@@ -1141,18 +1118,6 @@
           : 100;
         workflowProgressBar.style.width = progress + "%";
         workflowProgressBar.setAttribute("aria-valuenow", String(Math.round(progress)));
-      };
-
-      const openCharacterForm = function () {
-        if (characterFormPanel) {
-          chatPanels.forEach(function (panel) {
-            panel.classList.toggle("active", panel === characterFormPanel);
-          });
-          characterFormPanel.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
-        if (characterNameInput) {
-          characterNameInput.focus();
-        }
       };
 
       chatMessageContainers.forEach(function (container) {
@@ -1217,12 +1182,6 @@
             });
           }
           updateWorkflowProgress(tile);
-        });
-      });
-
-      characterCreateTriggers.forEach(function (trigger) {
-        trigger.addEventListener("click", function () {
-          openCharacterForm();
         });
       });
 
