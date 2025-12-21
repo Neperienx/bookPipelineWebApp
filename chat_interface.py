@@ -3369,6 +3369,11 @@ def create_app() -> Flask:
                     project_id=project_id,
                     character_id=character.id,
                 ),
+                "update_url": url_for(
+                    "project_update_character",
+                    project_id=project_id,
+                    character_id=character.id,
+                ),
                 "generate_url": url_for(
                     "character_generate",
                     project_id=project_id,
@@ -3501,6 +3506,11 @@ def create_app() -> Flask:
                 "message": "Character profile updated from assistant.",
                 "redirect_url": url_for(
                     "character_detail",
+                    project_id=project_id,
+                    character_id=character.id,
+                ),
+                "update_url": url_for(
+                    "project_update_character",
                     project_id=project_id,
                     character_id=character.id,
                 ),

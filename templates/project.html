@@ -400,7 +400,7 @@
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                   <div>
                     <h3 class="h6 mb-1">Characters</h3>
-                    <p class="text-secondary mb-0 small">Pick a tile to edit character details or open the full profile.</p>
+                    <p class="text-secondary mb-0 small">Pick a tile to open the full profile.</p>
                   </div>
                 </div>
                 <div class="character-tile-grid">
@@ -416,63 +416,15 @@
                   </a>
                   {% if main_characters %}
                     {% for character in main_characters %}
-                      <div
-                        class="character-tile editable-block"
-                        data-edit-type="character"
-                        data-endpoint="{{ url_for('project_update_character', project_id=project.id, character_id=character.id) }}"
-                        data-method="PATCH"
-                        data-click-to-edit="true"
+                      <a
+                        href="{{ url_for('character_detail', project_id=project.id, character_id=character.id) }}"
+                        class="character-tile"
                       >
-                        <div data-edit-display>
-                          <div class="fw-semibold" data-display-name>{{ character.name or 'Untitled character' }}</div>
-                          <div
-                            class="text-secondary small"
-                            data-display-role
-                            data-empty-text="Role not set yet"
-                          >
-                            {{ character.role_in_story or 'Role not set yet' }}
-                          </div>
+                        <div class="fw-semibold">{{ character.name or 'Untitled character' }}</div>
+                        <div class="text-secondary small">
+                          {{ character.role_in_story or 'Role not set yet' }}
                         </div>
-                        <form class="d-none mt-3" data-edit-form>
-                          <div class="row g-2">
-                            <div class="col-12">
-                              <label class="form-label small text-uppercase fw-semibold" for="mainName{{ character.id }}">Name</label>
-                              <input
-                                type="text"
-                                class="form-control form-control-sm"
-                                id="mainName{{ character.id }}"
-                                name="name"
-                                value="{{ character.name or '' }}"
-                              />
-                            </div>
-                            <div class="col-12">
-                              <label class="form-label small text-uppercase fw-semibold" for="mainRole{{ character.id }}">Role in story</label>
-                              <input
-                                type="text"
-                                class="form-control form-control-sm"
-                                id="mainRole{{ character.id }}"
-                                name="role_in_story"
-                                value="{{ character.role_in_story or '' }}"
-                              />
-                            </div>
-                          </div>
-                          <div class="edit-inline-actions mt-3">
-                            <button type="button" class="btn btn-outline-secondary btn-sm" data-edit-cancel>Cancel</button>
-                            <button type="submit" class="btn btn-primary btn-sm">Save</button>
-                          </div>
-                        </form>
-                        <div class="d-flex justify-content-between align-items-center mt-3" data-edit-actions>
-                          <a
-                            href="{{ url_for('character_detail', project_id=project.id, character_id=character.id) }}"
-                            class="btn btn-link btn-sm ps-0"
-                          >
-                            Open profile
-                          </a>
-                          <button type="button" class="btn btn-outline-info btn-sm" data-edit-trigger>Edit character</button>
-                        </div>
-                        <div class="alert alert-danger mt-2 d-none" data-edit-error></div>
-                        <div class="alert alert-success mt-2 d-none" data-edit-success></div>
-                      </div>
+                      </a>
                     {% endfor %}
                   {% else %}
                     <div class="text-secondary text-center py-4 border rounded-4 bg-white">
