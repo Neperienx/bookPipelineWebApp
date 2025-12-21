@@ -1297,6 +1297,7 @@ def create_app() -> Flask:
             project, history=pitch_history
         )
         overview_form_state["pitch"] = current_pitch_text
+        requested_step = request.args.get("step")
 
         if request.method == "POST":
             chat_type = request.form.get("chat_type", "outline")
@@ -2009,6 +2010,202 @@ def create_app() -> Flask:
                                 f"{device_sentence}"
                             )
                         session.modified = True
+            elif chat_type == "acts_validate":
+                chapters_count_raw = request.form.get("chapters_count", "").strip()
+                try:
+                    chapters_per_act = int(
+                        chapters_count_raw or chapter_count_default
+                    )
+                except ValueError:
+                    act_error = "Please enter a valid positive number of chapters."
+                    chapters_per_act = chapter_count_default
+                else:
+                    chapter_count_value = chapters_per_act
+
+                act_outline_segments = [
+                    segment.strip()
+                    for segment in [
+                        project.act1_outline or "",
+                        project.act2_outline or "",
+                        project.act3_outline or "",
+                    ]
+                    if segment and segment.strip()
+                ]
+                if not act_outline_segments:
+                    act_error = (
+                        "Please generate the act-by-act outline before validating."
+                    )
+                elif act_error is None:
+                    supporting_history.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                "Review the acts and suggest any supporting characters who "
+                                "need quick reference profiles."
+                            ),
+                        }
+                    )
+                    generator = None
+                    try:
+                        generator = _resolve_text_generator(use_api_requested)
+                        (
+                            assistant_reply,
+                            parsed_characters,
+                        ) = _generate_supporting_characters(
+                            generator,
+                            project,
+                            None,
+                        )
+                    except OpenAIAPIRateLimitError as exc:
+                        supporting_error = str(exc)
+                        supporting_history.pop()
+                    except RuntimeError as exc:
+                        supporting_error = str(exc)
+                        supporting_history.pop()
+                    except ValueError as exc:
+                        supporting_error = str(exc)
+                        supporting_history.pop()
+                    except Exception as exc:  # pragma: no cover - defensive
+                        supporting_error = (
+                            "The text generation backend could not identify supporting characters: "
+                            f"{exc}"
+                        )
+                        supporting_history.pop()
+                    else:
+                        device_type = generator.get_compute_device()
+                        device_label = _normalise_device_label(device_type)
+                        device_sentence = _device_usage_sentence(device_type)
+                        clean_reply = assistant_reply.strip() or "(no reply)"
+                        supporting_history.append(
+                            {
+                                "role": "assistant",
+                                "content": clean_reply,
+                                "device_type": device_label,
+                            }
+                        )
+                        added_count, updated_count = _apply_supporting_character_updates(
+                            project,
+                            parsed_characters,
+                        )
+                        db.session.commit()
+                        changes: List[str] = []
+                        if added_count:
+                            plural = "s" if added_count != 1 else ""
+                            changes.append(
+                                f"created {added_count} new supporting character{plural}"
+                            )
+                        if updated_count:
+                            plural = "s" if updated_count != 1 else ""
+                            changes.append(
+                                f"updated {updated_count} existing profile{plural}"
+                            )
+                        if changes:
+                            change_sentence = ", ".join(changes)
+                            supporting_success = (
+                                f"Supporting cast saved: {change_sentence}."
+                                f"{device_sentence}"
+                            )
+                        else:
+                            supporting_success = (
+                                "No new supporting characters were required; the roster is already up to date."
+                                f"{device_sentence}"
+                            )
+
+                if supporting_error is None and act_error is None:
+                    chapter_prompt = (
+                        "Generate a chapter-by-chapter outline from the validated act structure."
+                    )
+                    chapter_history.append(
+                        {"role": "user", "content": chapter_prompt}
+                    )
+                    generator = None
+                    try:
+                        generator = _resolve_text_generator(use_api_requested)
+                        (
+                            chapter_texts,
+                            chapter_structures,
+                            chapter_debug_details,
+                            chapter_all_valid,
+                        ) = _generate_chapter_outlines(
+                            generator,
+                            project,
+                            chapter_prompt,
+                            chapters_per_act,
+                        )
+                    except OpenAIAPIRateLimitError as exc:
+                        chapter_error = str(exc)
+                        chapter_history.pop()
+                    except RuntimeError as exc:
+                        chapter_error = str(exc)
+                        chapter_history.pop()
+                    except Exception as exc:  # pragma: no cover - defensive
+                        chapter_error = (
+                            "The text generation backend could not generate the chapter outline: "
+                            f"{exc}"
+                        )
+                        chapter_history.pop()
+                    else:
+                        if chapter_debug_details:
+                            for entry in chapter_debug_details:
+                                LOGGER.info("Chapter generation debug: %s", entry)
+                        device_type = generator.get_compute_device()
+                        device_label = _normalise_device_label(device_type)
+                        device_sentence = _device_usage_sentence(device_type)
+                        chapters = [result.strip() for result in chapter_texts]
+                        labels = ["Act I", "Act II", "Act III"]
+                        for label, content in zip(labels, chapters):
+                            response_text = (
+                                f"{label} chapters:\n{content or '(no reply)'}"
+                            )
+                            chapter_history.append(
+                                {
+                                    "role": "assistant",
+                                    "content": response_text,
+                                    "device_type": device_label,
+                                }
+                            )
+                        project.chapters_final_notes = chapter_prompt
+                        project.act1_chapters = chapters[0] if chapters else ""
+                        project.act2_chapters = (
+                            chapters[1] if len(chapters) > 1 else ""
+                        )
+                        project.act3_chapters = (
+                            chapters[2] if len(chapters) > 2 else ""
+                        )
+                        project.act1_chapter_list = (
+                            json.dumps(chapter_structures[0], ensure_ascii=False)
+                            if chapter_structures and len(chapter_structures) > 0
+                            else None
+                        )
+                        project.act2_chapter_list = (
+                            json.dumps(chapter_structures[1], ensure_ascii=False)
+                            if chapter_structures and len(chapter_structures) > 1
+                            else None
+                        )
+                        project.act3_chapter_list = (
+                            json.dumps(chapter_structures[2], ensure_ascii=False)
+                            if chapter_structures and len(chapter_structures) > 2
+                            else None
+                        )
+                        db.session.commit()
+                        if not chapter_all_valid:
+                            chapter_warning = (
+                                "Chapter outline generation completed with validation warnings. "
+                                "Review the debug log below for specifics."
+                            )
+                        chapter_success = (
+                            "Chapter-by-chapter outline updated from assistant."
+                            f"{device_sentence}"
+                        )
+                    session.modified = True
+                if chapter_error is None and supporting_error is None and act_error is None:
+                    return redirect(
+                        url_for(
+                            "project_detail",
+                            project_id=project_id,
+                            step="draft",
+                        )
+                    )
             elif chat_type == "concepts":
                 additional_guidance = user_message
                 outline_text = (project.outline or "").strip()
@@ -2411,6 +2608,7 @@ def create_app() -> Flask:
         return render_template(
             "project.html",
             project=project,
+            requested_step=requested_step,
             history=history,
             error=error,
             success=success,
@@ -2937,8 +3135,22 @@ def create_app() -> Flask:
             abort(404)
 
         character = Character(project=project)
+        character.name = request.form.get("name", "").strip() or None
+        character.role_in_story = request.form.get("role_in_story", "").strip() or None
+        character.character_description = (
+            request.form.get("character_description", "").strip() or None
+        )
         db.session.add(character)
         db.session.commit()
+
+        if request.form.get("return_to_project"):
+            return redirect(
+                url_for(
+                    "project_detail",
+                    project_id=project_id,
+                    step="characters",
+                )
+            )
 
         return redirect(
             url_for(
