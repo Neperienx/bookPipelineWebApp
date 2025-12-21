@@ -10,34 +10,20 @@
       margin-bottom: 2rem;
       flex-wrap: wrap;
     }
-    .character-traits {
-      display: flex;
-      flex-direction: column;
-      gap: 1.25rem;
-    }
-    .trait-card {
-      border-radius: 1rem;
-      border: 1px solid rgba(148, 163, 184, 0.25);
-      background: rgba(15, 23, 42, 0.65);
-      padding: 1.25rem;
-    }
-    .trait-card h2 {
-      font-size: 1rem;
-      margin-bottom: 0.35rem;
-    }
-    .trait-card p.description {
-      margin-bottom: 0.75rem;
-      color: rgba(226, 232, 240, 0.75);
-      font-size: 0.85rem;
-    }
-    .trait-content {
-      white-space: pre-wrap;
+    .profile-editor textarea {
+      min-height: 22rem;
+      background: rgba(15, 23, 42, 0.45);
+      border-color: rgba(148, 163, 184, 0.35);
       color: #e2e8f0;
-      min-height: 3rem;
     }
-    .trait-empty {
-      color: rgba(226, 232, 240, 0.5);
-      font-style: italic;
+    .profile-editor textarea:focus {
+      background: rgba(15, 23, 42, 0.6);
+      border-color: rgba(56, 189, 248, 0.6);
+      color: #e2e8f0;
+    }
+    .profile-editor .form-helper {
+      font-size: 0.85rem;
+      color: rgba(226, 232, 240, 0.7);
     }
     .character-form {
       width: 100%;
@@ -94,100 +80,115 @@
       </form>
     </div>
   </div>
+  {% set profile_field = character_fields[0] if character_fields else None %}
   <div class="row g-4">
-    <div class="col-xl-5">
-      <div class="card h-100">
-        <div class="card-body">
-          <h2 class="h5 mb-3">Character profile</h2>
-          <div class="character-traits">
-            {% for field in character_fields %}
-              <section
-                class="trait-card"
-                data-field-key="{{ field.key }}"
-                data-field-label="{{ field.label }}"
-              >
-                <div class="d-flex justify-content-between align-items-start gap-2">
-                  <h2 class="h6 mb-0">{{ field.label }}</h2>
-                  {% if field.word_count %}
-                    <span class="badge bg-secondary">{{ field.word_count }} words</span>
-                  {% endif %}
-                </div>
-                <p class="description">{{ field.description }}</p>
-                {% set value = character|attr(field.key) %}
-                <div
-                  id="traitContent-{{ field.key }}"
-                  class="trait-content {{ 'trait-empty' if not value }}"
-                >
-                  {{ value or 'No profile yet. Complete the form to generate one.' }}
-                </div>
-              </section>
-            {% endfor %}
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="col-xl-7">
+    <div class="{% if is_new_character %}col-xl-5{% else %}col-12{% endif %}">
       <div class="card h-100">
         <div class="card-body d-flex flex-column">
-          <div class="mb-3">
-            <h2 class="h5 mb-1">Character brief</h2>
-            <p class="text-secondary mb-0">Provide as many details as you know. Leave fields blank to give the assistant creative freedom.</p>
-          </div>
+          <h2 class="h5 mb-3">Character profile</h2>
           <div id="characterMessageArea" class="mb-2"></div>
-          <div id="characterLoadingIndicator" class="loading-indicator" role="status" aria-live="polite">
-            <div class="spinner-border text-info" role="status" aria-hidden="true"></div>
-            <span id="characterLoadingMessage">Preparing assistant…</span>
-            <span id="characterDeviceBadge" class="badge bg-secondary ms-auto"></span>
-          </div>
-          <form
-            method="post"
-            id="characterForm"
-            class="character-form d-flex flex-column gap-3 flex-grow-1"
-            data-generate-url="{{ generate_url }}"
-            data-device-hint="{{ device_hint }}"
-            data-is-new-character="{{ 'true' if is_new_character else 'false' }}"
-          >
-            <div class="form-grid">
-              {% for field in input_fields %}
-                <div class="form-field">
-                  <label class="form-label" for="field-{{ field.key }}">
-                    {{ field.label }}{% if field.required %} <span class="text-danger">*</span>{% endif %}
-                  </label>
-                  {% if field.description %}
-                    <div class="form-helper">{{ field.description }}</div>
-                  {% endif %}
-                  {% if field.input_type == 'textarea' %}
-                    <textarea
-                      class="form-control"
-                      id="field-{{ field.key }}"
-                      name="{{ field.key }}"
-                      rows="4"
-                      {% if field.required %}required{% endif %}
-                    >{{ form_data.get(field.key, '') | trim }}</textarea>
-                  {% else %}
-                    <input
-                      type="text"
-                      class="form-control"
-                      id="field-{{ field.key }}"
-                      name="{{ field.key }}"
-                      value="{{ form_data.get(field.key, '') }}"
-                      {% if field.required %}required{% endif %}
-                    />
-                  {% endif %}
-                </div>
-              {% endfor %}
-            </div>
-            <div class="d-flex align-items-center justify-content-end gap-3 mt-auto">
-              <div class="form-check mb-0">
-                <input class="form-check-input" type="checkbox" value="1" id="characterUseApi" name="use_api" />
-                <label class="form-check-label small" for="characterUseApi">API</label>
+          <div class="profile-editor d-flex flex-column gap-2 flex-grow-1">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+              <div>
+                <h3 class="h6 mb-1">{{ profile_field.label if profile_field else 'Full character profile' }}</h3>
+                {% if profile_field and profile_field.description %}
+                  <p class="form-helper mb-0">{{ profile_field.description }}</p>
+                {% endif %}
               </div>
-              <button type="submit" class="btn btn-primary">Generate profile</button>
+              {% if profile_field and profile_field.word_count %}
+                <span class="badge bg-secondary">{{ profile_field.word_count }} words</span>
+              {% endif %}
             </div>
-          </form>
+            <textarea
+              id="characterProfileText"
+              class="form-control flex-grow-1"
+              name="profile_text"
+              {% if is_new_character %}readonly{% endif %}
+              data-update-url="{% if not is_new_character %}{{ url_for('project_update_character', project_id=project.id, character_id=character.id) }}{% endif %}"
+              data-is-new-character="{{ 'true' if is_new_character else 'false' }}"
+              placeholder="No profile yet. Complete the form to generate one."
+            >{{ character.profile_text or '' }}</textarea>
+            <div class="d-flex justify-content-end">
+              <button
+                type="button"
+                class="btn btn-primary btn-sm{% if is_new_character %} d-none{% endif %}"
+                id="characterProfileSave"
+              >
+                Save profile
+              </button>
+            </div>
+            {% if is_new_character %}
+              <p class="form-helper mb-0" id="characterProfileHint">
+                Generate the character to unlock editing and save changes.
+              </p>
+            {% endif %}
+          </div>
         </div>
       </div>
     </div>
+    {% if is_new_character %}
+      <div class="col-xl-7">
+        <div class="card h-100">
+          <div class="card-body d-flex flex-column">
+            <div class="mb-3">
+              <h2 class="h5 mb-1">Character brief</h2>
+              <p class="text-secondary mb-0">Provide as many details as you know. Leave fields blank to give the assistant creative freedom.</p>
+            </div>
+            <div id="characterLoadingIndicator" class="loading-indicator" role="status" aria-live="polite">
+              <div class="spinner-border text-info" role="status" aria-hidden="true"></div>
+              <span id="characterLoadingMessage">Preparing assistant…</span>
+              <span id="characterDeviceBadge" class="badge bg-secondary ms-auto"></span>
+            </div>
+            <form
+              method="post"
+              id="characterForm"
+              class="character-form d-flex flex-column gap-3 flex-grow-1"
+              data-generate-url="{{ generate_url }}"
+              data-device-hint="{{ device_hint }}"
+              data-is-new-character="{{ 'true' if is_new_character else 'false' }}"
+            >
+              <div class="form-grid">
+                {% for field in input_fields %}
+                  <div class="form-field">
+                    <label class="form-label" for="field-{{ field.key }}">
+                      {{ field.label }}{% if field.required %} <span class="text-danger">*</span>{% endif %}
+                    </label>
+                    {% if field.description %}
+                      <div class="form-helper">{{ field.description }}</div>
+                    {% endif %}
+                    {% if field.input_type == 'textarea' %}
+                      <textarea
+                        class="form-control"
+                        id="field-{{ field.key }}"
+                        name="{{ field.key }}"
+                        rows="4"
+                        {% if field.required %}required{% endif %}
+                      >{{ form_data.get(field.key, '') | trim }}</textarea>
+                    {% else %}
+                      <input
+                        type="text"
+                        class="form-control"
+                        id="field-{{ field.key }}"
+                        name="{{ field.key }}"
+                        value="{{ form_data.get(field.key, '') }}"
+                        {% if field.required %}required{% endif %}
+                      />
+                    {% endif %}
+                  </div>
+                {% endfor %}
+              </div>
+              <div class="d-flex align-items-center justify-content-end gap-3 mt-auto">
+                <div class="form-check mb-0">
+                  <input class="form-check-input" type="checkbox" value="1" id="characterUseApi" name="use_api" />
+                  <label class="form-check-label small" for="characterUseApi">API</label>
+                </div>
+                <button type="submit" class="btn btn-primary">Generate profile</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    {% endif %}
   </div>
 {% endblock %}
 {% block scripts %}
@@ -198,13 +199,18 @@
       const loadingMessage = document.getElementById("characterLoadingMessage");
       const deviceBadge = document.getElementById("characterDeviceBadge");
       const messageArea = document.getElementById("characterMessageArea");
-      if (!form || !loadingIndicator || !loadingMessage) {
+      const profileTextarea = document.getElementById("characterProfileText");
+      const profileSaveButton = document.getElementById("characterProfileSave");
+      const profileHint = document.getElementById("characterProfileHint");
+      if (!profileTextarea) {
         return;
       }
-      const isNewCharacter = form.getAttribute("data-is-new-character") === "true";
+      let isNewCharacter = profileTextarea.getAttribute("data-is-new-character") === "true";
       let hasSavedProfile = !isNewCharacter;
+      let initialProfileValue = profileTextarea.value || "";
+      let hasUnsavedProfile = false;
 
-      const deviceHint = form.getAttribute("data-device-hint") || "";
+      const deviceHint = form ? form.getAttribute("data-device-hint") || "" : "";
 
       const setDeviceBadge = (deviceType) => {
         if (!deviceBadge) {
@@ -236,7 +242,19 @@
         messageArea.appendChild(alert);
       };
 
-      const shouldWarnOnExit = () => !hasSavedProfile && isNewCharacter;
+      const setUnsavedState = () => {
+        if (!profileTextarea) {
+          hasUnsavedProfile = false;
+          return;
+        }
+        hasUnsavedProfile = profileTextarea.value !== initialProfileValue;
+        if (profileSaveButton) {
+          profileSaveButton.disabled = !hasUnsavedProfile;
+        }
+      };
+
+      const shouldWarnOnExit = () =>
+        (isNewCharacter && !hasSavedProfile) || hasUnsavedProfile;
 
       window.addEventListener("beforeunload", (event) => {
         if (!shouldWarnOnExit()) {
@@ -252,44 +270,81 @@
           return;
         }
         const shouldLeave = window.confirm(
-          "You haven't generated this character yet. Leave without saving?"
+          "You have unsaved character changes. Leave without saving?"
         );
         if (!shouldLeave) {
           event.preventDefault();
         }
       });
 
-      const updateOutlineSection = (sections, profileMap) => {
-        let updates = [];
-        if (Array.isArray(sections) && sections.length) {
-          updates = sections;
-        } else if (profileMap && typeof profileMap === "object") {
-          updates = Object.entries(profileMap).map(([key, content]) => ({ key, content }));
+      const unlockProfileEditing = (updateUrl) => {
+        if (updateUrl) {
+          profileTextarea.dataset.updateUrl = updateUrl;
         }
-        updates.forEach((section) => {
-          if (!section || typeof section !== "object") {
-            return;
-          }
-          const key = section.key;
-          const content = typeof section.content === "string" ? section.content.trim() : "";
-          if (!key) {
-            return;
-          }
-          const selectorKey = window.CSS && typeof window.CSS.escape === "function"
-            ? window.CSS.escape(key)
-            : String(key).replace(/"/g, '\\"');
-          const card = document.querySelector(`.trait-card[data-field-key="${selectorKey}"]`);
-          if (!card) {
-            return;
-          }
-          const contentContainer = card.querySelector(".trait-content");
-          if (!contentContainer) {
-            return;
-          }
-          contentContainer.classList.toggle("trait-empty", !content);
-          contentContainer.textContent = content || "No profile yet. Complete the form to generate one.";
-        });
+        profileTextarea.readOnly = false;
+        isNewCharacter = false;
+        hasSavedProfile = true;
+        if (profileSaveButton) {
+          profileSaveButton.classList.remove("d-none");
+        }
+        if (profileHint) {
+          profileHint.classList.add("d-none");
+        }
+        setUnsavedState();
       };
+
+      const applyProfileText = (text) => {
+        const content = typeof text === "string" ? text : "";
+        profileTextarea.value = content;
+        initialProfileValue = content;
+        setUnsavedState();
+      };
+
+      profileTextarea.addEventListener("input", setUnsavedState);
+
+      if (profileSaveButton) {
+        profileSaveButton.addEventListener("click", async () => {
+          const updateUrl = profileTextarea.dataset.updateUrl;
+          if (!updateUrl) {
+            renderAlert("warning", "Save is not available until the character has been created.");
+            return;
+          }
+          profileSaveButton.disabled = true;
+          renderAlert("info", "Saving profile updates…");
+          try {
+            const response = await fetch(updateUrl, {
+              method: "PATCH",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ profile_text: profileTextarea.value }),
+            });
+            const data = await response.json().catch(() => null);
+            if (!response.ok) {
+              const errorMessage = data && data.error
+                ? data.error
+                : `Request failed with status ${response.status}`;
+              throw new Error(errorMessage);
+            }
+            applyProfileText(data && data.character ? data.character.profile_text : profileTextarea.value);
+            renderAlert("success", "Character profile saved.");
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "An unexpected error occurred.";
+            renderAlert("danger", `Unable to save the character profile. ${message}`);
+          }
+          profileSaveButton.disabled = !hasUnsavedProfile;
+        });
+      }
+
+      setUnsavedState();
+
+      if (!form) {
+        return;
+      }
+
+      if (!loadingIndicator || !loadingMessage) {
+        return;
+      }
 
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
@@ -359,7 +414,22 @@
             throw new Error(errorMessage);
           }
 
-          updateOutlineSection(Array.isArray(data.sections) ? data.sections : [], data.profile || {});
+          const profileFromPayload = data.profile && typeof data.profile.profile_text === "string"
+            ? data.profile.profile_text
+            : null;
+          let profileText = profileFromPayload;
+          if (!profileText && Array.isArray(data.sections)) {
+            const profileSection = data.sections.find((section) => section.key === "profile_text");
+            if (profileSection && typeof profileSection.content === "string") {
+              profileText = profileSection.content;
+            }
+          }
+          if (!profileText && typeof data.assistant_reply === "string") {
+            profileText = data.assistant_reply;
+          }
+          if (profileText) {
+            applyProfileText(profileText);
+          }
 
           if (data.character && typeof data.character === "object") {
             const nameHeading = document.querySelector(".character-header h1");
@@ -378,10 +448,15 @@
             form.setAttribute("data-generate-url", data.generate_url);
           }
 
+          if (data.update_url) {
+            unlockProfileEditing(data.update_url);
+          }
+
           if (data.redirect_url) {
             window.history.replaceState({}, "", data.redirect_url);
             form.setAttribute("data-is-new-character", "false");
             hasSavedProfile = true;
+            profileTextarea.setAttribute("data-is-new-character", "false");
           }
 
           if (data.device_type) {
