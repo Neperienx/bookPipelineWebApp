@@ -275,7 +275,8 @@
       aspect-ratio: 1 / 1;
       display: flex;
       flex-direction: column;
-      justify-content: space-between;
+      justify-content: center;
+      align-items: flex-start;
     }
     .character-tile:hover {
       transform: translateY(-2px);
@@ -296,6 +297,19 @@
     .character-tile-meta {
       font-size: 0.75rem;
       color: rgba(100, 73, 55, 0.75);
+    }
+    .character-tile-content {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 0.35rem;
+      height: 100%;
+      text-align: left;
+    }
+    .character-tile-name {
+      text-decoration: underline;
+      text-underline-offset: 0.2em;
     }
     .pitch-placeholder {
       color: rgba(100, 73, 55, 0.8);
@@ -420,9 +434,11 @@
                         href="{{ url_for('character_detail', project_id=project.id, character_id=character.id) }}"
                         class="character-tile"
                       >
-                        <div class="fw-semibold">{{ character.name or 'Untitled character' }}</div>
-                        <div class="text-secondary small">
-                          {{ character.role_in_story or 'Role not set yet' }}
+                        <div class="character-tile-content">
+                          <div class="character-tile-name fw-semibold">{{ character.name or 'Untitled character' }}</div>
+                          <div class="character-tile-role text-secondary small">
+                            {{ character.role_in_story or 'Role not set yet' }}
+                          </div>
                         </div>
                       </a>
                     {% endfor %}
