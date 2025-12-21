@@ -3,6 +3,8 @@ openai_config.json
 .env
 .env.*
 !.env.example
+.venv.
+.venv*
 
 # Python cache/bytecode
 __pycache__/
