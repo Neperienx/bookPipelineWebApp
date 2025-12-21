@@ -404,18 +404,16 @@
                   </div>
                 </div>
                 <div class="character-tile-grid">
-                  <form method="post" action="{{ url_for('character_create', project_id=project.id) }}">
-                    <button
-                      type="submit"
-                      class="character-tile add-character-tile"
-                    >
-                      <div class="d-flex flex-column align-items-center justify-content-center gap-2">
-                        <span class="badge rounded-pill text-bg-light border">+</span>
-                        <span>Add new character</span>
-                        <span class="small text-secondary">Open the full brief</span>
-                      </div>
-                    </button>
-                  </form>
+                  <a
+                    href="{{ url_for('character_new', project_id=project.id) }}"
+                    class="character-tile add-character-tile"
+                  >
+                    <div class="d-flex flex-column align-items-center justify-content-center gap-2">
+                      <span class="badge rounded-pill text-bg-light border">+</span>
+                      <span>Add new character</span>
+                      <span class="small text-secondary">Open the full brief</span>
+                    </div>
+                  </a>
                   {% if main_characters %}
                     {% for character in main_characters %}
                       <div
@@ -426,32 +424,14 @@
                         data-click-to-edit="true"
                       >
                         <div data-edit-display>
-                          <div class="d-flex justify-content-between align-items-start gap-3">
-                            <div>
-                              <div class="fw-semibold" data-display-name>{{ character.name or 'Untitled character' }}</div>
-                              <div
-                                class="text-secondary small"
-                                data-display-role
-                                data-empty-text="Role not set yet"
-                              >
-                                {{ character.role_in_story or 'Role not set yet' }}
-                              </div>
-                            </div>
-                            <span class="character-tile-meta">
-                              {% if character.updated_at %}
-                                Updated {{ character.updated_at.strftime('%b %d, %Y') }}
-                              {% else %}
-                                Created {{ character.created_at.strftime('%b %d, %Y') }}
-                              {% endif %}
-                            </span>
-                          </div>
-                          <p
-                            class="small text-secondary mb-0 mt-2"
-                            data-display-description
-                            data-empty-text="Add a short description."
+                          <div class="fw-semibold" data-display-name>{{ character.name or 'Untitled character' }}</div>
+                          <div
+                            class="text-secondary small"
+                            data-display-role
+                            data-empty-text="Role not set yet"
                           >
-                            {{ character.character_description or 'Add a short description.' }}
-                          </p>
+                            {{ character.role_in_story or 'Role not set yet' }}
+                          </div>
                         </div>
                         <form class="d-none mt-3" data-edit-form>
                           <div class="row g-2">
@@ -474,15 +454,6 @@
                                 name="role_in_story"
                                 value="{{ character.role_in_story or '' }}"
                               />
-                            </div>
-                            <div class="col-12">
-                              <label class="form-label small text-uppercase fw-semibold" for="mainDescription{{ character.id }}">Quick description</label>
-                              <textarea
-                                class="form-control form-control-sm"
-                                id="mainDescription{{ character.id }}"
-                                name="character_description"
-                                rows="3"
-                              >{{ character.character_description or '' }}</textarea>
                             </div>
                           </div>
                           <div class="edit-inline-actions mt-3">
@@ -1488,7 +1459,6 @@
           [
             "name",
             "role_in_story",
-            "character_description",
             "physical_description",
             "background",
           ].forEach(function (field) {
@@ -1588,9 +1558,6 @@
       function applyCharacterUpdate(container, character) {
         const nameEl = container.querySelector("[data-display-name]");
         const roleEl = container.querySelector("[data-display-role]");
-        const descriptionEl = container.querySelector(
-          "[data-display-description]"
-        );
         if (nameEl) {
           nameEl.textContent = character.name || "Unnamed character";
         }
@@ -1603,21 +1570,11 @@
             roleEl.textContent = roleFallback;
           }
         }
-        if (descriptionEl) {
-          const fallback = descriptionEl.getAttribute("data-empty-text") || "";
-          const text = character.character_description || "";
-          if (text.trim()) {
-            descriptionEl.textContent = text;
-          } else {
-            descriptionEl.textContent = fallback;
-          }
-        }
         const form = container.querySelector("[data-edit-form]");
         if (form) {
           updateFormDefaults(form, {
             name: character.name || "",
             role_in_story: character.role_in_story || "",
-            character_description: character.character_description || "",
           });
         }
       }

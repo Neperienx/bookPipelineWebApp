@@ -3134,30 +3134,45 @@ def create_app() -> Flask:
         if project is None:
             abort(404)
 
+        return redirect(url_for("character_new", project_id=project_id))
+
+    @app.route(
+        "/projects/<int:project_id>/characters/new",
+        methods=["GET", "POST"],
+    )
+    def character_new(project_id: int) -> str:
+        project = db.session.get(Project, project_id)
+        if project is None:
+            abort(404)
+
         character = Character(project=project)
-        character.name = request.form.get("name", "").strip() or None
-        character.role_in_story = request.form.get("role_in_story", "").strip() or None
-        character.character_description = (
-            request.form.get("character_description", "").strip() or None
-        )
-        db.session.add(character)
-        db.session.commit()
+        character_fields = get_character_fields()
+        input_fields = get_character_input_fields()
+        form_key = _new_character_form_state_key(project_id)
 
-        if request.form.get("return_to_project"):
-            return redirect(
-                url_for(
-                    "project_detail",
-                    project_id=project_id,
-                    step="characters",
-                )
-            )
+        if request.method == "POST" and "reset_form" in request.form:
+            session.pop(form_key, None)
+            session.modified = True
+            return redirect(url_for("character_new", project_id=project_id))
 
-        return redirect(
-            url_for(
-                "character_detail",
-                project_id=project_id,
-                character_id=character.id,
-            )
+        stored_form = session.get(form_key, {})
+        form_data: Dict[str, str] = {}
+        for field in input_fields:
+            key = field["key"]
+            form_data[key] = stored_form.get(key, "") or ""
+
+        device_hint = _compute_device_hint()
+
+        return render_template(
+            "character.html",
+            project=project,
+            character=character,
+            character_fields=character_fields,
+            input_fields=input_fields,
+            form_data=form_data,
+            device_hint=device_hint,
+            generate_url=url_for("character_generate_new", project_id=project_id),
+            is_new_character=True,
         )
 
     @app.route(
@@ -3212,6 +3227,12 @@ def create_app() -> Flask:
             input_fields=input_fields,
             form_data=form_data,
             device_hint=device_hint,
+            generate_url=url_for(
+                "character_generate",
+                project_id=project_id,
+                character_id=character.id,
+            ),
+            is_new_character=False,
         )
 
     @app.route(
@@ -3343,6 +3364,151 @@ def create_app() -> Flask:
                 "assistant_reply": assistant_reply,
                 "device_type": generator.get_compute_device(),
                 "message": "Character profile updated from assistant.",
+                "redirect_url": url_for(
+                    "character_detail",
+                    project_id=project_id,
+                    character_id=character.id,
+                ),
+                "generate_url": url_for(
+                    "character_generate",
+                    project_id=project_id,
+                    character_id=character.id,
+                ),
+            }
+        )
+
+    @app.route(
+        "/projects/<int:project_id>/characters/new/generate",
+        methods=["POST"],
+    )
+    def character_generate_new(project_id: int):
+        project = db.session.get(Project, project_id)
+        if project is None:
+            return jsonify({"error": "Project not found."}), 404
+
+        payload = request.get_json(silent=True) or {}
+        inputs_payload = payload.get("inputs")
+        use_api_requested = _is_api_requested({"use_api": payload.get("use_api")})
+        if not isinstance(inputs_payload, dict):
+            return jsonify({"error": "Invalid request payload."}), 400
+
+        input_fields = get_character_input_fields()
+        trimmed_inputs: Dict[str, str] = {}
+        for field in input_fields:
+            key = field["key"]
+            raw_value = inputs_payload.get(key, "")
+            if raw_value is None:
+                value_text = ""
+            else:
+                value_text = str(raw_value).strip()
+            trimmed_inputs[key] = value_text
+
+        name = trimmed_inputs.get("name", "")
+        role = trimmed_inputs.get("role_in_story", "")
+        if not name or not role:
+            return (
+                jsonify({"error": "Name and role in the story are required."}),
+                422,
+            )
+
+        prompt_inputs = {key: value for key, value in trimmed_inputs.items() if value}
+
+        form_key = _new_character_form_state_key(project_id)
+        session[form_key] = trimmed_inputs
+        session.modified = True
+
+        character_fields = get_character_fields()
+
+        try:
+            generator = _resolve_text_generator(use_api_requested)
+        except RuntimeError as exc:
+            LOGGER.error("Failed to initialise text generator: %s", exc)
+            return jsonify({"error": str(exc)}), 400
+        except Exception as exc:  # pragma: no cover - defensive
+            LOGGER.exception("Unexpected error initialising text generator")
+            return (
+                jsonify(
+                    {
+                        "error": "The text generation backend could not be initialised.",
+                        "detail": str(exc),
+                    }
+                ),
+                500,
+            )
+
+        config = SYSTEM_PROMPTS.get("character_creation", {})
+        base_prompt = config.get(
+            "base",
+            "You are a writing assistant and we want to create a character.",
+        )
+        format_rules = config.get("profile_format_instructions", "")
+
+        try:
+            profile_data, sections, assistant_reply = _run_character_profile_generation(
+                generator,
+                base_prompt,
+                format_rules,
+                character_fields,
+                prompt_inputs,
+                input_fields,
+            )
+        except OpenAIAPIRateLimitError as exc:
+            LOGGER.info(
+                "Character profile generation rate limited for project %s",
+                project_id,
+            )
+            return jsonify({"error": str(exc)}), 429
+        except ValueError as exc:
+            LOGGER.warning(
+                "Character profile generation validation failed for project %s: %s",
+                project_id,
+                exc,
+            )
+            return jsonify({"error": str(exc)}), 422
+        except Exception as exc:  # pragma: no cover - defensive
+            LOGGER.exception(
+                "Character profile generation failed for project %s",
+                project_id,
+            )
+            return (
+                jsonify(
+                    {
+                        "error": "The text generation backend could not generate a reply.",
+                        "detail": str(exc),
+                    }
+                ),
+                500,
+            )
+
+        character = Character(project=project)
+        _apply_character_profile(character, character_fields, profile_data)
+        character.name = name
+        character.role_in_story = role
+        character.updated_at = datetime.utcnow()
+        db.session.add(character)
+        db.session.commit()
+
+        return jsonify(
+            {
+                "character": {
+                    "name": character.name,
+                    "role_in_story": character.role_in_story,
+                },
+                "profile": profile_data,
+                "sections": sections,
+                "assistant_reply": assistant_reply,
+                "device_type": generator.get_compute_device(),
+                "message": "Character profile updated from assistant.",
+                "redirect_url": url_for(
+                    "character_detail",
+                    project_id=project_id,
+                    character_id=character.id,
+                ),
+                "generate_url": url_for(
+                    "character_generate",
+                    project_id=project_id,
+                    character_id=character.id,
+                ),
             }
         )
 
@@ -6124,6 +6290,10 @@ def _session_key(project_id: int) -> str:
 
 def _character_form_state_key(project_id: int, character_id: int) -> str:
     return f"character_form_{project_id}_{character_id}"
+
+
+def _new_character_form_state_key(project_id: int) -> str:
+    return f"character_form_{project_id}_new"
 
 
 # Allow ``python chat_interface.py`` to run the development server directly.
